@@ -18,23 +18,20 @@
 
 SET client_min_messages = warning;
 
--- Run idempotently.
-DROP SCHEMA IF EXISTS hcmos CASCADE;  -- no-op normally; keeps re-runs clean if used
--- (We use the public schema; the DROP above is defensive for a stray hcmos schema.)
-
-DROP TABLE IF EXISTS audit, idempotency, session, device, app_user, employee, config, tenant CASCADE;
+-- Non-destructive & idempotent: applied once (tracked in schema_migrations) and
+-- safe to re-run. It NEVER drops data.
 
 -- ---------------------------------------------------------------------------
 -- Tables
 -- ---------------------------------------------------------------------------
 
-CREATE TABLE tenant (
+CREATE TABLE IF NOT EXISTS tenant (
   company_id  uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   name        text NOT NULL,
   status      text NOT NULL DEFAULT 'active' CHECK (status IN ('active','suspended'))
 );
 
-CREATE TABLE employee (
+CREATE TABLE IF NOT EXISTS employee (
   id           uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   company_id   uuid NOT NULL REFERENCES tenant(company_id),
   full_name    text NOT NULL,
@@ -47,7 +44,7 @@ CREATE TABLE employee (
   disciplinary     text    -- disciplinary  -> R05,R06,R07,R11
 );
 
-CREATE TABLE app_user (
+CREATE TABLE IF NOT EXISTS app_user (
   id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   company_id    uuid NOT NULL REFERENCES tenant(company_id),
   employee_id   uuid REFERENCES employee(id),
@@ -64,9 +61,9 @@ CREATE TABLE app_user (
   created_at    timestamptz NOT NULL DEFAULT now()
 );
 -- Email is the global console login identifier; it resolves the tenant.
-CREATE UNIQUE INDEX app_user_email_key ON app_user (lower(email));
+CREATE UNIQUE INDEX IF NOT EXISTS app_user_email_key ON app_user (lower(email));
 
-CREATE TABLE device (
+CREATE TABLE IF NOT EXISTS device (
   id           uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   company_id   uuid NOT NULL REFERENCES tenant(company_id),
   employee_id  uuid REFERENCES employee(id),
@@ -78,7 +75,7 @@ CREATE TABLE device (
   locked_until timestamptz
 );
 
-CREATE TABLE session (
+CREATE TABLE IF NOT EXISTS session (
   id         uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   company_id uuid NOT NULL REFERENCES tenant(company_id),
   user_id    uuid REFERENCES app_user(id),
@@ -89,10 +86,10 @@ CREATE TABLE session (
   expires_at timestamptz NOT NULL,
   revoked_at timestamptz
 );
-CREATE UNIQUE INDEX session_token_hash_key ON session (token_hash);
+CREATE UNIQUE INDEX IF NOT EXISTS session_token_hash_key ON session (token_hash);
 
 -- Append-only, tamper-evident audit. Chained per tenant.
-CREATE TABLE audit (
+CREATE TABLE IF NOT EXISTS audit (
   seq        bigserial PRIMARY KEY,
   company_id uuid NOT NULL,
   actor      text,
@@ -107,7 +104,7 @@ CREATE TABLE audit (
   hash       text NOT NULL
 );
 
-CREATE TABLE config (
+CREATE TABLE IF NOT EXISTS config (
   company_id uuid NOT NULL REFERENCES tenant(company_id),
   key        text NOT NULL,
   value      text NOT NULL,
@@ -116,7 +113,7 @@ CREATE TABLE config (
 
 -- Offline field-auth dedupe: client supplies an idempotency key; the server
 -- validates and dedupes on sync.
-CREATE TABLE idempotency (
+CREATE TABLE IF NOT EXISTS idempotency (
   company_id uuid NOT NULL REFERENCES tenant(company_id),
   key        text NOT NULL,
   response   jsonb NOT NULL,

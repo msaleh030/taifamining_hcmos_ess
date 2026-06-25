@@ -4,6 +4,7 @@
 const db = require('./db');
 const cfg = require('./config');
 const roles = require('./roles');
+const a3 = require('./a3');
 const C = require('./crypto');
 const { HttpError, genericAuthError } = require('./errors');
 
@@ -147,13 +148,15 @@ function landing(session) {
   return roles.landingFor(session.role_code);
 }
 
-// A3 confidential-field enforcement on profile reads (server-side).
+// A3 confidential-field enforcement on profile reads (server-side). Shares the
+// Slice 2 assembler so forbidden fields are absent (table not even joined).
 async function readProfile(session, employeeId) {
   if (!isUuid(employeeId)) throw new HttpError(400, 'invalid request');
-  const r = await db.withTenant(session.company_id, (c) =>
-    c.query('SELECT * FROM employee WHERE id=$1', [employeeId]));
-  if (r.rows.length === 0) throw new HttpError(404, 'not found');
-  return roles.visibleProfile(session.role_code, r.rows[0]);
+  return db.withTenant(session.company_id, async (c) => {
+    const r = await c.query('SELECT * FROM employee WHERE id=$1', [employeeId]);
+    if (r.rows.length === 0) throw new HttpError(404, 'not found');
+    return a3.assembleProfile(c, session, r.rows[0]);
+  });
 }
 
 // Server-side RBAC: matrix checked here regardless of what the UI offered.

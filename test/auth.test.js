@@ -122,28 +122,32 @@ test('AUTH-05 password reset by a permitted owner rotates the credential', async
 });
 
 // ── A3: confidential fields enforced server-side; forbidden fields ABSENT ───
-test('A3 payroll role (R07) sees pay/bank + disciplinary but not medical/permits', async () => {
+// (Profile reads now share the Slice 2 assembler over the normalised tables.)
+test('A3 payroll role (R07) sees pay/bank + disciplinary but not medical', async () => {
   const pay = await H.loginConsole(F.USERS.PAYROLL_A);
   const r = await H.req('GET', `/me/profile/${F.EMP.CAROL}`, { token: pay.body.token });
   assert.equal(r.status, 200);
-  assert.ok('pay_grade' in r.body && 'bank_account' in r.body);
+  assert.ok('basic_pay' in r.body && 'bank_account' in r.body);
   assert.ok('disciplinary' in r.body);
-  assert.ok(!('medical_notes' in r.body), 'medical omitted (absent, not masked)');
-  assert.ok(!('permits' in r.body));
+  assert.ok(!('osha_status' in r.body), 'medical omitted (absent, not masked)');
+  assert.ok(!('permit_no' in r.body));
 });
 
-test('A3 HSE role (R06) sees medical/permits + disciplinary but not pay/bank', async () => {
+test('A3 HSE role (R06) sees medical + disciplinary but not pay/bank', async () => {
   const hse = await H.loginConsole(F.USERS.HSE_A);
   const r = await H.req('GET', `/me/profile/${F.EMP.CAROL}`, { token: hse.body.token });
   assert.equal(r.status, 200);
-  assert.ok('medical_notes' in r.body && 'permits' in r.body);
+  assert.ok('osha_status' in r.body && 'permit_no' in r.body);
   assert.ok('disciplinary' in r.body);
-  assert.ok(!('pay_grade' in r.body) && !('bank_account' in r.body));
+  assert.ok(!('basic_pay' in r.body) && !('bank_account' in r.body));
 });
 
 test('A3 ordinary employee (R01) sees no confidential fields at all', async () => {
   const emp = await H.loginConsole(F.USERS.EMP_A);
   const r = await H.req('GET', `/me/profile/${F.EMP.CAROL}`, { token: emp.body.token });
   assert.equal(r.status, 200);
-  assert.deepEqual(Object.keys(r.body).sort(), ['full_name', 'id']);
+  for (const k of ['basic_pay', 'bank_account', 'osha_status', 'permit_no', 'disciplinary']) {
+    assert.ok(!(k in r.body), `${k} absent for R01`);
+  }
+  assert.ok('full_name' in r.body); // base profile still present
 });
