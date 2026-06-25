@@ -10,6 +10,39 @@ const { F } = H;
 before(H.start);
 after(H.stop);
 
+// ── AC-EMP-01: directory search + filter (site, department, status) ─────────
+// 17.5 covers status/site filters and paging; this proves the remaining two
+// directory affordances in the spec — free-text search and department filter —
+// are applied server-side (in SQL), not client-side.
+test('AC-EMP-01 directory: free-text search and department filter run server-side', async () => {
+  const central = await H.loginConsole(F.USERS.PAYROLL_A); // R07 central, all sites
+
+  // Search matches full_name…
+  const byName = await H.req('GET', '/employees?q=Carol%20Confidential&limit=25', { token: central.body.token });
+  assert.equal(byName.status, 200);
+  assert.ok(byName.body.rows.length >= 1);
+  assert.ok(byName.body.rows.every((r) => /carol confidential/i.test(r.full_name)));
+
+  // …and emp_no (single OR-ed predicate), returning the same unique row.
+  const byNo = await H.req('GET', '/employees?q=E-A-0002&limit=25', { token: central.body.token });
+  assert.equal(byNo.status, 200);
+  assert.ok(byNo.body.rows.some((r) => r.emp_no === 'E-A-0002'));
+
+  // Department filter returns only that department, and is bounded by the page.
+  const proc = await H.req('GET', '/employees?dept=Processing&limit=40', { token: central.body.token });
+  assert.equal(proc.status, 200);
+  assert.ok(proc.body.rows.length > 0 && proc.body.rows.length <= 40);
+  assert.ok(proc.body.rows.every((r) => r.dept === 'Processing'));
+  assert.ok(proc.body.next_cursor, 'large department paginates rather than full-loads');
+
+  // Search + department compose (both predicates AND-ed in SQL).
+  const both = await H.req('GET', '/employees?q=Carol&dept=Processing&limit=25', { token: central.body.token });
+  assert.ok(both.body.rows.every((r) => r.dept === 'Processing' && /carol/i.test(r.full_name)));
+  const wrongDept = await H.req('GET', '/employees?q=Carol&dept=Mining&limit=25', { token: central.body.token });
+  assert.ok(!wrongDept.body.rows.some((r) => /carol confidential/i.test(r.full_name)),
+    'department predicate is not bypassed by the search term');
+});
+
 // ── Section 17.1: confidential ABSENCE (A3), proven by key-absence ──────────
 test('17.1 confidential fields are ABSENT (not masked/null) for non-permitted roles', async () => {
   const id = F.EMP.CAROL;
