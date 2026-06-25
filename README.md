@@ -119,11 +119,15 @@ lives in the `site_scope` table.
 These are decisions/operational items beyond what tests can prove here. They are
 called out so they are not mistaken as done:
 
-1. **Replace the pure-Node Postgres driver.** `src/pg.js` exists only because this
-   environment has no package registry. It uses local `trust` auth and lacks TLS and
-   SCRAM. In production, set `DATABASE_URL` and use `node-postgres` (`pg`) with TLS +
-   `scram-sha-256`; the data layer is isolated to `src/pg.js`/`src/db.js` so the swap
-   is contained. **This is the single biggest pre-launch item.**
+1. **Postgres driver — hardened, but vendored.** `src/pg.js` now authenticates with
+   **SCRAM-SHA-256** and supports **TLS** (`PGSSLMODE=require|verify-full`,
+   `PGSSLROOTCERT`), plus `DATABASE_URL` — verified by `test/driver.test.js`. So it
+   is production-capable, not trust-only. Remaining caveats before heavy load: it has
+   no prepared-statement caching, binary protocol, `COPY`, SCRAM channel binding, or
+   connection keepalive/cancel; it has not been soak-tested. Either run a load test
+   and add those, or (if the deploy pipeline allows a registry/vendored package) drop
+   in `node-postgres` — the data layer is isolated to `src/pg.js`/`src/db.js`, so the
+   swap stays contained.
 2. **PII at rest.** `bank_account`, medical, `home_address` — add column/disk
    encryption and key management; A3 governs read visibility, not storage.
 3. **Connection pool & horizontal scale.** Tune pool size; run multiple app

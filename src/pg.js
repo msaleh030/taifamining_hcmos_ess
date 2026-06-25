@@ -5,10 +5,13 @@
 // so this implements just enough of the protocol to run parameterised queries
 // safely: Parse/Bind/Describe/Execute/Sync (the "extended query" flow). Binding
 // parameters server-side means values are never interpolated into SQL — no
-// injection surface. Auth is `trust` (configured by scripts/setup-db.sh), so we
-// only have to answer AuthenticationOk; cleartext/MD5 are also handled for
-// resilience.
+// injection surface.
+//
+// Production-capable auth: SCRAM-SHA-256 (the modern Postgres default) and TLS
+// (sslmode disable|prefer|require|verify-ca|verify-full), plus cleartext/MD5 and
+// `trust` for the local sandbox. All from node:crypto / node:tls — no packages.
 const net = require('node:net');
+const tls = require('node:tls');
 const crypto = require('node:crypto');
 
 // A handful of OIDs we decode from text into JS types.
@@ -69,20 +72,111 @@ class Client {
   connect() {
     return new Promise((resolve, reject) => {
       this._connectCbs = { resolve, reject };
-      this.sock = net.connect({ host: this.opts.host, port: this.opts.port });
-      this.sock.on('connect', () => {
-        const w = new W();
-        w.i32(196608); // protocol 3.0
-        w.str('user').str(this.opts.user);
-        w.str('database').str(this.opts.database);
-        w.str('application_name').str('hcmos');
-        w.chunks.push(Buffer.from([0])); // terminator
-        this.sock.write(w.frame(null));
+      this._raw = net.connect({ host: this.opts.host, port: this.opts.port });
+      this.sock = this._raw;
+      this._raw.on('error', (e) => this._fail(e));
+      this._raw.on('close', () => { this._closed = true; this._fail(new Error('connection closed')); });
+      this._raw.once('connect', () => {
+        const mode = this.opts.ssl || 'disable';
+        if (mode === 'disable') { this._afterTls(); return; }
+        this._negotiateTls(mode);
       });
-      this.sock.on('data', (d) => this._onData(d));
-      this.sock.on('error', (e) => this._fail(e));
-      this.sock.on('close', () => { this._closed = true; this._fail(new Error('connection closed')); });
     });
+  }
+
+  // Ask the server to switch to TLS (Postgres SSLRequest), then upgrade or fall
+  // back per sslmode. Production should use 'require'/'verify-full' + a CA.
+  _negotiateTls(mode) {
+    const req = Buffer.alloc(8);
+    req.writeInt32BE(8, 0);
+    req.writeInt32BE(80877103, 4); // SSLRequest magic
+    const onByte = (buf) => {
+      this._raw.removeListener('data', onByte);
+      const code = String.fromCharCode(buf[0]);
+      if (code === 'S') {
+        const verify = mode === 'verify-full' || mode === 'verify-ca';
+        const tlsSock = tls.connect({
+          socket: this._raw,
+          // SNI is only valid for hostnames, not IP literals (RFC 6066).
+          servername: net.isIP(this.opts.host) ? undefined : this.opts.host,
+          rejectUnauthorized: verify,
+          ca: this.opts.ca,
+        }, () => this._afterTls(tlsSock));
+        tlsSock.on('error', (e) => this._fail(e));
+        return;
+      }
+      if (code === 'N') {
+        if (mode === 'require' || mode === 'verify-full' || mode === 'verify-ca') {
+          return this._fail(new Error('server does not support SSL but sslmode=' + mode));
+        }
+        return this._afterTls(); // 'prefer' → continue plaintext
+      }
+      this._fail(new Error('unexpected SSL negotiation byte'));
+    };
+    this._raw.on('data', onByte);
+    this._raw.write(req);
+  }
+
+  // Bind the active stream (plaintext or TLS) and send the StartupMessage.
+  _afterTls(tlsSock) {
+    if (tlsSock) this.sock = tlsSock;
+    this.sock.on('data', (d) => this._onData(d));
+    const w = new W();
+    w.i32(196608); // protocol 3.0
+    w.str('user').str(this.opts.user);
+    w.str('database').str(this.opts.database);
+    w.str('application_name').str('hcmos');
+    w.chunks.push(Buffer.from([0])); // terminator
+    this.sock.write(w.frame(null));
+  }
+
+  // ---- SCRAM-SHA-256 (RFC 5802 + Postgres SASL framing) -------------------
+  _saslBegin(body) {
+    const mechs = body.toString('utf8').split('\0').filter(Boolean);
+    if (!mechs.includes('SCRAM-SHA-256')) {
+      return this._fail(new Error('no supported SASL mechanism (got ' + mechs.join(',') + ')'));
+    }
+    const clientNonce = crypto.randomBytes(18).toString('base64');
+    this._scram = { clientNonce, clientFirstBare: `n=,r=${clientNonce}` };
+    const clientFirst = `n,,${this._scram.clientFirstBare}`; // gs2 header + bare
+    const w = new W();
+    w.str('SCRAM-SHA-256');
+    const cf = Buffer.from(clientFirst, 'utf8');
+    w.i32(cf.length).bytes(cf);
+    this.sock.write(w.frame('p')); // SASLInitialResponse
+  }
+
+  _saslContinue(body) {
+    const serverFirst = body.toString('utf8');
+    const a = parseSaslAttrs(serverFirst);
+    const salt = Buffer.from(a.s, 'base64');
+    const iter = parseInt(a.i, 10);
+    const saltedPassword = crypto.pbkdf2Sync(this.opts.password || '', salt, iter, 32, 'sha256');
+    const clientKey = crypto.createHmac('sha256', saltedPassword).update('Client Key').digest();
+    const storedKey = crypto.createHash('sha256').update(clientKey).digest();
+    const finalNoProof = `c=biws,r=${a.r}`; // biws = base64("n,,")
+    const authMessage = `${this._scram.clientFirstBare},${serverFirst},${finalNoProof}`;
+    const clientSig = crypto.createHmac('sha256', storedKey).update(authMessage).digest();
+    const proof = Buffer.alloc(32);
+    for (let i = 0; i < 32; i++) proof[i] = clientKey[i] ^ clientSig[i];
+    this._scram.saltedPassword = saltedPassword;
+    this._scram.authMessage = authMessage;
+    const w = new W();
+    w.bytes(Buffer.from(`${finalNoProof},p=${proof.toString('base64')}`, 'utf8'));
+    this.sock.write(w.frame('p')); // SASLResponse
+  }
+
+  _saslFinal(body) {
+    const a = parseSaslAttrs(body.toString('utf8'));
+    const serverKey = crypto.createHmac('sha256', this._scram.saltedPassword).update('Server Key').digest();
+    const serverSig = crypto.createHmac('sha256', serverKey).update(this._scram.authMessage).digest();
+    if (a.v) {
+      const got = Buffer.from(a.v, 'base64');
+      if (got.length !== serverSig.length || !crypto.timingSafeEqual(got, serverSig)) {
+        return this._fail(new Error('SCRAM server signature mismatch'));
+      }
+    }
+    // AuthenticationOk (R/0) follows.
   }
 
   _fail(err) {
@@ -121,6 +215,9 @@ class Client {
           const w = new W(); w.str('md5' + outer);
           this.sock.write(w.frame('p')); break;
         }
+        if (sub === 10) { this._saslBegin(body.subarray(4)); break; }     // SASL
+        if (sub === 11) { this._saslContinue(body.subarray(4)); break; }  // SASLContinue
+        if (sub === 12) { this._saslFinal(body.subarray(4)); break; }     // SASLFinal
         this._fail(new Error('unsupported auth method ' + sub));
         break;
       }
@@ -217,6 +314,17 @@ class Client {
     this.sock.destroy();
     this._closed = true;
   }
+}
+
+// Parse SCRAM "k=v,k=v" messages. Values may contain '=' (base64), so split on
+// the first '=' only.
+function parseSaslAttrs(s) {
+  const out = {};
+  for (const part of s.split(',')) {
+    const i = part.indexOf('=');
+    if (i > 0) out[part.slice(0, i)] = part.slice(i + 1);
+  }
+  return out;
 }
 
 function parseErr(body) {
