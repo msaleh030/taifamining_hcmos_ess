@@ -1,0 +1,16 @@
+{
+  "name": "hcmos-ess",
+  "version": "0.1.0",
+  "private": true,
+  "description": "HCMOS ESS — Slice 1: Authentication & Access",
+  "type": "commonjs",
+  "scripts": {
+    "setup": "bash scripts/setup-db.sh",
+    "migrate": "node scripts/migrate.js",
+    "seed": "node scripts/seed.js",
+    "pretest": "bash scripts/setup-db.sh && node scripts/migrate.js && node scripts/seed.js",
+    "test": "node --test --test-concurrency=1 test/*.test.js",
+    "start": "node src/server.js"
+  },
+  "engines": { "node": ">=20" }
+}
