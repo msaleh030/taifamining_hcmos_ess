@@ -14,7 +14,7 @@ async function main() {
     // trigger), so TRUNCATE it — which also resets the chain to genesis.
     await c.query('TRUNCATE audit RESTART IDENTITY');
     for (const t of ['idempotency', 'field_change', 'employee_document', 'employee_asset',
-      'disciplinary', 'employee_medical', 'employee_pay', 'session',
+      'disciplinary', 'employee_medical', 'employee_pay', 'session', 'empno_counter',
       'device', 'app_user', 'employee', 'site', 'config', 'site_scope', 'tenant']) {
       await c.query(`DELETE FROM ${t}`);
     }
@@ -37,9 +37,11 @@ async function main() {
       [F.SITE.A1, F.TENANT_A, 'Mine North', F.SITE.A2, F.TENANT_A, 'Mine South', F.SITE.B1, F.TENANT_B, 'B Site']);
 
     for (const [id, e] of Object.entries(F.EMPLOYEES)) {
+      // Seeded employees are pre-go-live: their number is retained as legacy_id
+      // (EN-6), which grandfathers it past the new TMCL format constraint.
       await c.query(
-        `INSERT INTO employee(id,company_id,site_id,emp_no,full_name,role_code,dept,status,phone,email,home_address)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+        `INSERT INTO employee(id,company_id,site_id,emp_no,legacy_id,full_name,role_code,dept,status,phone,email,home_address)
+         VALUES ($1,$2,$3,$4,$4,$5,$6,$7,$8,$9,$10,$11)`,
         [id, e.company, e.site, e.emp_no, e.full_name, e.role_code, e.dept, e.status,
          e.phone || null, e.email || null, e.home_address || null]);
     }
@@ -76,9 +78,10 @@ async function main() {
     // Bulk directory load — one statement (fast). Spread across the two tenant-A
     // sites; a few non-active lifecycle states so the directory still lists them.
     await c.query(
-      `INSERT INTO employee(company_id, site_id, emp_no, full_name, role_code, dept, status, phone, email, joined_at)
+      `INSERT INTO employee(company_id, site_id, emp_no, legacy_id, full_name, role_code, dept, status, phone, email, joined_at)
        SELECT $1,
               CASE WHEN g % 2 = 0 THEN $2::uuid ELSE $3::uuid END,
+              'E'||lpad(g::text,5,'0'),
               'E'||lpad(g::text,5,'0'),
               'Emp '||lpad(g::text,5,'0'),
               'R01',

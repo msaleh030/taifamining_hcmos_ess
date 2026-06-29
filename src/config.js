@@ -43,6 +43,21 @@ const DEFAULT_CONFIG = {
   // Directory paging — server-side bound; first page must not full-table scan.
   'employees.page_size':   '50',
   'employees.page_max':    '200',
+
+  // ── Slice 3: Employee-number scheme — TMCL-<LOC>-<SEQ> ─────────────────────
+  // Format is prefix + location code + per-location zero-padded sequence, no year
+  // segment. Everything below is config: the generator/validator (src/empno.js)
+  // hard-codes none of it.
+  'empno.prefix':     'TMCL',
+  'empno.seq_width':  '4',          // SEQ is 4-digit zero-padded
+  // Single source of truth for locations: "key:code" pairs. An EMPTY code blocks
+  // generation for that location. Nyanzaga is [TBC-NYZ] — its code (NZ or NP) is
+  // awaiting confirmation, so it stays empty and generation is refused until set.
+  'empno.locations':  'ho:HO,mw:MW,nm:NM,nyanzaga:',
+  // [TBC-ROLLOVER] behaviour past SEQ 9999 per location is undefined until
+  // governance decides. Empty ⇒ the generator refuses to overflow (it does NOT
+  // silently widen the field).
+  'empno.rollover':   '',
 };
 
 // Site-scope is data/config (the site_scope table), not hard-coded. These are
@@ -55,26 +70,36 @@ const SITE_SCOPE = {
 
 // Cached per-tenant reads are unnecessary here; config_get is a cheap indexed
 // lookup via a SECURITY DEFINER function (bootstrap-safe, no app.company_id needed).
-async function getConfig(companyId, key, fallback = null) {
-  const r = await query('SELECT config_get($1,$2) AS v', [companyId, key]);
+//
+// `exec` (optional): when a caller is ALREADY inside a withTenant transaction it
+// MUST pass its client so the read runs on the same connection. Acquiring a
+// second pool connection from inside a held transaction risks pool-exhaustion
+// deadlock when concurrent transactions approach the pool size. Omit it for
+// standalone reads (the pool path).
+function runner(exec) {
+  return exec ? (sql, p) => exec.query(sql, p) : query;
+}
+
+async function getConfig(companyId, key, fallback = null, exec = null) {
+  const r = await runner(exec)('SELECT config_get($1,$2) AS v', [companyId, key]);
   const v = r.rows[0] && r.rows[0].v;
   return v === null || v === undefined ? fallback : v;
 }
 
-async function getInt(companyId, key, fallback) {
-  const v = await getConfig(companyId, key, null);
+async function getInt(companyId, key, fallback, exec = null) {
+  const v = await getConfig(companyId, key, null, exec);
   return v === null ? fallback : parseInt(v, 10);
 }
 
 // Parse a comma-separated role list from config.
-async function getOwnerRoles(companyId, key) {
-  const v = await getConfig(companyId, key, '');
+async function getOwnerRoles(companyId, key, exec = null) {
+  const v = await getConfig(companyId, key, '', exec);
   return v.split(',').map((s) => s.trim()).filter(Boolean);
 }
 
 // Comma-separated config as a Set, with a code fallback if the key is unset.
-async function getRoleSet(companyId, key, fallbackCsv = '') {
-  const v = await getConfig(companyId, key, null);
+async function getRoleSet(companyId, key, fallbackCsv = '', exec = null) {
+  const v = await getConfig(companyId, key, null, exec);
   const csv = v === null ? fallbackCsv : v;
   return new Set(csv.split(',').map((s) => s.trim()).filter(Boolean));
 }
