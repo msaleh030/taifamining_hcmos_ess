@@ -13,9 +13,9 @@ async function main() {
     // Clean slate (FK-safe order). audit is append-only (DELETE is blocked by a
     // trigger), so TRUNCATE it — which also resets the chain to genesis.
     await c.query('TRUNCATE audit RESTART IDENTITY');
-    for (const t of ['idempotency', 'field_change', 'employee_document', 'employee_asset',
-      'disciplinary', 'employee_medical', 'employee_pay', 'session', 'empno_counter',
-      'device', 'app_user', 'employee', 'site', 'config', 'site_scope', 'tenant']) {
+    for (const t of ['idempotency', 'field_change', 'leave_carry', 'employee_document',
+      'employee_asset', 'disciplinary', 'employee_medical', 'employee_pay', 'session',
+      'empno_counter', 'device', 'app_user', 'employee', 'site', 'config', 'site_scope', 'tenant']) {
       await c.query(`DELETE FROM ${t}`);
     }
 
@@ -61,6 +61,13 @@ async function main() {
     for (const d of F.DOCUMENTS) {
       await c.query('INSERT INTO employee_document(company_id,employee_id,kind,name,valid_until,uri) VALUES ($1,$2,$3,$4,$5,$6)',
         [d.company, d.employee, d.kind, d.name, d.valid_until, d.uri]);
+    }
+
+    // Leave carry (LR-4): one entry old enough to lapse under a 1-year window and
+    // one still inside it (asserted by test/leave.test.js with asOf in 2026).
+    for (const lc of F.LEAVE_CARRY) {
+      await c.query('INSERT INTO leave_carry(company_id,employee_id,days,carried_for_year) VALUES ($1,$2,$3,$4)',
+        [lc.company, lc.employee, lc.days, lc.year]);
     }
 
     for (const u of Object.values(F.USERS)) {

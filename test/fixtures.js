@@ -78,8 +78,15 @@ const DEVICES = {
 // Bulk directory load for the large-data test (Section 17.5).
 const BULK_COUNT = 5200;
 
+// Leave carry (LR-4). With lapse window = 1 year and a 2026 "as of" date: the
+// 2024 entry is past its window (lapses), the 2025 entry is still inside it.
+const LEAVE_CARRY = [
+  { company: TENANT_A, employee: EMP.CAROL, days: 5, year: 2024 }, // should lapse
+  { company: TENANT_A, employee: EMP.CAROL, days: 3, year: 2025 }, // should survive
+];
+
 module.exports = {
   MFA_SECRET, TENANT_A, TENANT_B, SITE, EMP,
-  EMPLOYEES, PAY, MEDICAL, DISCIPLINARY, DOCUMENTS,
+  EMPLOYEES, PAY, MEDICAL, DISCIPLINARY, DOCUMENTS, LEAVE_CARRY,
   USERS, DEVICES, BULK_COUNT,
 };
