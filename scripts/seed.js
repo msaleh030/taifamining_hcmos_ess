@@ -13,9 +13,9 @@ async function main() {
     // Clean slate (FK-safe order). audit is append-only (DELETE is blocked by a
     // trigger), so TRUNCATE it — which also resets the chain to genesis.
     await c.query('TRUNCATE audit RESTART IDENTITY');
-    for (const t of ['idempotency', 'field_change', 'leave_carry', 'employee_document',
-      'employee_asset', 'disciplinary', 'employee_medical', 'employee_pay', 'session',
-      'empno_counter', 'device', 'app_user', 'employee', 'site', 'config', 'site_scope', 'tenant']) {
+    for (const t of ['idempotency', 'field_change', 'leave_carry', 'geofence_zone',
+      'employee_document', 'employee_asset', 'disciplinary', 'employee_medical', 'employee_pay',
+      'session', 'empno_counter', 'device', 'app_user', 'employee', 'site', 'config', 'site_scope', 'tenant']) {
       await c.query(`DELETE FROM ${t}`);
     }
 
@@ -33,8 +33,15 @@ async function main() {
       }
     }
 
-    await c.query('INSERT INTO site(id,company_id,name) VALUES ($1,$2,$3),($4,$5,$6),($7,$8,$9)',
-      [F.SITE.A1, F.TENANT_A, 'Mine North', F.SITE.A2, F.TENANT_A, 'Mine South', F.SITE.B1, F.TENANT_B, 'B Site']);
+    await c.query('INSERT INTO site(id,company_id,name) VALUES ($1,$2,$3),($4,$5,$6),($7,$8,$9),($10,$11,$12)',
+      [F.SITE.A1, F.TENANT_A, 'Mine North', F.SITE.A2, F.TENANT_A, 'Mine South',
+       F.SITE.HO, F.TENANT_A, 'Head Office', F.SITE.B1, F.TENANT_B, 'B Site']);
+
+    for (const z of F.GEOFENCE_ZONES) {
+      await c.query(
+        'INSERT INTO geofence_zone(company_id,site_id,name,center_lat,center_lng,radius_m) VALUES ($1,$2,$3,$4,$5,$6)',
+        [z.company, z.site, z.name, z.lat, z.lng, z.radius]);
+    }
 
     for (const [id, e] of Object.entries(F.EMPLOYEES)) {
       // Seeded employees are pre-go-live: their number is retained as legacy_id

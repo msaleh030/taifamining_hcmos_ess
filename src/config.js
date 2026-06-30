@@ -82,6 +82,16 @@ const DEFAULT_CONFIG = {
   'payroll.gross_components': 'house,transport,responsibility', // PC-3 (must equal PC-1's set)
   'payroll.partial_period':   PENDING,     // PC-2 [TBC]
 
+  // ── Geofence clock-in (SS-3) ──────────────────────────────────────────────
+  // Zones themselves live in geofence_zone (per site). These tune the validator.
+  // [OPEN] HO has no zones: interim 'allow' so an empty zone set does NOT reject
+  // (HO staff are not locked out); flip to 'reject' once the HO decision lands.
+  'geofence.empty_zone.policy': 'allow',
+  // [FLAGGED: confirm tolerance policy] accept when distance <= radius + accuracy,
+  // with accuracy capped at tolerance.max_m to bound spoofed-accuracy abuse.
+  'geofence.tolerance.policy':  'accuracy',  // accuracy | none
+  'geofence.tolerance.max_m':   '50',
+
   // ── Documents / retention / region (DA-1, AC-2) ──────────────────────────
   'doc.lead_time.contract':   '30',        // DA-1 lead times (days)
   'doc.lead_time.permit':     '60',

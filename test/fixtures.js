@@ -8,10 +8,11 @@ const MFA_SECRET = 'JBSWY3DPEHPK3PXP';
 const TENANT_A = '11111111-1111-1111-1111-111111111111';
 const TENANT_B = '22222222-2222-2222-2222-222222222222';
 
-// Sites (Slice 2). Tenant A has two; tenant B one.
+// Sites (Slice 2). Tenant A has two mines + a Head Office; tenant B one.
 const SITE = {
   A1: '5170e000-0000-0000-0000-0000000000a1', // Mine North (tenant A)
   A2: '5170e000-0000-0000-0000-0000000000a2', // Mine South (tenant A)
+  HO: '5170e000-0000-0000-0000-0000000000d0', // Head Office (tenant A) — no geofence zones [OPEN]
   B1: '5170e000-0000-0000-0000-0000000000b1', // tenant B
 };
 
@@ -21,6 +22,7 @@ const EMP = {
   FIELDA: 'a0000000-0000-0000-0000-0000000000f1', // field operator (SITE A1)
   TERM:   'a0000000-0000-0000-0000-0000000000e1', // terminated user (SITE A1)
   DAVE:   'a0000000-0000-0000-0000-0000000000d2', // in SITE A2 — out-of-site target
+  HOEMP:  'a0000000-0000-0000-0000-0000000000d0', // in SITE HO (no zones)
   BOB_B:  'b0000000-0000-0000-0000-0000000000b1', // tenant B
 };
 
@@ -32,8 +34,17 @@ const EMPLOYEES = {
   [EMP.FIELDA]:{ company: TENANT_A, site: SITE.A1, emp_no: 'E-A-0003', full_name: 'Frank Field',       role_code: 'R13', dept: 'Mining',     status: 'active', phone: '0700000003', email: 'frank@a.example' },
   [EMP.TERM]:  { company: TENANT_A, site: SITE.A1, emp_no: 'E-A-0004', full_name: 'Tom Terminated',    role_code: 'R01', dept: 'Mining',     status: 'terminated', phone: '0700000004', email: 'tom@a.example' },
   [EMP.DAVE]:  { company: TENANT_A, site: SITE.A2, emp_no: 'E-A-0005', full_name: 'Dave SouthSite',    role_code: 'R01', dept: 'Mining',     status: 'active', phone: '0700000005', email: 'dave@a.example' },
+  [EMP.HOEMP]: { company: TENANT_A, site: SITE.HO, emp_no: 'E-A-0006', full_name: 'Hettie HeadOffice', role_code: 'R03', dept: 'Admin',      status: 'active', phone: '0700000006', email: 'hettie@a.example' },
   [EMP.BOB_B]: { company: TENANT_B, site: SITE.B1, emp_no: 'E-B-0001', full_name: 'Bob Bravo',         role_code: 'R01', dept: 'Mining',     status: 'active', phone: '0800000001', email: 'bob@b.example' },
 };
+
+// Geofence zones (SS-3). Site A1 has TWO zones (proves "inside ANY zone"); A2 has
+// one elsewhere; HO has none [OPEN]. Coordinates are arbitrary but fixed.
+const GEOFENCE_ZONES = [
+  { company: TENANT_A, site: SITE.A1, name: 'North Pit',  lat: -3.5000, lng: 32.0000, radius: 100 },
+  { company: TENANT_A, site: SITE.A1, name: 'North Camp', lat: -3.5500, lng: 32.0500, radius: 120 },
+  { company: TENANT_A, site: SITE.A2, name: 'South Pit',  lat: -3.6000, lng: 32.2000, radius: 150 },
+];
 
 // Confidential rows for CAROL (separate tables).
 const PAY = { [EMP.CAROL]: { company: TENANT_A, basic_pay: '4200.00', bank_name: 'NBK', bank_account: 'NBK-0099-2211' } };
@@ -65,6 +76,8 @@ const USERS = {
   RESET_A:    { id: 'd0000000-0000-0000-0000-0000000000a5', company: TENANT_A, employee: EMP.ALICE, email: 'reset@a.example',    password: 'ResetPass!2026', role: 'R01', status: 'active' },
   RESET2_A:   { id: 'd0000000-0000-0000-0000-0000000000a6', company: TENANT_A, employee: EMP.ALICE, email: 'reset2@a.example',   password: 'Reset2Pass!26',  role: 'R01', status: 'active' },
   FIELD_A:    { id: 'd0000000-0000-0000-0000-0000000000f0', company: TENANT_A, employee: EMP.FIELDA,email: 'field@a.example',    password: 'FieldPass!2026', role: 'R13', status: 'active' },
+  SITE2_A:    { id: 'd0000000-0000-0000-0000-0000000000d2', company: TENANT_A, employee: EMP.DAVE,  email: 'dave@a.example',     password: 'DavePass!2026',  role: 'R01', status: 'active' }, // SITE A2 (geofence)
+  HO_A:       { id: 'd0000000-0000-0000-0000-0000000000d0', company: TENANT_A, employee: EMP.HOEMP, email: 'hettie@a.example',   password: 'HettiePass!26',  role: 'R03', status: 'active' }, // SITE HO (no zones)
   TERM_A:     { id: 'd0000000-0000-0000-0000-0000000000e0', company: TENANT_A, employee: EMP.TERM,  email: 'term@a.example',     password: 'TermPass!2026',  role: 'R01', status: 'terminated' },
   BOB_B:      { id: 'd0000000-0000-0000-0000-0000000000b0', company: TENANT_B, employee: EMP.BOB_B, email: 'bob@b.example',      password: 'BobPass!2026',   role: 'R01', status: 'active' },
 };
@@ -87,6 +100,6 @@ const LEAVE_CARRY = [
 
 module.exports = {
   MFA_SECRET, TENANT_A, TENANT_B, SITE, EMP,
-  EMPLOYEES, PAY, MEDICAL, DISCIPLINARY, DOCUMENTS, LEAVE_CARRY,
+  EMPLOYEES, PAY, MEDICAL, DISCIPLINARY, DOCUMENTS, LEAVE_CARRY, GEOFENCE_ZONES,
   USERS, DEVICES, BULK_COUNT,
 };
