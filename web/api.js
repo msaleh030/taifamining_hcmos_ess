@@ -69,6 +69,16 @@ export const api = {
 
   // F5 — attendance clock-in. The server re-validates; the client cannot assert in.
   clockIn: (loc) => request('/attendance/clock-in', { method: 'POST', body: loc }),
+
+  // F6 — Exact payroll integration (pay-guarded). Upload → reconcile → net-check
+  // → control-totals → publish. The server BLOCKS on schema-fail and on totals
+  // that don't reconcile; the client cannot click past either.
+  exactUpload: (body) => request('/exact/upload', { method: 'POST', body }),
+  exactReconcile: (id) => request(`/exact/batch/${id}/reconcile`, { method: 'POST' }),
+  exactNetCheck: (id) => request(`/exact/batch/${id}/net-check`),
+  exactControlTotals: (id) => request(`/exact/batch/${id}/control-totals`),
+  exactPublish: (id) => request(`/exact/batch/${id}/publish`, { method: 'POST' }),
+  exactBatch: (id) => request(`/exact/batch/${id}`),
 };
 
 // A3: the API OMITS confidential fields a role may not see, so the UI simply does

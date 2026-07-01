@@ -65,10 +65,19 @@ async function validateLayout(client, companyId, grid) {
   return { version, headerRow, contract, dataRows: grid.slice(headerRow) };
 }
 
+// Normalise a declared control-totals object to the three numeric columns (or
+// null when not supplied). Accepts total_pay / total_deduction / net.
+function controlCols(ct) {
+  if (!ct || typeof ct !== 'object') return { tp: null, td: null, net: null };
+  const opt = (v) => (v == null || v === '' ? null : num(v));
+  return { tp: opt(ct.total_pay), td: opt(ct.total_deduction), net: opt(ct.net) };
+}
+
 // ── AC-EXACT-06: stage a load (idempotent by file hash) ─────────────────────
-async function stage(session, { period, filename, grid }) {
+async function stage(session, { period, filename, grid, controlTotals }) {
   if (!Array.isArray(grid)) throw new HttpError(400, 'grid required');
   const fileHash = gridHash(grid);
+  const ct = controlCols(controlTotals);
 
   return db.withTenant(session.company_id, async (c) => {
     const { version, dataRows } = await validateLayout(c, session.company_id, grid);
@@ -81,9 +90,11 @@ async function stage(session, { period, filename, grid }) {
     }
 
     const batch = (await c.query(
-      `INSERT INTO exact_batch (company_id, period, filename, file_hash, version, status, row_count)
-       VALUES ($1,$2,$3,$4,$5,'staged',$6) RETURNING id`,
-      [session.company_id, period || null, filename || null, fileHash, version, dataRows.length])).rows[0];
+      `INSERT INTO exact_batch (company_id, period, filename, file_hash, version, status, row_count,
+                                control_total_pay, control_total_deduction, control_net)
+       VALUES ($1,$2,$3,$4,$5,'staged',$6,$7,$8,$9) RETURNING id`,
+      [session.company_id, period || null, filename || null, fileHash, version, dataRows.length,
+       ct.tp, ct.td, ct.net])).rows[0];
 
     for (let i = 0; i < dataRows.length; i++) {
       const cells = dataRows[i];
@@ -120,6 +131,27 @@ async function match(session, batchId) {
   });
 }
 
+// ── AC-EXACT-09: control totals — sum the staged rows and compare to the totals
+// DECLARED at upload. Any declared total that doesn't reconcile is a hard block.
+async function controlCheck(session, batchId, exec) {
+  const co = session.company_id;
+  const tpCol = await cfg.getInt(co, 'exact.col.total_pay', 28, exec);
+  const tdCol = await cfg.getInt(co, 'exact.col.total_deduction', 42, exec);
+  const b = (await exec.query(
+    'SELECT control_total_pay, control_total_deduction, control_net FROM exact_batch WHERE id=$1', [batchId])).rows[0];
+  const rows = (await exec.query('SELECT cells FROM exact_row WHERE batch_id=$1', [batchId])).rows;
+  let sumTp = 0, sumTd = 0;
+  for (const r of rows) { sumTp += num(r.cells[tpCol]); sumTd += num(r.cells[tdCol]); }
+  const computed = { total_pay: round2(sumTp), total_deduction: round2(sumTd), net: round2(sumTp - sumTd) };
+  const declared = b ? { total_pay: b.control_total_pay, total_deduction: b.control_total_deduction, net: b.control_net } : {};
+  const mismatches = [];
+  for (const k of ['total_pay', 'total_deduction', 'net']) {
+    if (declared[k] == null) continue;                     // nothing declared → nothing to reconcile
+    if (round2(num(declared[k])) !== computed[k]) mismatches.push({ field: k, declared: round2(num(declared[k])), computed: computed[k] });
+  }
+  return { computed, declared, ok: mismatches.length === 0, mismatches };
+}
+
 // ── AC-EXACT-08: atomic publish (all-or-nothing) ────────────────────────────
 // opts.faultStep (TEST ONLY) forces a throw after the status flip to prove atomicity.
 async function publish(session, batchId, opts = {}) {
@@ -133,6 +165,11 @@ async function publish(session, batchId, opts = {}) {
     const pend = (await c.query(
       `SELECT count(*)::int n FROM exact_row WHERE batch_id=$1 AND match_status='pending'`, [batchId])).rows[0].n;
     if (pend > 0) throw new HttpError(409, 'run match before publishing');
+
+    // Control-totals gate: a file whose declared totals don't reconcile BLOCKS
+    // publish (not a warning) — checked BEFORE the status flip so nothing commits.
+    const control = await controlCheck(session, batchId, c);
+    if (!control.ok) throw new HttpError(409, 'control totals do not reconcile', { mismatches: control.mismatches });
 
     await c.query(`UPDATE exact_batch SET status='published', published_at=now() WHERE id=$1`, [batchId]);
     if (opts.faultStep === 'after_status') throw new Error('injected fault (test)');
@@ -209,7 +246,28 @@ async function reconcile(session, batchId) {
   return { batch_id: batchId, reconciled: true };
 }
 
+// Endpoint wrapper: control totals (computed vs declared) inside a tenant tx.
+async function controlReport(session, batchId) {
+  return db.withTenant(session.company_id, (c) => controlCheck(session, batchId, c));
+}
+
+// Read-only batch view (AC-EXACT-10: published pay is read; no endpoint mutates it).
+async function getBatch(session, batchId) {
+  return db.withTenant(session.company_id, async (c) => {
+    const b = (await c.query(
+      `SELECT id, period, filename, version, status, row_count, published_at,
+              control_total_pay, control_total_deduction, control_net
+         FROM exact_batch WHERE id=$1`, [batchId])).rows[0];
+    if (!b) throw new HttpError(404, 'batch not found');
+    const counts = (await c.query(
+      `SELECT match_status, count(*)::int n FROM exact_row WHERE batch_id=$1 GROUP BY match_status`, [batchId])).rows;
+    const by = { pending: 0, matched: 0, unmatched: 0 };
+    for (const r of counts) by[r.match_status] = r.n;
+    return { batch: b, rows: by, read_only: b.status === 'published' };
+  });
+}
+
 module.exports = {
-  parseCsv, gridHash, validateLayout, stage, match, publish,
+  parseCsv, gridHash, validateLayout, stage, match, publish, controlCheck, controlReport, getBatch,
   dailyRateBase, netCheck, netCheckBatch, reconcile, num,
 };

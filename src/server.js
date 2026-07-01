@@ -15,6 +15,7 @@ const leave = require('./leave');
 const liability = require('./liability');
 const kpi = require('./kpi');
 const attendance = require('./attendance');
+const exact = require('./exact');
 const roles = require('./roles');
 const cfg = require('./config');
 const { HttpError } = require('./errors');
@@ -122,6 +123,34 @@ const routes = [
   // location against the employee's site zones; the device verdict is never trusted.
   { method: 'POST', pattern: /^\/attendance\/clock-in$/,
     handler: async (req, m, url, s) => ({ status: 200, body: await attendance.clockIn(s, await readJson(req)) }) },
+
+  // ── F6: Exact payroll integration (upload → schema-validate → reconcile →
+  // control-totals → publish). This touches PAY data, so every endpoint is
+  // guarded to the pay-visibility role set (a3.pay.roles) — the SAME pay-adjacent
+  // discipline as liability: a role that cannot see pay cannot run the upload.
+  // Publish has the endpoint-layer fault seam (disabled in production) to prove
+  // atomicity; the control-totals mismatch and schema-fail are HARD blocks.
+  { method: 'POST', pattern: /^\/exact\/upload$/, allow: 'a3.pay.roles',
+    handler: async (req, m, url, s) => {
+      const body = await readJson(req);
+      const grid = Array.isArray(body.grid) ? body.grid : exact.parseCsv(String(body.csv || ''));
+      return { status: 200, body: await exact.stage(s,
+        { period: body.period, filename: body.filename, grid, controlTotals: body.control_totals }) };
+    } },
+  { method: 'POST', pattern: /^\/exact\/batch\/([0-9a-f-]+)\/reconcile$/i, allow: 'a3.pay.roles',
+    handler: async (req, m, url, s) => ({ status: 200, body: await exact.match(s, m[1]) }) },
+  { method: 'GET', pattern: /^\/exact\/batch\/([0-9a-f-]+)\/net-check$/i, allow: 'a3.pay.roles',
+    handler: async (req, m, url, s) => ({ status: 200, body: await exact.netCheckBatch(s, m[1]) }) },
+  { method: 'GET', pattern: /^\/exact\/batch\/([0-9a-f-]+)\/control-totals$/i, allow: 'a3.pay.roles',
+    handler: async (req, m, url, s) => ({ status: 200, body: await exact.controlReport(s, m[1]) }) },
+  { method: 'POST', pattern: /^\/exact\/batch\/([0-9a-f-]+)\/publish$/i, allow: 'a3.pay.roles',
+    handler: async (req, m, url, s) => {
+      const body = await readJson(req);
+      const opts = process.env.NODE_ENV !== 'production' && body.faultStep ? { faultStep: body.faultStep } : {};
+      return { status: 200, body: await exact.publish(s, m[1], opts) };
+    } },
+  { method: 'GET', pattern: /^\/exact\/batch\/([0-9a-f-]+)$/i, allow: 'a3.pay.roles',
+    handler: async (req, m, url, s) => ({ status: 200, body: await exact.getBatch(s, m[1]) }) },
 ];
 
 // Guard: verify session, then A2 module / RBAC action / registry deny-set if the
