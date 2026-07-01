@@ -40,23 +40,19 @@ const EMPLOYEES = {
   [EMP.BOB_B]: { company: TENANT_B, site: SITE.B1, emp_no: 'E-B-0001', full_name: 'Bob Bravo',         role_code: 'R01', dept: 'Mining',     status: 'active', phone: '0800000001', email: 'bob@b.example' },
 };
 
-// Geofence zones (SS-3, registry v1.2) — 7 zones. RADII are confirmed. HO centre
-// is CONFIRMED (-6.754188, 39.273797). The mine centres (MW/NM/NZ) are APPROXIMATE
-// pending precise survey — flagged; they live here in the registry (never in code)
-// so they can be corrected without a deploy. Centres are spaced km apart so a
-// small drift cannot fall into a neighbouring zone (keeps tests deterministic).
+// Geofence zones (SS-3, registry v1.2, O-1 CLOSED) — 7 zones, all centres and
+// radii CONFIRMED. They live here in the registry (never in code) so they can be
+// updated without a deploy. NB: NM Gokona Workshop (r200) and Gokona Admin (r100)
+// are ~67 m apart (Admin sits inside Workshop) — real survey, so tests that need a
+// deterministic single-zone match use the cleanly-separated MW zones.
 const GEOFENCE_ZONES = [
-  // Head Office — CONFIRMED centre + radius.
-  { company: TENANT_A, site: SITE.HO, name: 'HO',               lat: -6.754188, lng: 39.273797, radius: 150 },
-  // Mwadui (MW) — radii confirmed, centres approximate.
-  { company: TENANT_A, site: SITE.A2, name: 'MW Workshop',      lat: -3.5560, lng: 33.6070, radius: 300 },
-  { company: TENANT_A, site: SITE.A2, name: 'MW Production',    lat: -3.5760, lng: 33.6070, radius: 100 }, // ZKTeco non-functional: GPS only
-  // North Mara (NM) — radii confirmed, centres approximate.
-  { company: TENANT_A, site: SITE.A1, name: 'NM TSF',           lat: -1.4500, lng: 34.4500, radius: 400 },
-  { company: TENANT_A, site: SITE.A1, name: 'Gokona Workshop',  lat: -1.4700, lng: 34.4500, radius: 200 },
-  { company: TENANT_A, site: SITE.A1, name: 'Gokona Admin',     lat: -1.4500, lng: 34.4700, radius: 100 },
-  // Nyanzaga (NZ) — radius confirmed, centre approximate.
-  { company: TENANT_A, site: SITE.NZ, name: 'NZ',               lat: -2.7500, lng: 32.5000, radius: 800 },
+  { company: TENANT_A, site: SITE.HO, name: 'HO',              lat: -6.754188, lng: 39.273797, radius: 150 },
+  { company: TENANT_A, site: SITE.A2, name: 'MW Workshop',     lat: -3.527972, lng: 33.591528, radius: 300 },
+  { company: TENANT_A, site: SITE.A2, name: 'MW Production',   lat: -3.524574, lng: 33.591796, radius: 100 }, // ZKTeco non-functional: GPS only
+  { company: TENANT_A, site: SITE.A1, name: 'NM TSF',          lat: -1.478784, lng: 34.504310, radius: 400 },
+  { company: TENANT_A, site: SITE.A1, name: 'Gokona Workshop', lat: -1.420831, lng: 34.552759, radius: 200 },
+  { company: TENANT_A, site: SITE.A1, name: 'Gokona Admin',    lat: -1.421284, lng: 34.553155, radius: 100 },
+  { company: TENANT_A, site: SITE.NZ, name: 'NZ',              lat: -2.938408, lng: 32.679158, radius: 800 },
 ];
 
 // Confidential rows for CAROL (separate tables).
