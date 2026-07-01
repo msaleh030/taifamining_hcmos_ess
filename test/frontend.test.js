@@ -67,22 +67,32 @@ test('F0 serves the production frontend (static assets), with traversal blocked'
   assert.notEqual(bad.status, 200);
 });
 
-// F4 flag-off: the endpoint returns {enabled:false, cards:[]} (kpi.test #50); this
-// asserts the FRONTEND render of that payload is a DISTINCT disabled panel — a
-// module-off explainer + enable-pointer — NOT a fall-through to empty/blank (C3).
-test('F4 flag-off renders the distinct disabled panel, not empty/blank', async () => {
-  const { scorecardView } = await importWeb('kpi.js', ['api.js']);
+// F4 flag-off RENDER: the analytics flag is TENANT-WIDE and gates BOTH the org
+// scorecard (C3) and personal My KPIs (E8). This asserts the frontend render of a
+// {enabled:false} payload is a DISTINCT disabled panel (module-off explainer +
+// enable-pointer) for BOTH screens — never a fall-through to empty/blank, and
+// structurally distinct from the empty AND no-permission states.
+test('F4 flag-off renders the distinct disabled panel for BOTH C3 and E8', async () => {
+  const { kpiView, moduleDisabledView, noPermissionView } = await importWeb('kpi.js', ['api.js']);
 
-  const off = scorecardView({ enabled: false, cards: [] });
-  assert.match(off, /data-state="module-disabled"/, 'flag-off is the disabled panel state');
-  assert.match(off, /scorecard-disabled/);
-  assert.match(off, /switched off/i, 'the panel EXPLAINS the module is off');
-  assert.match(off, /enable-pointer/, 'the panel carries an enable-pointer');
-  assert.doesNotMatch(off, /data-state="empty"/, 'flag-off is NOT the empty state');
-  assert.doesNotMatch(off, /class="cards"/, 'flag-off does not fall through to blank cards');
+  for (const title of ['Scorecard', 'My KPIs']) {
+    // Flag off wins even when cards would exist (tenant-wide, overriding role).
+    const off = kpiView({ enabled: false, cards: [{ id: 'X', name: 'x' }] }, title);
+    assert.match(off, /data-state="module-disabled"/, `${title} flag-off is the disabled panel`);
+    assert.match(off, /kpi-disabled/);
+    assert.match(off, /switched off/i, 'the panel EXPLAINS the module is off');
+    assert.match(off, /enable-pointer/, 'the panel carries an enable-pointer');
+    assert.doesNotMatch(off, /data-state="empty"/, 'flag-off is NOT the empty state');
+    assert.doesNotMatch(off, /class="cards"/, 'flag-off does not fall through to blank cards');
 
-  // Enabled-but-no-cards is the EMPTY state — must be distinct from disabled.
-  const empty = scorecardView({ enabled: true, cards: [] });
-  assert.match(empty, /data-state="empty"/);
-  assert.doesNotMatch(empty, /scorecard-disabled/, 'empty is NOT the disabled panel');
+    // The disabled panel is structurally distinct from empty AND no-permission.
+    const empty = kpiView({ enabled: true, cards: [] }, title);
+    assert.match(empty, /data-state="empty"/);
+    assert.doesNotMatch(empty, /kpi-disabled/, 'empty is NOT the disabled panel');
+
+    const noPerm = noPermissionView(title);
+    assert.match(noPerm, /data-state="no-permission"/);
+    assert.doesNotMatch(noPerm, /data-state="module-disabled"/, 'no-permission is NOT the disabled panel');
+    assert.doesNotMatch(moduleDisabledView(title), /data-state="no-permission"/, 'disabled is NOT no-permission');
+  }
 });

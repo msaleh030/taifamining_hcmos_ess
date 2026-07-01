@@ -14,38 +14,50 @@ function cardHtml(card) {
       <p class="status">${rag.toUpperCase()}</p></div>`;
 }
 
-// Pure view: turn a scorecard payload into HTML. THREE distinct states, never a
-// blank fall-through (C3):
-//   • module-disabled — the analytics feature-flag is OFF for this client. A whole-
-//     module panel that EXPLAINS it is switched off + points at how to enable it.
-//     Distinct from empty (flag on, nothing to show) and from no-permission.
-//   • empty           — flag on but no cards yet.
+// FOUR distinct render states for a KPI module (C3 scorecard AND E8 My KPIs),
+// never a blank fall-through. Each carries a unique data-state so they can never
+// be confused:
+//   • module-disabled — analytics.enabled is OFF (TENANT-WIDE, overrides role): a
+//     whole-module panel EXPLAINING it is switched off + an enable-pointer.
+//   • no-permission   — the requester is not allowed the module (endpoint 403).
+//   • empty           — flag on, allowed, but no cards to show.
 //   • ready           — flag on, cards present.
-export function scorecardView(sc) {
-  if (!sc || !sc.enabled) {
-    return `<div class="scorecard scorecard-disabled" data-state="module-disabled">
-      <h3>Scorecard</h3>
-      <p class="module-off">The Scorecard module is switched off for this client — analytics is not enabled.</p>
+export function moduleDisabledView(title) {
+  return `<div class="kpi-module kpi-disabled" data-state="module-disabled">
+      <h3>${title}</h3>
+      <p class="module-off">The ${title} module is switched off for this client — analytics is not enabled.</p>
       <p class="enable-pointer">Enable the Analytics add-on in tenant configuration to switch this module on.</p>
     </div>`;
-  }
-  const cards = sc.cards || [];
+}
+
+export function noPermissionView(title) {
+  return `<div class="kpi-module kpi-no-permission" data-state="no-permission">
+      <h3>${title}</h3>
+      <p class="no-permission">You do not have access to ${title}.</p>
+    </div>`;
+}
+
+// Pure: a {enabled, cards} payload → HTML. Flag-off (enabled:false) ALWAYS wins,
+// regardless of role/cards — the tenant-wide disabled panel.
+export function kpiView(payload, title) {
+  if (!payload || !payload.enabled) return moduleDisabledView(title);
+  const cards = payload.cards || [];
   if (cards.length === 0) {
-    return `<div class="scorecard" data-state="empty"><h3>Scorecard</h3><p class="empty">No KPIs to show yet.</p></div>`;
+    return `<div class="kpi-module" data-state="empty"><h3>${title}</h3><p class="empty">No KPIs to show yet.</p></div>`;
   }
-  return `<div class="scorecard" data-state="ready"><h3>Scorecard</h3><div class="cards">${cards.map(cardHtml).join('')}</div></div>`;
+  return `<div class="kpi-module" data-state="ready"><h3>${title}</h3><div class="cards">${cards.map(cardHtml).join('')}</div></div>`;
 }
 
 export async function renderScorecard(el) {
   let sc;
   try { sc = await api.scorecard(); }
-  catch (e) { el.innerHTML = `<p>Could not load the scorecard.</p>`; return; }
-  el.innerHTML = scorecardView(sc);
+  catch (e) { el.innerHTML = e.status === 403 ? noPermissionView('Scorecard') : `<p>Could not load the scorecard.</p>`; return; }
+  el.innerHTML = kpiView(sc, 'Scorecard');
 }
 
 export async function renderMyKpis(el) {
   let mine;
   try { mine = await api.myKpis(); }
-  catch (e) { el.innerHTML = `<p>Could not load your KPIs.</p>`; return; }
-  el.innerHTML = `<div class="scorecard"><h3>My KPIs</h3><div class="cards">${mine.cards.map(cardHtml).join('')}</div></div>`;
+  catch (e) { el.innerHTML = e.status === 403 ? noPermissionView('My KPIs') : `<p>Could not load your KPIs.</p>`; return; }
+  el.innerHTML = kpiView(mine, 'My KPIs');
 }

@@ -10,8 +10,10 @@
 //  - Role-scope (A2/A3): the org scorecard shows only the KPIs a role owns.
 //  - My KPIs (E8): every employee sees their own personal cards (self only).
 //  - LVR-02: populations count ACTIVE staff only (leavers excluded).
-//  - Feature flag: the org scorecard is active only if analytics.enabled is on
-//    (steering decision). The engine + personal My KPIs exist regardless.
+//  - Feature flag: analytics.enabled is a TENANT-WIDE module flag governing BOTH
+//    the org scorecard (C3) AND personal My KPIs (E8) — when off, both return
+//    { enabled:false, cards:[] } regardless of role (the flag overrides role).
+//    The compute engine (computeOne) still exists for internal/drill-down use.
 const db = require('./db');
 const cfg = require('./config');
 const { HttpError } = require('./errors');
@@ -165,15 +167,19 @@ async function scorecard(session) {
   });
 }
 
-// My KPIs (E8): personal cards for the requester only. Always available.
+// My KPIs (E8): personal cards for the requester only (self). Gated by the SAME
+// tenant-wide analytics flag as the scorecard — off → { enabled:false, cards:[] }
+// for every role (the flag overrides role), so the screen shows the disabled panel.
 async function myKpis(session) {
+  const enabled = await analyticsEnabled(session.company_id);
+  if (!enabled) return { enabled: false, cards: [] };
   return db.withTenant(session.company_id, async (client) => {
     const emp = (await client.query('SELECT employee_id FROM app_user WHERE id=$1', [session.user_id])).rows[0];
     const employeeId = emp && emp.employee_id;
     const ctx = { client, employeeId, session };
     const cards = [];
     for (const d of DEFS.filter((x) => x.personal)) cards.push(await computeCard(d, ctx));
-    return { employee_id: employeeId, cards };
+    return { enabled: true, employee_id: employeeId, cards };
   });
 }
 

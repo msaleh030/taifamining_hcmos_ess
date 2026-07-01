@@ -60,20 +60,28 @@ test('role-scope: each role sees only the KPIs it owns; scorecard is feature-fla
   }
 });
 
-test('My KPIs (E8) are self only', async () => {
+test('My KPIs (E8) are self only, and gated by the tenant-wide analytics flag', async () => {
+  // Flag off (default) → E8 disabled tenant-wide, regardless of role.
+  const off = await kpi.myKpis({ company_id: A, user_id: F.USERS.SITE2_A.id, role_code: 'R01' });
+  assert.equal(off.enabled, false, 'My KPIs off when analytics is off (tenant-wide)');
+  assert.equal(off.cards.length, 0);
+
   // Give one employee a disciplinary record; another none.
   await db.withOwner((c) => c.query(
     `INSERT INTO disciplinary(company_id, employee_id, kind, action_type) VALUES ($1,$2,'verbal','verbal')`,
     [A, F.EMP.DAVE]));
+  await setCfg(A, 'analytics.enabled', 'true');
   try {
     const daveMy = await kpi.myKpis({ company_id: A, user_id: F.USERS.SITE2_A.id, role_code: 'R01' });
     const hoMy = await kpi.myKpis({ company_id: A, user_id: F.USERS.HO_A.id, role_code: 'R03' });
     const disc = (my) => my.cards.find((c) => c.id === 'MY-02');
 
+    assert.equal(daveMy.enabled, true);
     assert.equal(daveMy.employee_id, F.EMP.DAVE);
     assert.equal(disc(daveMy).value, 1, 'sees own disciplinary record');
     assert.equal(disc(hoMy).value, 0, 'another employee sees only their own (zero)');
   } finally {
+    await setCfg(A, 'analytics.enabled', 'false');
     await db.withOwner((c) => c.query(
       `DELETE FROM disciplinary WHERE employee_id=$1 AND action_type='verbal' AND detail IS NULL`, [F.EMP.DAVE]));
   }

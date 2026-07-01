@@ -54,14 +54,23 @@ test('scorecard is feature-flagged at the endpoint; role-scoped; not-available; 
   }
 });
 
-// ── My KPIs: self only (no way to read another employee's KPIs) ─────────────
-test('My KPIs returns the requester’s own cards only', async () => {
+// ── My KPIs (E8): tenant-wide flag-off, then self-only when enabled ──────────
+test('My KPIs is flag-gated tenant-wide, then returns the requester’s own cards only', async () => {
   const disc = (await owner(
     `INSERT INTO disciplinary(company_id, employee_id, kind, action_type) VALUES ($1,$2,'verbal','verbal') RETURNING id`,
     [A, F.EMP.DAVE])).rows[0].id;
   try {
-    const dave = await tok(F.USERS.SITE2_A); // employee DAVE
+    // Flag OFF (default): E8 disabled for the endpoint too — {enabled:false,cards:[]}
+    // regardless of role (tenant-wide overriding role → the screen shows disabled).
+    const dave = await tok(F.USERS.SITE2_A); // employee DAVE (R01)
+    const offD = await H.req('GET', '/kpi/mine', { token: dave });
+    assert.equal(offD.status, 200);
+    assert.equal(offD.body.enabled, false, 'My KPIs off tenant-wide when analytics off');
+    assert.deepEqual(offD.body.cards, []);
+
+    await setAnalytics('true');
     const mineD = await H.req('GET', '/kpi/mine', { token: dave });
+    assert.equal(mineD.body.enabled, true);
     assert.equal(mineD.body.employee_id, F.EMP.DAVE);
     assert.equal(mineD.body.cards.find((c) => c.id === 'MY-02').value, 1, 'sees own disciplinary count');
 
@@ -71,6 +80,7 @@ test('My KPIs returns the requester’s own cards only', async () => {
     assert.equal(mineA.body.cards.find((c) => c.id === 'MY-02').value, 0, 'another employee sees only their own');
     // (There is no /kpi/mine/:id — a caller cannot request another employee's KPIs.)
   } finally {
+    await setAnalytics('false');
     await owner(`DELETE FROM disciplinary WHERE id=$1`, [disc]);
   }
 });
