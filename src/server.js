@@ -23,6 +23,7 @@ const controls = require('./controls');
 const provision = require('./provision');
 const reports = require('./reports');
 const ingest = require('./ingest');
+const db = require('./db');
 const crypto = require('node:crypto');
 const roles = require('./roles');
 const cfg = require('./config');
@@ -54,6 +55,11 @@ function bearer(req) {
 
 // ── Declarative routes. auth defaults true; module/action are optional guards. ──
 const routes = [
+  // Liveness/readiness for systemd, the smoke test and edge monitoring. Public,
+  // returns NO data beyond ok/db — safe to expose.
+  { method: 'GET', pattern: /^\/health$/, auth: false,
+    handler: async () => { await db.query('SELECT 1'); return { status: 200, body: { ok: true, db: true } }; } },
+
   { method: 'POST', pattern: /^\/auth\/console$/, auth: false,
     handler: async (req) => ({ status: 200, body: await auth.consoleLogin(await readJson(req)) }) },
   { method: 'POST', pattern: /^\/auth\/field$/, auth: false,

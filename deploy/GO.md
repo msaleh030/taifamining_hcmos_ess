@@ -36,6 +36,13 @@ UAT_NAME='Mohammed Saleh' UAT_ROLE=R11 UAT_SITE='Head Office' node scripts/provi
 R11 (HR Director) is central — sees every site's directory + permit alerts (I-5).
 Enrol the printed `otpauth://` in your authenticator; rotate the printed password.
 
+Provision a SECOND ingest-set user (e.g. R12 sysadmin) — the data load is
+maker-checker and needs **two distinct users** from `ingest.roles` (R11/R12):
+```
+UAT_COMPANY=11111111-1111-1111-1111-111111111111 UAT_EMAIL=sysadmin@taifamining.tz \
+UAT_NAME='HCMOS SysAdmin' UAT_ROLE=R12 UAT_SITE='Head Office' node scripts/provision-uat-user.js
+```
+
 ## 5. Cloudflare — DNS + TLS + Access + cache  (→ I-1)  [your account]
 Follow `deploy/cloudflare-edge.md`:
 - Tunnel `hcmos-uat` → `http://localhost:3000`; `cloudflared tunnel route dns
@@ -50,10 +57,25 @@ Follow `deploy/cloudflare-edge.md`:
   the foot of `deploy/backup.sh`) and record it.
 
 ## 7. Real data  (→ I-5 full)
-Drop the **340 opening balances + permit files** on the box and load via the
-ingestion path (`deploy/README.md` §3). Until then the directory shows the seed's
-synthetic employees. **Stays TEST data** — carry policy + duplicate-file open with
-Baraka.
+Drop the **340 opening balances + permit files** (CSV) on the box, prepare a
+`control.json` with the EXPECTED totals **from the source document** (independent
+check), then load through the ingestion discipline via the loader:
+```
+cd /opt/hcmos; set -a; . /etc/hcmos/hcmos.env; set +a
+# dry-run first — prints clean/exception split + control check, loads NOTHING:
+node scripts/load-ingest.js opening-balance balances.csv control.json \
+     admin@taifamining.tz sysadmin@taifamining.tz
+# review balances.csv.exceptions.json, then commit (maker admin@, checker sysadmin@):
+node scripts/load-ingest.js opening-balance balances.csv control.json \
+     admin@taifamining.tz sysadmin@taifamining.tz --commit
+# permits mirror (control.json = {"count": N}):
+node scripts/load-ingest.js permits permits.csv permits-control.json \
+     admin@taifamining.tz sysadmin@taifamining.tz --commit
+```
+Balances land in the protected **opening bucket** (lapse-exempt). Verify with
+`bash deploy/smoke-test.sh`, then log in as the R11 account and confirm the
+directory shows the loaded employees. **Stays TEST data** — carry policy +
+duplicate-file open with Baraka (`deploy/RATIFY-AT-UAT.md`).
 
 ## Acceptance (I-1..I-6)
 | ID | Met by |

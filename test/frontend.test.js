@@ -27,6 +27,14 @@ before(async () => { base = await H.start(); });
 after(H.stop);
 const raw = (p, opts) => fetch(base + p, opts);
 
+test('/health is public and confirms DB connectivity (deploy liveness probe)', async () => {
+  const r = await raw('/health');
+  assert.equal(r.status, 200);
+  const j = await r.json();
+  assert.equal(j.ok, true);
+  assert.equal(j.db, true);
+});
+
 test('F0 auth: login issues a token; /me/landing returns the A2 module set', async () => {
   const login = await H.loginConsole(F.USERS.DIRECTOR_A); // R11
   assert.equal(login.status, 200);
