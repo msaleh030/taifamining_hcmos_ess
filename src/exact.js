@@ -154,18 +154,14 @@ function num(v) {
 const round2 = (x) => Math.round(x * 100) / 100;
 const csvInts = (s) => String(s || '').split(',').map((x) => parseInt(x, 10)).filter(Number.isFinite);
 
-// ── EX-2 / PC-1: daily-rate base = confirmed earnings set, EXCLUDING overtime ─
-// cols 21 & 24. Rotation/Night Shift are [TBC]: included only if the registry
-// flag is on (default OUT). Operates on a row's cell array.
+// ── EX-2 / PC-1 (v1.4): daily-rate base = confirmed earnings set, EXCLUDING the
+// overtime cols (21,24) and Rotation/Night Shift (19,20). This is the ONE base;
+// leave-pay/liability (src/liability.js) reads it too. Operates on a cell array.
 async function dailyRateBase(session, cells) {
   const co = session.company_id;
   const base = csvInts(await cfg.getConfig(co, 'exact.dailyrate.base_cols', '', null));
-  const exclude = new Set(csvInts(await cfg.getConfig(co, 'exact.dailyrate.exclude_cols', '21,24', null)));
-  const includeRot = (await cfg.getConfig(co, 'exact.dailyrate.rotation_nightshift.include', 'false', null)) === 'true';
-  const rotCols = csvInts(await cfg.getConfig(co, 'exact.dailyrate.rotation_nightshift_cols', '', null));
-
-  let positions = base.filter((c) => !exclude.has(c));
-  if (includeRot) positions = positions.concat(rotCols.filter((c) => !exclude.has(c)));
+  const exclude = new Set(csvInts(await cfg.getConfig(co, 'exact.dailyrate.exclude_cols', '19,20,21,24', null)));
+  const positions = base.filter((c) => !exclude.has(c));
   return round2(positions.reduce((sum, c) => sum + num(cells[c]), 0));
 }
 

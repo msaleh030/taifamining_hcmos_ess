@@ -118,10 +118,9 @@ const DEFAULT_CONFIG = {
   // + Project + Medical + Housing(fixed) + Fixed Overtime + Transport(10%).
   // Positions are the contract's earnings columns; EXCLUDE overtime cols 21 & 24.
   'exact.dailyrate.base_cols':    '11,12,13,14,15,16,17,18',
-  'exact.dailyrate.exclude_cols': '21,24',
-  // [TBC] Rotation & Night Shift — flagged, default OUT until confirmed.
-  'exact.dailyrate.rotation_nightshift.include': 'false',
-  'exact.dailyrate.rotation_nightshift_cols':    '19,20',
+  // v1.4 CONFIRMED exclusions (no longer [TBC], no include flag): overtime normal
+  // (21) & holiday (24), and Rotation (19) & Night Shift (20).
+  'exact.dailyrate.exclude_cols': '19,20,21,24',
   // Full-period control-totals reconciliation (AC-EXACT-07) — still gated until a
   // real populated period arrives; the per-row net check runs now (EX-3).
   'exact.reconciliation':   PENDING,

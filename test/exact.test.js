@@ -36,9 +36,6 @@ function dataRow(empId, name, over = {}) {
   for (const [k, v] of Object.entries(over)) r[k] = v;
   return r;
 }
-const setCfg = (key, value) => db.withOwner((c) =>
-  c.query('UPDATE config SET value=$1 WHERE company_id=$2 AND key=$3', [value, A, key]));
-
 before(H.start);
 after(H.stop);
 
@@ -124,22 +121,14 @@ test('EX-3 net check: computed net equals col AS, and a wrong col AS is flagged'
   assert.deepEqual(res.mismatches.map((m) => m.row_no), [2]);
 });
 
-// ── EX-2: daily-rate base excludes overtime 21/24; Rotation/Night default OUT ─
-test('EX-2 daily-rate base sums the confirmed set, excludes cols 21/24, Rotation/Night OUT by default', async () => {
+// ── EX-2 / v1.4: daily-rate base sums the confirmed set; overtime AND
+//    Rotation/Night Shift are CONFIRMED excluded (no include flag) ────────────
+test('EX-2/v1.4 daily-rate base sums the confirmed set; overtime and Rotation/Night are excluded', async () => {
   const cells = Array(N).fill('0');
   for (let c = 11; c <= 18; c++) cells[c] = '100'; // base set 11..18 → 800
-  cells[19] = '50'; cells[20] = '50';              // rotation / night shift
-  cells[21] = '500'; cells[24] = '500';            // overtime normal/holiday — MUST be excluded
-
-  assert.equal(await exact.dailyRateBase(session, cells), 800, 'overtime excluded; rotation/night out');
-
-  // [TBC] flag ON → rotation + night included
-  await setCfg('exact.dailyrate.rotation_nightshift.include', 'true');
-  try {
-    assert.equal(await exact.dailyRateBase(session, cells), 900);
-  } finally {
-    await setCfg('exact.dailyrate.rotation_nightshift.include', 'false');
-  }
+  cells[19] = '50'; cells[20] = '50';              // rotation / night shift — EXCLUDED (v1.4)
+  cells[21] = '500'; cells[24] = '500';            // overtime normal/holiday — EXCLUDED
+  assert.equal(await exact.dailyRateBase(session, cells), 800, 'only the confirmed base contributes');
 });
 
 // ── Remaining [TBC]: full-period reconciliation still BLOCKS ─────────────────

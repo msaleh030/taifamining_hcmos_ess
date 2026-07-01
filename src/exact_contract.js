@@ -37,8 +37,8 @@ const NAMED = {
   16: ['allowances', 'HOUSING ALL (FIXED)', false],
   17: ['allowances', 'FIXED OVERTIME', false],
   18: ['allowances', 'TRANSPORT (10%)', false],
-  19: ['allowances', 'ROTATION ALLOWANCE', false],       // [TBC] in/out of base
-  20: ['allowances', 'NIGHT SHIFT ALLOWANCE', false],    // [TBC] in/out of base
+  19: ['allowances', 'ROTATION ALLOWANCE', false],       // v1.4: EXCLUDED from base
+  20: ['allowances', 'NIGHT SHIFT ALLOWANCE', false],    // v1.4: EXCLUDED from base
   21: ['allowances', 'OVERTIME NORMAL', false],          // EXCLUDED from base
   24: ['allowances', 'OVERTIME HOLIDAY', false],         // EXCLUDED from base
   28: ['allowances', 'TOTAL PAY', true],                 // EX-4: renamed from TOTAL ALLOWANCE
