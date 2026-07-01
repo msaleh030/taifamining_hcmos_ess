@@ -40,6 +40,14 @@ const DEFAULT_CONFIG = {
   // Roles with NO directory access at all (server returns 403 on /employees*).
   'directory.deny.roles':  'R08,R09,R12,R13',
 
+  // ── Disciplinary (Slice 4, SoD matrix per registry RTL/CR/TM/001/2026) ────
+  // Issuer and checker role-sets are DISJOINT, so a permitted issuer and a
+  // permitted checker are always different roles (SoD by construction); the
+  // service additionally enforces different persons and subject ≠ actor.
+  'disciplinary.issuer.roles':  'R02,R05,R06',   // supervisor + HSE issue
+  'disciplinary.checker.roles': 'R04,R11',       // HR Manager / HR Director confirm
+  'disciplinary.hr.role':       'R04',           // HR named on the console notification
+
   // Maker-checker: who may propose / approve a change, per editable field.
   // Generic fallback applies when a field-specific key is absent.
   'field_change.makers':         'R02,R03,R04',

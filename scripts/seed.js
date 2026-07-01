@@ -13,9 +13,10 @@ async function main() {
     // Clean slate (FK-safe order). audit is append-only (DELETE is blocked by a
     // trigger), so TRUNCATE it — which also resets the chain to genesis.
     await c.query('TRUNCATE audit RESTART IDENTITY');
-    for (const t of ['idempotency', 'field_change', 'leave_carry', 'geofence_zone',
-      'employee_document', 'employee_asset', 'disciplinary', 'employee_medical', 'employee_pay',
-      'session', 'empno_counter', 'device', 'app_user', 'employee', 'site', 'config', 'site_scope', 'tenant']) {
+    for (const t of ['idempotency', 'notification', 'activity_feed', 'field_change', 'leave_carry',
+      'geofence_zone', 'employee_document', 'employee_asset', 'disciplinary', 'employee_medical',
+      'employee_pay', 'session', 'empno_counter', 'device', 'app_user', 'employee', 'site',
+      'config', 'site_scope', 'tenant']) {
       await c.query(`DELETE FROM ${t}`);
     }
 
@@ -53,6 +54,12 @@ async function main() {
          VALUES ($1,$2,$3,$4,$4,$5,$6,$7,$8,$9,$10,$11)`,
         [id, e.company, e.site, e.emp_no, e.full_name, e.role_code, e.dept, e.status,
          e.phone || null, e.email || null, e.home_address || null]);
+    }
+
+    // Site line managers (Slice 4 — resolved into disciplinary notifications/audit).
+    for (const [siteId, mgr] of [[F.SITE.A1, F.EMP.ALICE], [F.SITE.A2, F.EMP.DAVE],
+      [F.SITE.HO, F.EMP.HOEMP], [F.SITE.B1, F.EMP.BOB_B]]) {
+      await c.query('UPDATE site SET manager_employee_id=$1 WHERE id=$2', [mgr, siteId]);
     }
 
     for (const [empId, p] of Object.entries(F.PAY)) {

@@ -25,6 +25,10 @@ const EMP = {
   TERM:   'a0000000-0000-0000-0000-0000000000e1', // terminated user (SITE A1)
   DAVE:   'a0000000-0000-0000-0000-0000000000d2', // in SITE A2 — out-of-site target
   HOEMP:  'a0000000-0000-0000-0000-0000000000d0', // in SITE HO (no zones)
+  // Slice 4 — distinct persons so disciplinary SoD is meaningful (all SITE A1).
+  DSUBJ:  'a0000000-0000-0000-0000-000000000d51', // disciplinary subject
+  DISS:   'a0000000-0000-0000-0000-000000000d52', // issuer
+  DCHK:   'a0000000-0000-0000-0000-000000000d53', // checker/approver
   BOB_B:  'b0000000-0000-0000-0000-0000000000b1', // tenant B
 };
 
@@ -37,6 +41,9 @@ const EMPLOYEES = {
   [EMP.TERM]:  { company: TENANT_A, site: SITE.A1, emp_no: 'E-A-0004', full_name: 'Tom Terminated',    role_code: 'R01', dept: 'Mining',     status: 'terminated', phone: '0700000004', email: 'tom@a.example' },
   [EMP.DAVE]:  { company: TENANT_A, site: SITE.A2, emp_no: 'E-A-0005', full_name: 'Dave SouthSite',    role_code: 'R01', dept: 'Mining',     status: 'active', phone: '0700000005', email: 'dave@a.example' },
   [EMP.HOEMP]: { company: TENANT_A, site: SITE.HO, emp_no: 'E-A-0006', full_name: 'Hettie HeadOffice', role_code: 'R03', dept: 'Admin',      status: 'active', phone: '0700000006', email: 'hettie@a.example' },
+  [EMP.DSUBJ]: { company: TENANT_A, site: SITE.A1, emp_no: 'E-A-0051', full_name: 'Dan Subject',       role_code: 'R01', dept: 'Mining',     status: 'active', phone: '0700000051', email: 'dan@a.example' },
+  [EMP.DISS]:  { company: TENANT_A, site: SITE.A1, emp_no: 'E-A-0052', full_name: 'Ivy Issuer',        role_code: 'R05', dept: 'HSE',        status: 'active', phone: '0700000052', email: 'ivy@a.example' },
+  [EMP.DCHK]:  { company: TENANT_A, site: SITE.A1, emp_no: 'E-A-0053', full_name: 'Cate Checker',      role_code: 'R04', dept: 'Admin',      status: 'active', phone: '0700000053', email: 'cate@a.example' },
   [EMP.BOB_B]: { company: TENANT_B, site: SITE.B1, emp_no: 'E-B-0001', full_name: 'Bob Bravo',         role_code: 'R01', dept: 'Mining',     status: 'active', phone: '0800000001', email: 'bob@b.example' },
 };
 
@@ -87,6 +94,9 @@ const USERS = {
   FIELD_A:    { id: 'd0000000-0000-0000-0000-0000000000f0', company: TENANT_A, employee: EMP.FIELDA,email: 'field@a.example',    password: 'FieldPass!2026', role: 'R13', status: 'active' },
   SITE2_A:    { id: 'd0000000-0000-0000-0000-0000000000d2', company: TENANT_A, employee: EMP.DAVE,  email: 'dave@a.example',     password: 'DavePass!2026',  role: 'R01', status: 'active' }, // SITE A2 (geofence)
   HO_A:       { id: 'd0000000-0000-0000-0000-0000000000d0', company: TENANT_A, employee: EMP.HOEMP, email: 'hettie@a.example',   password: 'HettiePass!26',  role: 'R03', status: 'active' }, // SITE HO (no zones)
+  DSUBJ_A:    { id: 'd0000000-0000-0000-0000-000000000d51', company: TENANT_A, employee: EMP.DSUBJ, email: 'dan@a.example',      password: 'DanPass!2026',   role: 'R01', status: 'active' }, // disciplinary subject
+  DISS_A:     { id: 'd0000000-0000-0000-0000-000000000d52', company: TENANT_A, employee: EMP.DISS,  email: 'ivy@a.example',      password: 'IvyPass!2026',   role: 'R05', status: 'active' }, // permitted issuer
+  DCHK_A:     { id: 'd0000000-0000-0000-0000-000000000d53', company: TENANT_A, employee: EMP.DCHK,  email: 'cate@a.example',     password: 'CatePass!2026',  role: 'R04', status: 'active' }, // permitted checker
   TERM_A:     { id: 'd0000000-0000-0000-0000-0000000000e0', company: TENANT_A, employee: EMP.TERM,  email: 'term@a.example',     password: 'TermPass!2026',  role: 'R01', status: 'terminated' },
   BOB_B:      { id: 'd0000000-0000-0000-0000-0000000000b0', company: TENANT_B, employee: EMP.BOB_B, email: 'bob@b.example',      password: 'BobPass!2026',   role: 'R01', status: 'active' },
 };
