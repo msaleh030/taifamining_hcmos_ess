@@ -73,4 +73,14 @@ async function runExpiryAlerts(session, asOf) {
   });
 }
 
-module.exports = { runExpiryAlerts };
+// The current open document-expiry alerts (the alerts dashboard, read-only).
+async function listOpen(session) {
+  return db.withTenant(session.company_id, async (c) => {
+    const rows = (await c.query(
+      `SELECT id, document_id, kind, due_date::text AS due_date, notify_role, status, notify_count
+         FROM doc_alert WHERE status='open' ORDER BY due_date`)).rows;
+    return { open: rows };
+  });
+}
+
+module.exports = { runExpiryAlerts, listOpen };

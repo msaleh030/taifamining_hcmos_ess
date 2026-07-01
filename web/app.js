@@ -9,6 +9,9 @@ import { renderLiability } from './liability.js';
 import { renderScorecard, renderMyKpis } from './kpi.js';
 import { renderAttendance } from './attendance.js';
 import { renderExact } from './exact.js';
+import { renderAlerts } from './alerts.js';
+import { renderSupport } from './support.js';
+import { renderPolicy } from './policy.js';
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -53,7 +56,7 @@ async function showLanding() {
       <span class="role">${landing.role} · ${landing.name}</span>
       <button id="logout">Sign out</button>
     </header>
-    <nav><ul id="modules"><li data-view="directory">directory</li><li data-view="liability">liability</li><li data-view="scorecard">scorecard</li><li data-view="mykpis">my kpis</li><li data-view="attendance">clock in</li><li data-view="exact">payroll upload</li>${nav}</ul></nav>
+    <nav><ul id="modules"><li data-view="directory">directory</li><li data-view="liability">liability</li><li data-view="scorecard">scorecard</li><li data-view="mykpis">my kpis</li><li data-view="attendance">clock in</li><li data-view="exact">payroll upload</li><li data-view="policy">policy</li><li data-view="support">support</li><li data-view="alerts">doc alerts</li>${nav}</ul></nav>
     <main id="view"><p>Select a module.</p></main>`;
   $('#logout').addEventListener('click', () => { api.logout(); showLogin(); });
 
@@ -77,7 +80,13 @@ async function showLanding() {
   // Exact payroll upload (pay-adjacent) — the endpoints are guarded to the
   // pay-visibility role set; a role without it gets 403 on every call.
   $('[data-view="exact"]').addEventListener('click', () => renderExact(view));
-  // Further per-screen views (F7..Fn) mount into #view the same way.
+  // F7: policy ack (self-service), support (self-service raise; agent lifecycle),
+  // document alerts (compliance-guarded). Each endpoint enforces its own guard.
+  $('[data-view="policy"]').addEventListener('click', () => renderPolicy(view));
+  $('[data-view="support"]').addEventListener('click', () => renderSupport(view));
+  $('[data-view="alerts"]').addEventListener('click', () => renderAlerts(view));
+  // The controls screen (F7 #2, all-clear evidence grid) mounts here once Design
+  // lands that spec. Further per-screen views (F8..Fn) mount into #view the same way.
 }
 
 function boot() {

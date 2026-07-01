@@ -45,6 +45,39 @@ async function raiseTicket(session, { subject, body, channel }) {
   });
 }
 
+// Is the caller a support agent (support.agent.roles)? Agents see/drive any
+// ticket; everyone else is scoped to the tickets they raised.
+async function isAgent(session, exec) {
+  const set = await cfg.getRoleSet(session.company_id, 'support.agent.roles', '', exec);
+  return set.has(session.role_code);
+}
+
+// SUP-04: list tickets — an agent sees all; a raiser sees only their own.
+async function listTickets(session) {
+  return db.withTenant(session.company_id, async (c) => {
+    const agent = await isAgent(session, c);
+    const empId = await employeeOf(c, session.user_id);
+    const rows = agent
+      ? (await c.query(
+          `SELECT id, employee_id, subject, status, channel, created_at FROM support_ticket ORDER BY created_at DESC`)).rows
+      : (await c.query(
+          `SELECT id, employee_id, subject, status, channel, created_at FROM support_ticket WHERE employee_id=$1 ORDER BY created_at DESC`, [empId])).rows;
+    return { scope: agent ? 'all' : 'own', tickets: rows };
+  });
+}
+
+// Read one ticket — scoped to the RAISER or a support agent (else 403).
+async function getTicket(session, ticketId) {
+  return db.withTenant(session.company_id, async (c) => {
+    const t = (await c.query(
+      `SELECT id, employee_id, subject, body, status, channel, created_at, updated_at FROM support_ticket WHERE id=$1`, [ticketId])).rows[0];
+    if (!t) throw new HttpError(404, 'ticket not found');
+    const empId = await employeeOf(c, session.user_id);
+    if (!(await isAgent(session, c)) && t.employee_id !== empId) throw new HttpError(403, 'not your ticket');
+    return t;
+  });
+}
+
 async function transition(session, ticketId, to) {
   return db.withTenant(session.company_id, async (c) => {
     const t = (await c.query('SELECT id, employee_id, status FROM support_ticket WHERE id=$1', [ticketId])).rows[0];
@@ -56,4 +89,4 @@ async function transition(session, ticketId, to) {
   });
 }
 
-module.exports = { raiseTicket, transition, NEXT };
+module.exports = { raiseTicket, transition, listTickets, getTicket, NEXT };

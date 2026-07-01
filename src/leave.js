@@ -96,9 +96,9 @@ async function apply(session, input = {}) {
   const { leave_type, days, weeks, hoh_override } = input;
   if (!['annual', 'sick'].includes(leave_type)) throw new HttpError(400, 'invalid leave type');
   // LR-2 CONFIRMED (v1.4): entitlement WEEKS convert to real days at 7 calendar
-  // days/week (2 weeks → 14, 4 → 28). This is NOT the pay divisor — the 30-day
-  // monthly→daily basis lives only in the daily-rate/liability path. Read as
-  // REQUIRED so a weeks request still BLOCKS if a tenant unsets the conversion.
+  // days/week (2 weeks → 14, 4 → 28; pinned by test/f3.test.js). This is NOT the
+  // pay divisor — the 30-day monthly→daily basis lives only in the daily-rate/
+  // liability path. Read as REQUIRED so a weeks request BLOCKS if a tenant unsets it.
   let d = Number(days);
   if (days == null && weeks != null) {
     const daysPerWeek = await cfg.getRequiredInt(co, 'leave.weeks_to_days'); // 7 (LR-2)

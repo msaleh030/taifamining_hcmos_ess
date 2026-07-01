@@ -82,6 +82,19 @@ export const api = {
   // leg is never re-posted once done).
   exactPublishRetry: (id) => request(`/exact/batch/${id}/publish/retry`, { method: 'POST' }),
   exactBatch: (id) => request(`/exact/batch/${id}`),
+
+  // F7 — alerts (compliance), support (self-service raise; agent lifecycle),
+  // policy (self-service read/ack; admin publish).
+  alertsRun: (asOf) => request('/alerts/run', { method: 'POST', body: { asOf } }),
+  alerts: () => request('/alerts'),
+  supportRaise: (body) => request('/support/tickets', { method: 'POST', body }),
+  supportList: () => request('/support/tickets'),
+  supportTicket: (id) => request(`/support/tickets/${id}`),
+  supportTransition: (id, to) => request(`/support/tickets/${id}/transition`, { method: 'POST', body: { to } }),
+  policyRead: (code) => request(`/policy/${encodeURIComponent(code)}`),
+  policyAck: (code) => request(`/policy/${encodeURIComponent(code)}/ack`, { method: 'POST' }),
+  policyOutstanding: (code) => request(`/policy/${encodeURIComponent(code)}/outstanding`),
+  policyPublish: (body) => request('/policy', { method: 'POST', body }),
 };
 
 // A3: the API OMITS confidential fields a role may not see, so the UI simply does

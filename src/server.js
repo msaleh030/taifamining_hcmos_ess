@@ -16,6 +16,9 @@ const liability = require('./liability');
 const kpi = require('./kpi');
 const attendance = require('./attendance');
 const exact = require('./exact');
+const docalerts = require('./docalerts');
+const support = require('./support');
+const policy = require('./policy');
 const roles = require('./roles');
 const cfg = require('./config');
 const { HttpError } = require('./errors');
@@ -160,6 +163,39 @@ const routes = [
     } },
   { method: 'GET', pattern: /^\/exact\/batch\/([0-9a-f-]+)$/i, allow: 'a3.pay.roles',
     handler: async (req, m, url, s) => ({ status: 200, body: await exact.getBatch(s, m[1]) }) },
+
+  // ── F7: Document-expiry alerts (DA-1/DA-2). Guarded to the document-compliance
+  // owners (alerts.view.roles) — the DA-2 notified roles + HR/admin oversight;
+  // faithful to who OWNS documents, not the broad reports set (R10 has no reports
+  // but IS a DA-2 role).
+  { method: 'POST', pattern: /^\/alerts\/run$/, allow: 'alerts.view.roles',
+    handler: async (req, m, url, s) => ({ status: 200, body: await docalerts.runExpiryAlerts(s, (await readJson(req)).asOf) }) },
+  { method: 'GET', pattern: /^\/alerts$/, allow: 'alerts.view.roles',
+    handler: async (req, m, url, s) => ({ status: 200, body: await docalerts.listOpen(s) }) },
+
+  // ── F7: Support tickets. Raise + list + read are self-service (the service
+  // record-scopes non-agents to their OWN tickets); driving the lifecycle
+  // (transition) is restricted to the support role (support.agent.roles).
+  { method: 'POST', pattern: /^\/support\/tickets$/,
+    handler: async (req, m, url, s) => ({ status: 200, body: await support.raiseTicket(s, await readJson(req)) }) },
+  { method: 'GET', pattern: /^\/support\/tickets$/,
+    handler: async (req, m, url, s) => ({ status: 200, body: await support.listTickets(s) }) },
+  { method: 'POST', pattern: /^\/support\/tickets\/([0-9a-f-]+)\/transition$/i, allow: 'support.agent.roles',
+    handler: async (req, m, url, s) => ({ status: 200, body: await support.transition(s, m[1], (await readJson(req)).to) }) },
+  { method: 'GET', pattern: /^\/support\/tickets\/([0-9a-f-]+)$/i,
+    handler: async (req, m, url, s) => ({ status: 200, body: await support.getTicket(s, m[1]) }) },
+
+  // ── F7: Policy acknowledgement (POL-01..04). Read + acknowledge are SELF-
+  // SERVICE (every employee). Publishing a company-wide policy is admin
+  // (admin.config.write); the outstanding-acks compliance report is reports-only.
+  { method: 'GET', pattern: /^\/policy\/([\w-]+)\/outstanding$/i, module: 'reports',
+    handler: async (req, m, url, s) => ({ status: 200, body: await policy.outstanding(s, m[1]) }) },
+  { method: 'POST', pattern: /^\/policy\/([\w-]+)\/ack$/i,
+    handler: async (req, m, url, s) => ({ status: 200, body: await policy.acknowledge(s, m[1]) }) },
+  { method: 'GET', pattern: /^\/policy\/([\w-]+)$/i,
+    handler: async (req, m, url, s) => ({ status: 200, body: await policy.readCurrent(s, m[1]) }) },
+  { method: 'POST', pattern: /^\/policy$/, action: 'admin.config.write',
+    handler: async (req, m, url, s) => ({ status: 200, body: await policy.publishPolicy(s, await readJson(req)) }) },
 ];
 
 // Guard: verify session, then A2 module / RBAC action / registry deny-set if the

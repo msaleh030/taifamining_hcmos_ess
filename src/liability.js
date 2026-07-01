@@ -2,7 +2,8 @@
 // Slice 6 — Leave pay & liability (LIAB-01/02/03, LVR-02).
 //
 // ONE base: the leave-pay base IS the EX-2 daily-rate base (exact.dailyRateBase);
-// no second base is created. Per v1.4:
+// no second base is created. Per v1.4 (the numbers here are pinned by
+// test/liability.test.js + test/f3.test.js, not by this comment):
 //   daily rate = monthly remuneration (that base) / 30
 //   liability  = outstanding leave days × daily rate
 //   scope      = ACTIVE staff only (leavers excluded — LVR-02)
@@ -14,11 +15,13 @@ const exact = require('./exact');
 const round2 = (x) => Math.round(x * 100) / 100;
 const REMUNERATION = 'monthly remuneration';
 
-// The single daily rate — the one EX-2 base divided by the PC-1 divisor (30).
-// Leave pay uses the SAME PC-1 basis as payroll; there is no separate divisor.
+// The single daily rate — the one EX-2 base divided by the PC-1 divisor. Leave
+// pay uses the SAME PC-1 basis as payroll; there is no separate divisor. The
+// divisor value (30) is pinned by test/liability.test.js (LIAB-01: base 3000 →
+// dailyRate 100), not by this comment.
 async function dailyRate(session, cells) {
   const base = await exact.dailyRateBase(session, cells);                       // ONE base
-  const divisor = await cfg.getRequiredInt(session.company_id, 'payroll.daily_rate.divisor'); // PC-1 = 30
+  const divisor = await cfg.getRequiredInt(session.company_id, 'payroll.daily_rate.divisor');
   return round2(base / divisor);
 }
 

@@ -174,6 +174,16 @@ const DEFAULT_CONFIG = {
   'doc.notify.role.medical':  'R10',       // SHEQ
   // Support ticket channels (ES-5).
   'support.channels':         'in_app,email',
+  // ── F7 guards (Slice 9 modules exposed over HTTP) ─────────────────────────
+  // Document-expiry alerts belong to the document-compliance owners: the DA-2
+  // notified roles (R05/R06/R10) + the HR line and admin oversight. Excludes
+  // payroll/finance/employee/field, who do not manage documents. Guard enforced
+  // at the endpoint (test/f7.test.js).
+  'alerts.view.roles':        'R03,R04,R05,R06,R10,R11,R12',
+  // Support helpdesk agents — may view and drive the lifecycle of ANY ticket. A
+  // raiser always sees/acts on their OWN ticket regardless (record-scoped in the
+  // service). CONFIRMED: System Admin only to start. Guard: test/f7.test.js.
+  'support.agent.roles':      'R12',
   'retention.audit_years':    '7',
   'retention.safety_years':   '10',
   'region':                   'af-south-1',
