@@ -88,10 +88,13 @@ const DEFAULT_CONFIG = {
   'leave.carry.lapse_years':  '1',         // LR-4 carry lapses after ONE year (CHANGED from 2)
   'leave.max_continuous_days':'14',        // LR-5 max 14 continuous (HoH override)
   'leave.entitlement.default':'21',        // LR-1 entitlement map (default grade)
-  // LR-2 CONFIRMED (v1.4): a leave period expressed in months converts to days on
-  // a 30-day month — the SAME 30-day basis as PC-1's daily-rate divisor. Read as a
-  // required value so a period request still BLOCKS if a tenant ever unsets it.
-  'leave.days_per_month':     '30',        // LR-2 (was leave.weeks_to_days [TBC])
+  // LR-2 CONFIRMED (v1.4): entitlement WEEKS convert to real days at 7 CALENDAR
+  // days/week (LR-1's 4 weeks = 28 days, 2 weeks = 14). This is a calendar
+  // conversion — NOT the pay divisor. The "30" (monthly amount → daily value)
+  // is a DIFFERENT conversion and lives ONLY in the daily-rate/liability path
+  // (payroll.daily_rate.divisor). The two must never be collapsed: using 30 here
+  // would over-credit every entitlement by ~2 days/week.
+  'leave.weeks_to_days':      '7',         // LR-2 (weeks → days; 7 days/week)
   'leave.coverage.thresholds':PENDING,     // LR-6 [TBC] per-role coverage
   // LR-7 CONFIRMED (v1.4): sick leave = 63 days full pay + 63 days half pay
   // (126 total); a medical certificate is required from day one. full/half is a

@@ -106,17 +106,21 @@ test('sick leave draws its own bucket via the endpoint; annual is untouched', as
   }
 });
 
-// ── LR-2: a period in months converts to days on the confirmed 30-day basis ──
-test('LR-2 a months-based sick request converts on the 30-day basis (loaded, not gated)', async () => {
+// ── LR-2: entitlement WEEKS convert to real days at 7 days/week (NOT 30) ─────
+// The 30-day basis is the pay divisor and lives only in the daily-rate/liability
+// path; collapsing them here would over-credit every entitlement by ~2 days/week.
+test('LR-2 a weeks-based request converts at 7 calendar days/week (2→14, 4→28)', async () => {
   const t = await tok(F.USERS.EMP_A);
   try {
-    const b0 = (await H.req('GET', '/leave/balance', { token: t })).body;
-    // 1 month → 30 days on the LR-2 basis; sick draws its own bucket.
-    const r = await H.req('POST', '/leave/apply', { token: t, body: { leave_type: 'sick', months: 1 } });
-    assert.equal(r.status, 200, 'months request no longer blocks — LR-2 is loaded');
-    assert.equal(r.body.days, 30, '1 month = 30 days (LR-2 30-day basis)');
-    const b1 = (await H.req('GET', '/leave/balance', { token: t })).body;
-    assert.equal(b1.sick.taken, b0.sick.taken + 30, 'sick bucket rose by the converted days');
+    const two = await H.req('POST', '/leave/apply', { token: t, body: { leave_type: 'sick', weeks: 2 } });
+    assert.equal(two.status, 200, 'weeks request is loaded, not gated');
+    assert.equal(two.body.days, 14, '2 weeks = 14 days (7 days/week — NOT 30-day month)');
+
+    const four = await H.req('POST', '/leave/apply', { token: t, body: { leave_type: 'sick', weeks: 4 } });
+    assert.equal(four.body.days, 28, '4 weeks = 28 days (LR-1 four-week entitlement)');
+
+    const b = (await H.req('GET', '/leave/balance', { token: t })).body;
+    assert.equal(b.sick.taken, 42, 'sick bucket rose by 14 + 28 real days');
   } finally {
     await owner(`DELETE FROM leave_request WHERE employee_id=$1`, [F.EMP.ALICE]);
   }
