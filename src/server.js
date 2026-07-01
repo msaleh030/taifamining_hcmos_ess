@@ -11,6 +11,7 @@ const path = require('node:path');
 const auth = require('./auth');
 const employees = require('./employees');
 const roles = require('./roles');
+const cfg = require('./config');
 const { HttpError } = require('./errors');
 
 const WEB_DIR = path.join(__dirname, '..', 'web');
@@ -61,32 +62,41 @@ const routes = [
   { method: 'GET', pattern: /^\/reports\/summary$/, module: 'reports',
     handler: async (req, m, url, s) => ({ status: 200, body: { role: s.role_code, modules: auth.landing(s).modules, generated: true } }) },
 
-  // ── Slice 2: Employee Master ──────────────────────────────────────────────
-  { method: 'GET', pattern: /^\/employees$/,
+  // ── Slice 2 / F1: Employee Master. The directory access rule is the registry
+  // directory.deny.roles set — declared here so the F0 middleware enforces it at
+  // the HTTP layer (authoritative); employees.js keeps the same check as cheap
+  // defence-in-depth.
+  { method: 'GET', pattern: /^\/employees$/, deny: 'directory.deny.roles',
     handler: async (req, m, url, s) => ({ status: 200, body: await employees.list(s, {
       q: url.searchParams.get('q') || undefined, site: url.searchParams.get('site') || undefined,
       dept: url.searchParams.get('dept') || undefined, status: url.searchParams.get('status') || undefined,
       cursor: url.searchParams.get('cursor') || undefined, limit: url.searchParams.get('limit') || undefined,
     }) }) },
-  { method: 'GET', pattern: /^\/employees\/([0-9a-f-]+)\/documents$/i,
+  { method: 'GET', pattern: /^\/employees\/([0-9a-f-]+)\/documents$/i, deny: 'directory.deny.roles',
     handler: async (req, m, url, s) => ({ status: 200, body: await employees.documents(s, m[1]) }) },
-  { method: 'POST', pattern: /^\/employees\/([0-9a-f-]+)\/change$/i,
+  { method: 'POST', pattern: /^\/employees\/([0-9a-f-]+)\/change$/i, deny: 'directory.deny.roles',
     handler: async (req, m, url, s) => ({ status: 200, body: await employees.submitChange(s, m[1], await readJson(req)) }) },
-  { method: 'GET', pattern: /^\/employees\/([0-9a-f-]+)$/i,
+  { method: 'GET', pattern: /^\/employees\/([0-9a-f-]+)$/i, deny: 'directory.deny.roles',
     handler: async (req, m, url, s) => ({ status: 200, body: await employees.get(s, m[1]) }) },
-  { method: 'POST', pattern: /^\/field-change\/([0-9a-f-]+)\/approve$/i,
+  { method: 'POST', pattern: /^\/field-change\/([0-9a-f-]+)\/approve$/i, deny: 'directory.deny.roles',
     handler: async (req, m, url, s) => ({ status: 200, body: await employees.decide(s, m[1], true) }) },
-  { method: 'POST', pattern: /^\/field-change\/([0-9a-f-]+)\/decline$/i,
+  { method: 'POST', pattern: /^\/field-change\/([0-9a-f-]+)\/decline$/i, deny: 'directory.deny.roles',
     handler: async (req, m, url, s) => ({ status: 200, body: await employees.decide(s, m[1], false) }) },
 ];
 
-// Guard: verify session, then A2 module / RBAC action if the route declares them.
+// Guard: verify session, then A2 module / RBAC action / registry deny-set if the
+// route declares them. `deny` names a registry role-set config key (e.g. the
+// directory access rule) — authoritative at the HTTP layer.
 async function guard(route, req) {
   if (route.auth === false) return null;
   const session = await auth.verifySession(bearer(req));
   if (!session) throw new HttpError(401, 'authentication required');
   if (route.module && !roles.moduleAllowed(session.role_code, route.module)) throw new HttpError(403, 'forbidden');
   if (route.action && !roles.canPerform(session.role_code, route.action)) throw new HttpError(403, 'forbidden');
+  if (route.deny) {
+    const denied = await cfg.getRoleSet(session.company_id, route.deny, '');
+    if (denied.has(session.role_code)) throw new HttpError(403, 'forbidden');
+  }
   return session;
 }
 

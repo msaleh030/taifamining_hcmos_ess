@@ -2,6 +2,8 @@
 // Routing and the nav are driven by /me/landing, so a user only ever sees the
 // modules their role permits (A2); the server enforces the same per endpoint.
 import { api, session } from './api.js';
+import { renderDirectory } from './directory.js';
+import { renderProfile } from './profile.js';
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -36,7 +38,9 @@ async function showLanding() {
     session.clear();
     return showLogin(err.status === 401 ? 'Session expired — sign in again.' : 'Could not load your dashboard.');
   }
-  // A2 guard: render ONLY the modules the role is permitted (server-authoritative list).
+  // A2 guard: render ONLY the modules the role is permitted (server-authoritative
+  // list). The Directory (F1) is an additional entry; access is enforced by the
+  // API deny guard — a role without it sees the "no access" message.
   const nav = landing.modules.map((mod) => `<li data-module="${mod}">${mod}</li>`).join('');
   $('#app').innerHTML = `
     <header>
@@ -44,10 +48,14 @@ async function showLanding() {
       <span class="role">${landing.role} · ${landing.name}</span>
       <button id="logout">Sign out</button>
     </header>
-    <nav><ul id="modules">${nav}</ul></nav>
+    <nav><ul id="modules"><li data-view="directory">directory</li>${nav}</ul></nav>
     <main id="view"><p>Select a module.</p></main>`;
   $('#logout').addEventListener('click', () => { api.logout(); showLogin(); });
-  // Per-screen views (F1..Fn) mount into #view; each calls its own guarded endpoint.
+
+  const view = $('#view');
+  const openProfile = (id) => renderProfile(view, id);
+  $('[data-view="directory"]').addEventListener('click', () => renderDirectory(view, openProfile));
+  // Further per-screen views (F2..Fn) mount into #view the same way.
 }
 
 function boot() {

@@ -41,9 +41,25 @@ export const api = {
   },
   logout() { session.clear(); },
   landing: () => request('/me/landing'),
-  profile: (id) => request(`/me/profile/${id}`),
   reportsSummary: () => request('/reports/summary'),
+
+  // F1 — directory + profile (maker-checker).
+  directory: (params = {}) => {
+    const q = new URLSearchParams(Object.entries(params).filter(([, v]) => v != null && v !== ''));
+    const qs = q.toString();
+    return request('/employees' + (qs ? `?${qs}` : ''));
+  },
+  employee: (id) => request(`/employees/${id}`),
+  documents: (id) => request(`/employees/${id}/documents`),
+  requestChange: (id, field, value) => request(`/employees/${id}/change`, { method: 'POST', body: { field, value } }),
+  approveChange: (changeId) => request(`/field-change/${changeId}/approve`, { method: 'POST' }),
+  declineChange: (changeId) => request(`/field-change/${changeId}/decline`, { method: 'POST' }),
 };
+
+// A3: the API OMITS confidential fields a role may not see, so the UI simply does
+// not render them (absent, never masked). This lists the confidential fields that
+// COULD appear so a screen can iterate present ones without guessing.
+export const CONFIDENTIAL_FIELDS = ['basic_pay', 'bank_account', 'osha_status', 'permit_no', 'disciplinary'];
 
 // Shared render convention: a not-available card names its missing input; a value
 // card carries its RAG status. Screens use this so "wired" == same conventions
