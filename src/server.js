@@ -19,6 +19,7 @@ const exact = require('./exact');
 const docalerts = require('./docalerts');
 const support = require('./support');
 const policy = require('./policy');
+const controls = require('./controls');
 const roles = require('./roles');
 const cfg = require('./config');
 const { HttpError } = require('./errors');
@@ -196,6 +197,13 @@ const routes = [
     handler: async (req, m, url, s) => ({ status: 200, body: await policy.readCurrent(s, m[1]) }) },
   { method: 'POST', pattern: /^\/policy$/, action: 'admin.config.write',
     handler: async (req, m, url, s) => ({ status: 200, body: await policy.publishPolicy(s, await readJson(req)) }) },
+
+  // ── F7: Controls & Checker (AC-AUD-03). The audit/controls view is restricted
+  // to the AUD/SOD oversight set (controls.view.roles = R11/R12). Returns per-
+  // control checked-counts AND offenders, so the screen can render the all-clear
+  // evidence grid (green + counts) distinctly from the fail-with-offenders grid.
+  { method: 'GET', pattern: /^\/controls$/, allow: 'controls.view.roles',
+    handler: async (req, m, url, s) => ({ status: 200, body: await controls.runControls(s) }) },
 ];
 
 // Guard: verify session, then A2 module / RBAC action / registry deny-set if the

@@ -180,6 +180,11 @@ const DEFAULT_CONFIG = {
   // payroll/finance/employee/field, who do not manage documents. Guard enforced
   // at the endpoint (test/f7.test.js).
   'alerts.view.roles':        'R03,R04,R05,R06,R10,R11,R12',
+  // Controls & Checker / audit view — the AUD/SOD oversight set. CONFIRMED:
+  // HR Director (R11, exec oversight) + System Administrator (R12). No one else
+  // reads the SoD-breach / leaver-access / audit-chain evidence. Guard enforced at
+  // the endpoint (test/f7_controls.test.js).
+  'controls.view.roles':      'R11,R12',
   // Support helpdesk agents — may view and drive the lifecycle of ANY ticket. A
   // raiser always sees/acts on their OWN ticket regardless (record-scoped in the
   // service). CONFIRMED: System Admin only to start. Guard: test/f7.test.js.

@@ -95,6 +95,7 @@ export const api = {
   policyAck: (code) => request(`/policy/${encodeURIComponent(code)}/ack`, { method: 'POST' }),
   policyOutstanding: (code) => request(`/policy/${encodeURIComponent(code)}/outstanding`),
   policyPublish: (body) => request('/policy', { method: 'POST', body }),
+  controls: () => request('/controls'),
 };
 
 // A3: the API OMITS confidential fields a role may not see, so the UI simply does

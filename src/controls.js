@@ -14,29 +14,36 @@ const AUDIT_VERIFY = `
      coalesce(before::text,''), coalesce(after::text,'')), 'UTF8')),'hex')
    ORDER BY seq`;
 
+// Each control reports BOTH the offending rows AND the size of the population it
+// examined (`checked`). On the all-clear path the checked-count is the audit
+// evidence ("N records checked, 0 offenders") — a green with no number could just
+// mean nothing was looked at; the count proves the control actually ran.
 async function runControls(session) {
   return db.withTenant(session.company_id, async (c) => {
     const checks = [];
-    const add = (check, rows) => checks.push({ check, pass: rows.length === 0, offenders: rows });
+    const one = async (sql) => (await c.query(`SELECT count(*)::int n FROM (${sql}) t`)).rows[0].n;
+    const add = (check, checked, offenders) => checks.push({ check, checked, pass: offenders.length === 0, offenders });
 
-    // 1. SoD breach — an APPROVED field change whose checker is also the maker.
-    add('sod.self_approval', (await c.query(
+    // 1. SoD breach — population: APPROVED field changes with a checker; offender:
+    //    checker is also the maker (self-approval).
+    const SOD_POP = `SELECT 1 FROM field_change WHERE status='approved' AND checker IS NOT NULL`;
+    add('sod.self_approval', await one(SOD_POP), (await c.query(
       `SELECT id, employee_id, field, maker, checker FROM field_change
         WHERE status='approved' AND checker IS NOT NULL AND checker = maker`)).rows);
 
-    // 2. Attendance with no location evidence.
-    add('attendance.no_location', (await c.query(
-      `SELECT id, employee_id, punched_at FROM attendance
-        WHERE lat IS NULL OR lng IS NULL`)).rows);
+    // 2. Attendance — population: every punch; offender: no location evidence.
+    add('attendance.no_location', await one('SELECT 1 FROM attendance'), (await c.query(
+      `SELECT id, employee_id, punched_at FROM attendance WHERE lat IS NULL OR lng IS NULL`)).rows);
 
-    // 3. Access still held by leavers (LVR-01) — active login, terminated employee.
-    add('access.leaver_retained', (await c.query(
+    // 3. Access — population: active logins; offender: active login on a leaver (LVR-01).
+    add('access.leaver_retained', await one(
+      `SELECT 1 FROM app_user u JOIN employee e ON e.id = u.employee_id WHERE u.status='active'`), (await c.query(
       `SELECT u.id AS user_id, u.email, e.id AS employee_id, e.status
          FROM app_user u JOIN employee e ON e.id = u.employee_id
         WHERE u.status='active' AND e.status='terminated'`)).rows);
 
-    // 4. Audit-chain integrity — rows whose stored hash no longer recomputes.
-    add('audit.chain_integrity', (await c.query(AUDIT_VERIFY)).rows);
+    // 4. Audit-chain — population: every audit row; offender: hash no longer recomputes.
+    add('audit.chain_integrity', await one('SELECT 1 FROM audit'), (await c.query(AUDIT_VERIFY)).rows);
 
     return { checks, all_pass: checks.every((x) => x.pass) };
   });
