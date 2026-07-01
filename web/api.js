@@ -62,6 +62,10 @@ export const api = {
   leaveBalance: () => request('/leave/balance'),
   leaveApply: (body) => request('/leave/apply', { method: 'POST', body }),
   liabilityBatch: (batchId) => request(`/liability/batch/${batchId}`),
+
+  // F4 — KPI scorecard (role-scoped, feature-flagged) + My KPIs (self only).
+  scorecard: () => request('/kpi/scorecard'),
+  myKpis: () => request('/kpi/mine'),
 };
 
 // A3: the API OMITS confidential fields a role may not see, so the UI simply does

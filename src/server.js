@@ -13,6 +13,7 @@ const employees = require('./employees');
 const disciplinary = require('./disciplinary');
 const leave = require('./leave');
 const liability = require('./liability');
+const kpi = require('./kpi');
 const roles = require('./roles');
 const cfg = require('./config');
 const { HttpError } = require('./errors');
@@ -107,6 +108,14 @@ const routes = [
     handler: async (req, m, url, s) => ({ status: 200, body: await leave.apply(s, await readJson(req)) }) },
   { method: 'GET', pattern: /^\/liability\/batch\/([0-9a-f-]+)$/i, allow: 'a3.pay.roles',
     handler: async (req, m, url, s) => ({ status: 200, body: await liability.batchLiability(s, m[1]) }) },
+
+  // ── F4: KPI scorecard (role-scoped, feature-flagged) + personal My KPIs. The
+  // scorecard is feature-flagged inside the engine (analytics.enabled) — the
+  // endpoint returns { enabled:false, cards:[] } when off, never a partial one.
+  { method: 'GET', pattern: /^\/kpi\/scorecard$/,
+    handler: async (req, m, url, s) => ({ status: 200, body: await kpi.scorecard(s) }) },
+  { method: 'GET', pattern: /^\/kpi\/mine$/,
+    handler: async (req, m, url, s) => ({ status: 200, body: await kpi.myKpis(s) }) },
 ];
 
 // Guard: verify session, then A2 module / RBAC action / registry deny-set if the

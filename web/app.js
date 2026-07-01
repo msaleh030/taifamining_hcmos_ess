@@ -6,6 +6,7 @@ import { renderDirectory } from './directory.js';
 import { renderProfile } from './profile.js';
 import { renderLeave } from './leave.js';
 import { renderLiability } from './liability.js';
+import { renderScorecard, renderMyKpis } from './kpi.js';
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -50,7 +51,7 @@ async function showLanding() {
       <span class="role">${landing.role} · ${landing.name}</span>
       <button id="logout">Sign out</button>
     </header>
-    <nav><ul id="modules"><li data-view="directory">directory</li><li data-view="liability">liability</li>${nav}</ul></nav>
+    <nav><ul id="modules"><li data-view="directory">directory</li><li data-view="liability">liability</li><li data-view="scorecard">scorecard</li><li data-view="mykpis">my kpis</li>${nav}</ul></nav>
     <main id="view"><p>Select a module.</p></main>`;
   $('#logout').addEventListener('click', () => { api.logout(); showLogin(); });
 
@@ -68,7 +69,9 @@ async function showLanding() {
     const batch = prompt('Exact batch id for liability:');
     if (batch) renderLiability(view, batch);
   });
-  // Further per-screen views (F4..Fn) mount into #view the same way.
+  $('[data-view="scorecard"]').addEventListener('click', () => renderScorecard(view));
+  $('[data-view="mykpis"]').addEventListener('click', () => renderMyKpis(view));
+  // Further per-screen views (F5..Fn) mount into #view the same way.
 }
 
 function boot() {
