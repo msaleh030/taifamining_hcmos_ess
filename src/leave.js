@@ -52,9 +52,21 @@ async function lapseCarry(companyId, asOf) {
   });
 }
 
+// Parse the LR-7 sick rule ('full:63,half:63,cert_from_day:1') into a structured
+// entitlement. Returns null if the rule is [TBC]/absent (caller shows not-available).
+function parseSickRule(v) {
+  if (cfg.isPending(v)) return null;
+  const kv = Object.fromEntries(v.split(',').map((p) => p.split(':').map((s) => s.trim())));
+  const full = Number(kv.full), half = Number(kv.half), cert = Number(kv.cert_from_day);
+  if (!Number.isFinite(full) || !Number.isFinite(half)) return null;
+  return { full_pay_days: full, half_pay_days: half, entitlement: full + half,
+    certificate_from_day: Number.isFinite(cert) ? cert : 1 };
+}
+
 // LV-01/05: the requester's own leave balance. Annual = entitlement (LR-1) +
-// carry (LR-4) − taken. Sick is a SEPARATE bucket (LR-7): its taken is tracked,
-// but the limit is [TBC] so `available` is not-available (never a guessed number).
+// carry (LR-4) − taken. Sick is a SEPARATE bucket (LR-7 CONFIRMED v1.4: 63 full +
+// 63 half = 126 entitlement, certificate from day one); its taken counts against
+// the 126. If a tenant ever unsets the rule, the card reverts to not-available.
 async function balance(session) {
   const co = session.company_id;
   return db.withTenant(co, async (c) => {
@@ -64,10 +76,14 @@ async function balance(session) {
     const carried = await openCarry(c, empId);
     const annualTaken = await takenOf(c, empId, 'annual');
     const sickTaken = await takenOf(c, empId, 'sick');
+    const sickRule = parseSickRule(await cfg.getConfig(co, 'leave.sick.rule', null, c));
+    const sick = sickRule
+      ? { ...sickRule, taken: sickTaken, available: round1(sickRule.entitlement - sickTaken) }
+      : { taken: sickTaken, available: { available: false, missing: 'sick-leave rule (LR-7)' } };
     return {
       employee_id: empId,
       annual: { entitlement, carried, taken: annualTaken, available: round1(entitlement + carried - annualTaken) },
-      sick: { taken: sickTaken, available: { available: false, missing: 'sick-leave rule (LR-7)' } },
+      sick,
     };
   });
 }
@@ -76,10 +92,15 @@ async function balance(session) {
 // HoH override) and available balance. Sick draws its OWN bucket — never annual.
 async function apply(session, input = {}) {
   const co = session.company_id;
-  const { leave_type, days, weeks, hoh_override } = input;
-  if (weeks != null) await cfg.getRequired(co, 'leave.weeks_to_days'); // LR-2 [TBC] → blocks
+  const { leave_type, days, months, hoh_override } = input;
   if (!['annual', 'sick'].includes(leave_type)) throw new HttpError(400, 'invalid leave type');
-  const d = Number(days);
+  // LR-2 CONFIRMED (v1.4): a period given in months converts to days on the
+  // 30-day-month basis. Read as REQUIRED so it still BLOCKS if a tenant unsets it.
+  let d = Number(days);
+  if (days == null && months != null) {
+    const dpm = await cfg.getRequiredInt(co, 'leave.days_per_month'); // 30 (LR-2)
+    d = Number(months) * dpm;
+  }
   if (!(d > 0)) throw new HttpError(400, 'days must be positive');
 
   return db.withTenant(co, async (c) => {

@@ -14,6 +14,7 @@ const A = F.TENANT_A;
 const owner = (sql, p) => db.withOwner((c) => c.query(sql, p));
 const tok = async (u) => (await H.loginConsole(u)).body.token;
 const N = contractDef.build().length;
+const round1 = (x) => Math.round(x * 10) / 10;
 
 // A cells array whose EX-2 name-keyed base sums to `base` (Basic Salary at col 12).
 function cellsWithBase(base) {
@@ -75,7 +76,12 @@ test('sick leave draws its own bucket via the endpoint; annual is untouched', as
   try {
     const b0 = (await H.req('GET', '/leave/balance', { token: t })).body;
     const annual0 = b0.annual.available;
-    assert.equal(b0.sick.available.available, false, 'sick limit is not-available (LR-7 [TBC])');
+    // LR-7 CONFIRMED (v1.4): sick = 63 full + 63 half = 126 entitlement, cert day 1.
+    assert.equal(b0.sick.entitlement, 126, 'sick entitlement is the loaded LR-7 rule');
+    assert.equal(b0.sick.full_pay_days, 63);
+    assert.equal(b0.sick.half_pay_days, 63);
+    assert.equal(b0.sick.certificate_from_day, 1);
+    assert.equal(b0.sick.available, round1(126 - b0.sick.taken), 'sick available is a number, not not-available');
 
     // apply SICK — must not touch annual
     const sick = await H.req('POST', '/leave/apply', { token: t, body: { leave_type: 'sick', days: 3 } });
@@ -83,6 +89,7 @@ test('sick leave draws its own bucket via the endpoint; annual is untouched', as
     const b1 = (await H.req('GET', '/leave/balance', { token: t })).body;
     assert.equal(b1.annual.available, annual0, 'annual balance unchanged by sick leave');
     assert.equal(b1.sick.taken, b0.sick.taken + 3, 'sick bucket increased');
+    assert.equal(b1.sick.available, round1(126 - b1.sick.taken), 'sick available drops with taken');
 
     // apply ANNUAL — reduces annual, not sick
     const ann = await H.req('POST', '/leave/apply', { token: t, body: { leave_type: 'annual', days: 5 } });
@@ -94,6 +101,22 @@ test('sick leave draws its own bucket via the endpoint; annual is untouched', as
     // LR-5: an annual request over the max-continuous without HoH override is refused
     const tooLong = await H.req('POST', '/leave/apply', { token: t, body: { leave_type: 'annual', days: 15 } });
     assert.equal(tooLong.status, 409, 'exceeds max continuous without HoH override');
+  } finally {
+    await owner(`DELETE FROM leave_request WHERE employee_id=$1`, [F.EMP.ALICE]);
+  }
+});
+
+// ── LR-2: a period in months converts to days on the confirmed 30-day basis ──
+test('LR-2 a months-based sick request converts on the 30-day basis (loaded, not gated)', async () => {
+  const t = await tok(F.USERS.EMP_A);
+  try {
+    const b0 = (await H.req('GET', '/leave/balance', { token: t })).body;
+    // 1 month → 30 days on the LR-2 basis; sick draws its own bucket.
+    const r = await H.req('POST', '/leave/apply', { token: t, body: { leave_type: 'sick', months: 1 } });
+    assert.equal(r.status, 200, 'months request no longer blocks — LR-2 is loaded');
+    assert.equal(r.body.days, 30, '1 month = 30 days (LR-2 30-day basis)');
+    const b1 = (await H.req('GET', '/leave/balance', { token: t })).body;
+    assert.equal(b1.sick.taken, b0.sick.taken + 30, 'sick bucket rose by the converted days');
   } finally {
     await owner(`DELETE FROM leave_request WHERE employee_id=$1`, [F.EMP.ALICE]);
   }

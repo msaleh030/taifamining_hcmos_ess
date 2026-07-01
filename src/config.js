@@ -1,9 +1,11 @@
 'use strict';
 // Runtime configuration lives in the `config` table, per tenant — NEVER in code.
-// These are the DEFAULT values seeded for a tenant. The [TBC] items (lockout
-// policy, enrolment/PIN-reset owners) are pending the 4 July governance return;
-// they are read from `config` at request time so they can change without a
-// deploy. The values here are defensible defaults, not hard-coded policy.
+// These are the DEFAULT values seeded for a tenant. Auth lockout (threshold /
+// duration) runs on defensible defaults documented as pending ratification — it
+// is NOT gated, because auth cannot block a login on a [TBC] value; it stays
+// overridable in `config`. The genuinely-gated items use the PENDING sentinel
+// and BLOCK at use. Every value is read from `config` at request time so it can
+// change without a deploy — none of this is hard-coded policy.
 const { query } = require('./db');
 const { HttpError } = require('./errors');
 
@@ -14,7 +16,8 @@ const { HttpError } = require('./errors');
 const PENDING = '__TBC__';
 
 const DEFAULT_CONFIG = {
-  // [TBC] auth lockout policy
+  // Auth lockout — defensible default, PENDING RATIFICATION (not gated: auth must
+  // function, so these apply now and stay overridable in config).
   'auth.lockout.threshold': '5',     // failed attempts before lock
   'auth.lockout.duration':  '900',   // lock seconds (15 min)
 
@@ -80,9 +83,15 @@ const DEFAULT_CONFIG = {
   'leave.carry.lapse_years':  '1',         // LR-4 carry lapses after ONE year (CHANGED from 2)
   'leave.max_continuous_days':'14',        // LR-5 max 14 continuous (HoH override)
   'leave.entitlement.default':'21',        // LR-1 entitlement map (default grade)
-  'leave.weeks_to_days':      PENDING,     // LR-2 [TBC]
+  // LR-2 CONFIRMED (v1.4): a leave period expressed in months converts to days on
+  // a 30-day month — the SAME 30-day basis as PC-1's daily-rate divisor. Read as a
+  // required value so a period request still BLOCKS if a tenant ever unsets it.
+  'leave.days_per_month':     '30',        // LR-2 (was leave.weeks_to_days [TBC])
   'leave.coverage.thresholds':PENDING,     // LR-6 [TBC] per-role coverage
-  'leave.sick.rule':          PENDING,     // LR-7 [TBC]
+  // LR-7 CONFIRMED (v1.4): sick leave = 63 days full pay + 63 days half pay
+  // (126 total); a medical certificate is required from day one. full/half is a
+  // PAY split; both count against the 126-day entitlement for balance purposes.
+  'leave.sick.rule':          'full:63,half:63,cert_from_day:1', // LR-7
 
   // ── Payroll (PC-*) ────────────────────────────────────────────────────────
   // PC-1 daily-rate divisor = 30 (registry). This is THE pay daily-rate basis,
@@ -93,7 +102,7 @@ const DEFAULT_CONFIG = {
   'payroll.gross_components': 'house,transport,responsibility', // PC-3 (must equal PC-1's set)
   'payroll.partial_period':   PENDING,     // PC-2 [TBC]
 
-  // ── Geofence clock-in (SS-3, registry v1.2 CONFIRMED) ─────────────────────
+  // ── Geofence clock-in (SS-3, registry v1.4 CONFIRMED) ─────────────────────
   // Zones themselves live in geofence_zone (per site). These tune the validator.
   // CONFIRMED: accept when distance <= radius + min(device_accuracy, 50m).
   'geofence.tolerance.policy':  'accuracy',  // accuracy | none
