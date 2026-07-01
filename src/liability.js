@@ -14,10 +14,11 @@ const exact = require('./exact');
 const round2 = (x) => Math.round(x * 100) / 100;
 const REMUNERATION = 'monthly remuneration';
 
-// The single daily rate — the one EX-2 base divided by the leave divisor (30).
+// The single daily rate — the one EX-2 base divided by the PC-1 divisor (30).
+// Leave pay uses the SAME PC-1 basis as payroll; there is no separate divisor.
 async function dailyRate(session, cells) {
-  const base = await exact.dailyRateBase(session, cells);                    // ONE base
-  const divisor = await cfg.getRequiredInt(session.company_id, 'leave.liability.divisor'); // 30
+  const base = await exact.dailyRateBase(session, cells);                       // ONE base
+  const divisor = await cfg.getRequiredInt(session.company_id, 'payroll.daily_rate.divisor'); // PC-1 = 30
   return round2(base / divisor);
 }
 

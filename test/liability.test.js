@@ -17,13 +17,15 @@ const A = F.TENANT_A;
 const session = { company_id: A, user_id: F.USERS.PAYMGR_A.id, role_code: 'R09' };
 const N = contractDef.build().length;
 
-// EX-2 base sums to 3000 (→ daily rate 3000/30 = 100); overtime + rotation/night
+// EX-2 base sums to 3000 (→ daily rate 3000/30 = 100). Basic sits at col 12
+// (an INCLUDED component); Rotation(11)/overtime(21,24)/Night Shift(26) are
 // populated to prove they never reach the base.
 function baseCells() {
   const c = Array(N).fill('0');
-  c[11] = '3000';               // basic (in the base set 11..18)
-  c[19] = '999'; c[20] = '999'; // rotation / night — excluded
-  c[21] = '999'; c[24] = '999'; // overtime — excluded
+  c[12] = '3000';                       // Basic Salary (included)
+  c[11] = '999';                        // Rotation      — excluded
+  c[21] = '999'; c[24] = '999';         // overtime      — excluded
+  c[26] = '999';                        // Night Shift   — excluded
   return c;
 }
 

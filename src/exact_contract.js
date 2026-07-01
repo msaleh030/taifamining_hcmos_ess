@@ -28,20 +28,24 @@ const NAMED = {
   7:  ['identity', 'NIDA', true],
   9:  ['identity', 'TIN', true],
   10: ['identity', 'PENSION/NSSF NO', true],
-  // EX-2 earnings/allowance components (positions provisional; not pinned).
-  11: ['allowances', 'BASIC SALARY', false],
-  12: ['allowances', 'HOUSING ALLOWANCE (15%)', false],
-  13: ['allowances', 'RESPONSIBILITY', false],
-  14: ['allowances', 'PROJECT', false],
-  15: ['allowances', 'MEDICAL', false],
-  16: ['allowances', 'HOUSING ALL (FIXED)', false],
-  17: ['allowances', 'FIXED OVERTIME', false],
-  18: ['allowances', 'TRANSPORT (10%)', false],
-  19: ['allowances', 'ROTATION ALLOWANCE', false],       // v1.4: EXCLUDED from base
-  20: ['allowances', 'NIGHT SHIFT ALLOWANCE', false],    // v1.4: EXCLUDED from base
-  21: ['allowances', 'OVERTIME NORMAL', false],          // EXCLUDED from base
-  24: ['allowances', 'OVERTIME HOLIDAY', false],         // EXCLUDED from base
-  28: ['allowances', 'TOTAL PAY', true],                 // EX-4: renamed from TOTAL ALLOWANCE
+  // EX-2 earnings/allowance components. Column POSITIONS confirmed against the
+  // real Exact export are `pinned`; the fixed-pay components whose exact position
+  // is not yet confirmed are provisional (not pinned) — but the daily-rate base is
+  // resolved BY NAME (src/exact.js), so a position change is caught by the
+  // name-keyed test rather than silently moving money.
+  11: ['allowances', 'ROTATION', true],           // CONFIRMED — EXCLUDED from base
+  12: ['allowances', 'BASIC SALARY', false],       // include (position provisional)
+  13: ['allowances', 'HOUSING ALLOWANCE', false],  // include (position provisional)
+  14: ['allowances', 'RESPONSIBILITY', false],     // include (position provisional)
+  15: ['allowances', 'PROJECT', false],            // include (position provisional)
+  16: ['allowances', 'MEDICAL', false],            // include (position provisional)
+  17: ['allowances', 'HOUSING ALL', false],        // include (position provisional)
+  19: ['allowances', 'FIXED OVERTIME', true],      // CONFIRMED — INCLUDED in base
+  20: ['allowances', 'TRANSPORT', true],           // CONFIRMED — INCLUDED in base
+  21: ['allowances', 'OVERTIME NORMAL', true],     // CONFIRMED — EXCLUDED from base
+  24: ['allowances', 'OVERTIME HOLIDAY', true],    // CONFIRMED — EXCLUDED from base
+  26: ['allowances', 'NIGHT SHIFT', true],         // CONFIRMED — EXCLUDED from base
+  28: ['allowances', 'TOTAL PAY', true],           // EX-4: renamed from TOTAL ALLOWANCE
   31: ['deductions', 'NSSF', true],
   32: ['deductions', 'PAYE', true],
   42: ['deductions', 'TOTAL DEDUCTION', true],

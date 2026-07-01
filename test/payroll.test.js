@@ -1,7 +1,7 @@
 'use strict';
 // Slice — Payroll PC-1/PC-2/PC-3 registry-gating. Proves the daily-rate divisor
-// comes from the registry (not the literal 31), that PC-3 gross components must
-// equal PC-1's fixed-allowance set, and that the [TBC] PC-2 rule BLOCKS.
+// comes from the registry (PC-1 = 30, no 31 anywhere), that PC-3 gross components
+// must equal PC-1's fixed-allowance set, and that the [TBC] PC-2 rule BLOCKS.
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 const H = require('./helpers');
@@ -16,18 +16,19 @@ const setDivisor = (n) => db.withOwner((c) => c.query(
 before(H.start);
 after(H.stop);
 
-test('PC-1 daily rate uses the divisor from the registry, not a literal 31', async () => {
-  // LOCKED divisor = 31.
-  assert.equal(await payroll.dailyRate(A, 3100), 100, '3100 / 31');
+test('PC-1 daily rate uses the registry divisor (30); nothing computes on 31', async () => {
+  // PC-1 = 30.
+  assert.equal(await payroll.dailyRate(A, 3000), 100, '3000 / 30');
+  // Nothing computes on 31: 3100/30 ≠ 100 (it would be 100 only if divided by 31).
+  assert.equal(await payroll.dailyRate(A, 3100), 3100 / 30);
+  assert.notEqual(await payroll.dailyRate(A, 3100), 100, 'no 31 divisor');
 
-  // Change the registry → the computation changes (so it is not hard-coded 31).
-  await setDivisor(30);
+  // Divisor is read live from the registry (not hard-coded).
+  await setDivisor(15);
   try {
-    assert.equal(await payroll.dailyRate(A, 3000), 100, 'now 3000 / 30');
-    assert.equal(await payroll.dailyRate(A, 3100), 3100 / 30, 'divisor is read live from config');
-    assert.notEqual(await payroll.dailyRate(A, 3100), 100, 'not the literal 31 divisor');
+    assert.equal(await payroll.dailyRate(A, 3000), 200, '3000 / 15');
   } finally {
-    await setDivisor(31); // restore the locked (flagged) value
+    await setDivisor(30); // restore PC-1
   }
 });
 

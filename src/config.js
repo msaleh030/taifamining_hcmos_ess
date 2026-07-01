@@ -80,15 +80,15 @@ const DEFAULT_CONFIG = {
   'leave.carry.lapse_years':  '1',         // LR-4 carry lapses after ONE year (CHANGED from 2)
   'leave.max_continuous_days':'14',        // LR-5 max 14 continuous (HoH override)
   'leave.entitlement.default':'21',        // LR-1 entitlement map (default grade)
-  // LIAB-01: leave liability daily rate = monthly remuneration / 30 (calendar-day
-  // basis; distinct from the PC-1 payroll daily-rate divisor of 31).
-  'leave.liability.divisor':  '30',
   'leave.weeks_to_days':      PENDING,     // LR-2 [TBC]
   'leave.coverage.thresholds':PENDING,     // LR-6 [TBC] per-role coverage
   'leave.sick.rule':          PENDING,     // LR-7 [TBC]
 
   // ── Payroll (PC-*) ────────────────────────────────────────────────────────
-  'payroll.daily_rate.divisor':'31',       // PC-1 [FLAGGED: confirm with Finance]
+  // PC-1 daily-rate divisor = 30 (registry). This is THE pay daily-rate basis,
+  // used by payroll AND by leave pay/liability. There is no 31 divisor; a 31-day
+  // proration, if ever needed, must be raised as its own registry item.
+  'payroll.daily_rate.divisor':'30',
   'payroll.fixed_allowances': 'house,transport,responsibility', // PC-1 fixed-allowance set
   'payroll.gross_components': 'house,transport,responsibility', // PC-3 (must equal PC-1's set)
   'payroll.partial_period':   PENDING,     // PC-2 [TBC]
@@ -120,10 +120,13 @@ const DEFAULT_CONFIG = {
   // EX-2 CONFIRMED daily-rate base (PC-1): BASIC + Housing(15%) + Responsibility
   // + Project + Medical + Housing(fixed) + Fixed Overtime + Transport(10%).
   // Positions are the contract's earnings columns; EXCLUDE overtime cols 21 & 24.
-  'exact.dailyrate.base_cols':    '11,12,13,14,15,16,17,18',
-  // v1.4 CONFIRMED exclusions (no longer [TBC], no include flag): overtime normal
-  // (21) & holiday (24), and Rotation (19) & Night Shift (20).
-  'exact.dailyrate.exclude_cols': '19,20,21,24',
+  // EX-2 daily-rate base — NAME-KEYED (resolved to positions via the column
+  // contract), confirmed against the real Exact export, so a column can never
+  // silently drift. INCLUDE = the fixed-pay set; EXCLUDE = the variable
+  // overtime/rotation/night components. This is the single base used by payroll
+  // and by leave pay/liability.
+  'exact.dailyrate.include_names': 'BASIC SALARY,HOUSING ALLOWANCE,RESPONSIBILITY,PROJECT,MEDICAL,HOUSING ALL,FIXED OVERTIME,TRANSPORT',
+  'exact.dailyrate.exclude_names': 'ROTATION,OVERTIME NORMAL,OVERTIME HOLIDAY,NIGHT SHIFT',
   // Full-period control-totals reconciliation (AC-EXACT-07) — still gated until a
   // real populated period arrives; the per-row net check runs now (EX-3).
   'exact.reconciliation':   PENDING,

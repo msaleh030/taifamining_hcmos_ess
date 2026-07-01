@@ -150,17 +150,35 @@ function num(v) {
   return Number.isFinite(n) ? n : 0;
 }
 const round2 = (x) => Math.round(x * 100) / 100;
-const csvInts = (s) => String(s || '').split(',').map((x) => parseInt(x, 10)).filter(Number.isFinite);
 
-// ── EX-2 / PC-1 (v1.4): daily-rate base = confirmed earnings set, EXCLUDING the
-// overtime cols (21,24) and Rotation/Night Shift (19,20). This is the ONE base;
-// leave-pay/liability (src/liability.js) reads it too. Operates on a cell array.
+// ── EX-2 / PC-1: daily-rate base — NAME-KEYED, resolved to column positions via
+// the contract. INCLUDE the fixed-pay components; EXCLUDE the variable
+// overtime/rotation/night ones. Because it resolves by NAME, a column moving
+// position cannot silently change the base (the name-keyed test guards it), and a
+// configured name missing from the contract BLOCKS rather than compute a wrong,
+// money-driving base. This is the ONE base; leave pay/liability reads it too.
+const norm = (s) => String(s || '').trim().toUpperCase().replace(/\s+/g, ' ');
+
+async function contractPositions(companyId) {
+  const version = await cfg.getConfig(companyId, 'exact.contract.version', 'v1.2', null);
+  const r = await db.query('SELECT position, header FROM exact_column WHERE version=$1', [version]);
+  const map = new Map();
+  for (const row of r.rows) map.set(norm(row.header), row.position);
+  return map;
+}
+
 async function dailyRateBase(session, cells) {
   const co = session.company_id;
-  const base = csvInts(await cfg.getConfig(co, 'exact.dailyrate.base_cols', '', null));
-  const exclude = new Set(csvInts(await cfg.getConfig(co, 'exact.dailyrate.exclude_cols', '19,20,21,24', null)));
-  const positions = base.filter((c) => !exclude.has(c));
-  return round2(positions.reduce((sum, c) => sum + num(cells[c]), 0));
+  const include = (await cfg.getConfig(co, 'exact.dailyrate.include_names', '', null)).split(',').map(norm).filter(Boolean);
+  const exclude = new Set((await cfg.getConfig(co, 'exact.dailyrate.exclude_names', '', null)).split(',').map(norm).filter(Boolean));
+  const pos = await contractPositions(co);
+
+  const missing = include.filter((n) => !pos.has(n));
+  if (missing.length) throw new HttpError(409, `daily-rate base: component(s) not in the column contract: ${missing.join(', ')}`);
+  const conflict = include.filter((n) => exclude.has(n));
+  if (conflict.length) throw new HttpError(409, `daily-rate base: component both included and excluded: ${conflict.join(', ')}`);
+
+  return round2(include.reduce((sum, n) => sum + num(cells[pos.get(n)]), 0));
 }
 
 // ── EX-3: NET PAY = Total Pay − Total Deduction; verify against col AS ───────

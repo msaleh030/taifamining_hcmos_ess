@@ -121,15 +121,40 @@ test('EX-3 net check: computed net equals col AS, and a wrong col AS is flagged'
   assert.deepEqual(res.mismatches.map((m) => m.row_no), [2]);
 });
 
-// ── EX-2 / v1.4: daily-rate base sums the confirmed set; overtime AND
-//    Rotation/Night Shift are CONFIRMED excluded (no include flag) ────────────
-test('EX-2/v1.4 daily-rate base sums the confirmed set; overtime and Rotation/Night are excluded', async () => {
+// ── EX-2: daily-rate base is NAME-KEYED against the real Exact export ────────
+// INCLUDE = Basic(12) Housing(13) Responsibility(14) Project(15) Medical(16)
+// Housing All(17) Fixed Overtime(19) Transport(20); EXCLUDE = Rotation(11)
+// Overtime-normal(21) Overtime-holiday(24) Night Shift(26).
+test('EX-2 daily-rate base includes the fixed set (incl. Fixed Overtime + Transport); excludes Rotation/OT/Night', async () => {
   const cells = Array(N).fill('0');
-  for (let c = 11; c <= 18; c++) cells[c] = '100'; // base set 11..18 → 800
-  cells[19] = '50'; cells[20] = '50';              // rotation / night shift — EXCLUDED (v1.4)
-  cells[21] = '500'; cells[24] = '500';            // overtime normal/holiday — EXCLUDED
-  // v1.4: Rotation & Night Shift are CONFIRMED excluded (no include flag to toggle).
-  assert.equal(await exact.dailyRateBase(session, cells), 800, 'overtime and Rotation/Night are confirmed excluded');
+  for (const p of [12, 13, 14, 15, 16, 17, 19, 20]) cells[p] = '100'; // 8 included → 800
+  cells[11] = '999';                 // Rotation      — EXCLUDED
+  cells[21] = '999'; cells[24] = '999'; // overtime    — EXCLUDED
+  cells[26] = '999';                 // Night Shift   — EXCLUDED
+  assert.equal(await exact.dailyRateBase(session, cells), 800, 'only the fixed-pay components contribute');
+});
+
+// Name-keyed guard: excludes/includes resolve BY NAME via the contract, so a
+// column changing position can never silently move money.
+test('EX-2 base is name-keyed — excluded columns never enter it; Fixed Overtime + Transport do', async () => {
+  const rows = (await db.withOwner((c) => c.query(
+    `SELECT header, position FROM exact_column WHERE version='v1.2'`))).rows;
+  const pos = Object.fromEntries(rows.map((row) => [row.header, Number(row.position)]));
+  // the confirmed real-export anchors
+  assert.equal(pos['ROTATION'], 11);
+  assert.equal(pos['FIXED OVERTIME'], 19);
+  assert.equal(pos['TRANSPORT'], 20);
+  assert.equal(pos['OVERTIME NORMAL'], 21);
+  assert.equal(pos['OVERTIME HOLIDAY'], 24);
+  assert.equal(pos['NIGHT SHIFT'], 26);
+
+  const onlyExcluded = Array(N).fill('0');
+  for (const p of [11, 21, 24, 26]) onlyExcluded[p] = '1000';
+  assert.equal(await exact.dailyRateBase(session, onlyExcluded), 0, 'excluded-by-name columns never enter the base');
+
+  const onlyFixedOtTransport = Array(N).fill('0');
+  onlyFixedOtTransport[19] = '100'; onlyFixedOtTransport[20] = '100';
+  assert.equal(await exact.dailyRateBase(session, onlyFixedOtTransport), 200, 'Fixed Overtime + Transport are included by name');
 });
 
 // ── Remaining [TBC]: full-period reconciliation still BLOCKS ─────────────────
