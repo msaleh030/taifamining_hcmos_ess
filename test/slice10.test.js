@@ -35,7 +35,13 @@ test('TEN-01 provisions a tenant from the registry (config, LOC sites) audited a
   assert.equal(rows.length, KEYS, 'all registry keys seeded');
   const got = Object.fromEntries(rows.map((r) => [r.key, r.value]));
   for (const [k, v] of Object.entries(DEFAULT_CONFIG)) assert.equal(got[k], v, `registry value flows: ${k}`);
-  assert.equal(got['doc.notify.role.licence'], 'R10', 'DA-2 registry value flows into the new tenant');
+
+  // The COMPLETE DA-2 notify set resolves in the fresh tenant (not just one type).
+  const DA2 = { contract: 'R05', permit: 'R06', licence: 'R10', medical: 'R10' };
+  for (const [kind, role] of Object.entries(DA2)) {
+    assert.equal(got[`doc.notify.role.${kind}`], role, `DA-2 ${kind} → ${role} in the provisioned tenant`);
+    assert.equal(await cfg.getConfig(T1, `doc.notify.role.${kind}`), role, `DA-2 ${kind} resolves via the registry reader`);
+  }
 
   // sites created from the registry LOC codes.
   const sites = (await owner(`SELECT name FROM site WHERE company_id=$1`, [T1])).rows.map((r) => r.name).sort();
