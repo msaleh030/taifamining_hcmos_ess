@@ -187,15 +187,16 @@ const routes = [
     handler: async (req, m, url, s) => ({ status: 200, body: await support.getTicket(s, m[1]) }) },
 
   // ── F7: Policy acknowledgement (POL-01..04). Read + acknowledge are SELF-
-  // SERVICE (every employee). Publishing a company-wide policy is admin
-  // (admin.config.write); the outstanding-acks compliance report is reports-only.
+  // SERVICE (every employee). Publishing a company-wide policy is guarded to the
+  // registry role-set policy.publish.roles (so the owner is UAT-flippable via
+  // config, not code); the outstanding-acks compliance report is reports-only.
   { method: 'GET', pattern: /^\/policy\/([\w-]+)\/outstanding$/i, module: 'reports',
     handler: async (req, m, url, s) => ({ status: 200, body: await policy.outstanding(s, m[1]) }) },
   { method: 'POST', pattern: /^\/policy\/([\w-]+)\/ack$/i,
     handler: async (req, m, url, s) => ({ status: 200, body: await policy.acknowledge(s, m[1]) }) },
   { method: 'GET', pattern: /^\/policy\/([\w-]+)$/i,
     handler: async (req, m, url, s) => ({ status: 200, body: await policy.readCurrent(s, m[1]) }) },
-  { method: 'POST', pattern: /^\/policy$/, action: 'admin.config.write',
+  { method: 'POST', pattern: /^\/policy$/, allow: 'policy.publish.roles',
     handler: async (req, m, url, s) => ({ status: 200, body: await policy.publishPolicy(s, await readJson(req)) }) },
 
   // ── F7: Controls & Checker (AC-AUD-03). The audit/controls view is restricted

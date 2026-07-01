@@ -174,21 +174,32 @@ const DEFAULT_CONFIG = {
   'doc.notify.role.medical':  'R10',       // SHEQ
   // Support ticket channels (ES-5).
   'support.channels':         'in_app,email',
-  // ── F7 guards (Slice 9 modules exposed over HTTP) ─────────────────────────
-  // Document-expiry alerts belong to the document-compliance owners: the DA-2
-  // notified roles (R05/R06/R10) + the HR line and admin oversight. Excludes
-  // payroll/finance/employee/field, who do not manage documents. Guard enforced
-  // at the endpoint (test/f7.test.js).
+  // ── F7 guards (Slice 9 modules exposed over HTTP). All four are APPLIED,
+  //    pending client ratification at UAT (same category as DA-2 roles / lockout):
+  //    real values that apply now, NOT [TBC]-gated. Each guard is pinned by a test.
+  //
+  // Document-expiry alerts → document-compliance owners: the DA-2 notified roles
+  // (R05/R06/R10) + the HR line and admin oversight. DELIBERATELY not reports-
+  // scoped: R10 (clinic) receives medical/licence alerts but has no reports module,
+  // so a reports guard would wrongly exclude a DA-2 recipient. UAT: faithful-rule-
+  // correct as-is; ratify. Pinned by test/f7.test.js.
   'alerts.view.roles':        'R03,R04,R05,R06,R10,R11,R12',
-  // Controls & Checker / audit view — the AUD/SOD oversight set. CONFIRMED:
-  // HR Director (R11, exec oversight) + System Administrator (R12). No one else
-  // reads the SoD-breach / leaver-access / audit-chain evidence. Guard enforced at
-  // the endpoint (test/f7_controls.test.js).
+  // Controls & Checker / audit view — the AUD/SOD oversight set: HR Director
+  // (R11, exec oversight) + System Administrator (R12). No one else reads the
+  // SoD-breach / leaver-access / audit-chain evidence. UAT: confirm AUD/SOD
+  // membership (R11/R12 applied; org RACI may add/replace). Pinned: test/f7_controls.test.js.
   'controls.view.roles':      'R11,R12',
   // Support helpdesk agents — may view and drive the lifecycle of ANY ticket. A
   // raiser always sees/acts on their OWN ticket regardless (record-scoped in the
-  // service). CONFIRMED: System Admin only to start. Guard: test/f7.test.js.
+  // service). Applied: System Admin only to start. UAT: confirm R12-only vs an
+  // HR / dedicated support owner. Pinned by test/f7.test.js.
   'support.agent.roles':      'R12',
+  // Policy PUBLISH (POL-01) — who may publish a company-wide policy version.
+  // Applied: System Admin (R12). Read + acknowledge (POL-02/03) are self-service;
+  // the outstanding-acks report (POL-04) is module:'reports'. UAT: confirm the
+  // publish owner is IT-admin (R12) vs HR (R07) — org RACI may differ; flipping it
+  // is a registry edit, not a code change. Pinned by test/f7.test.js.
+  'policy.publish.roles':     'R12',
   'retention.audit_years':    '7',
   'retention.safety_years':   '10',
   'region':                   'af-south-1',
