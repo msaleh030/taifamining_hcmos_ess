@@ -1,9 +1,19 @@
 'use strict';
-// HTTP API (Node built-in http only). Routes map 1:1 to the handoff contract.
+// HTTP API (Node built-in http only) + static serving for the production frontend.
+//
+// F0 endpoint MIDDLEWARE: routes are declarative — each declares whether it needs
+// a session (auth) and, optionally, an A2 module or an RBAC action. The dispatcher
+// enforces session + A2/A3 guards at the HTTP layer BEFORE the handler runs, so
+// every per-screen endpoint inherits the guards instead of re-implementing them.
 const http = require('node:http');
+const fs = require('node:fs');
+const path = require('node:path');
 const auth = require('./auth');
 const employees = require('./employees');
+const roles = require('./roles');
 const { HttpError } = require('./errors');
+
+const WEB_DIR = path.join(__dirname, '..', 'web');
 
 function readJson(req) {
   return new Promise((resolve, reject) => {
@@ -18,95 +28,105 @@ function readJson(req) {
 }
 
 function send(res, status, body) {
-  const payload = JSON.stringify(body);
   res.writeHead(status, { 'content-type': 'application/json' });
-  res.end(payload);
+  res.end(JSON.stringify(body));
 }
 
 function bearer(req) {
-  const h = req.headers['authorization'] || '';
-  const m = /^Bearer\s+(.+)$/i.exec(h);
+  const m = /^Bearer\s+(.+)$/i.exec(req.headers['authorization'] || '');
   return m ? m[1] : null;
 }
 
-// Require a valid session; throws 401 otherwise.
-async function requireSession(req) {
+// ── Declarative routes. auth defaults true; module/action are optional guards. ──
+const routes = [
+  { method: 'POST', pattern: /^\/auth\/console$/, auth: false,
+    handler: async (req) => ({ status: 200, body: await auth.consoleLogin(await readJson(req)) }) },
+  { method: 'POST', pattern: /^\/auth\/field$/, auth: false,
+    handler: async (req) => ({ status: 200, body: await auth.fieldLogin(await readJson(req)) }) },
+  { method: 'POST', pattern: /^\/auth\/reset\/password$/,
+    handler: async (req, m, url, s) => ({ status: 200, body: await auth.resetPassword(s, await readJson(req)) }) },
+  { method: 'POST', pattern: /^\/auth\/reset\/pin$/,
+    handler: async (req, m, url, s) => ({ status: 200, body: await auth.resetPin(s, await readJson(req)) }) },
+
+  { method: 'GET', pattern: /^\/me\/landing$/,
+    handler: async (req, m, url, s) => ({ status: 200, body: auth.landing(s) }) },
+  { method: 'GET', pattern: /^\/me\/profile\/([0-9a-f-]+)$/i,
+    handler: async (req, m, url, s) => ({ status: 200, body: await auth.readProfile(s, m[1]) }) },
+  { method: 'POST', pattern: /^\/action\/([\w.]+)$/,
+    handler: async (req, m, url, s) => ({ status: 200, body: await auth.performAction(s, m[1]) }) },
+
+  // F0: a module-guarded endpoint — proves the A2 guard is enforced at the HTTP
+  // layer (roles with the 'reports' module get 200, others 403). Per-screen
+  // slices declare their own module/action the same way.
+  { method: 'GET', pattern: /^\/reports\/summary$/, module: 'reports',
+    handler: async (req, m, url, s) => ({ status: 200, body: { role: s.role_code, modules: auth.landing(s).modules, generated: true } }) },
+
+  // ── Slice 2: Employee Master ──────────────────────────────────────────────
+  { method: 'GET', pattern: /^\/employees$/,
+    handler: async (req, m, url, s) => ({ status: 200, body: await employees.list(s, {
+      q: url.searchParams.get('q') || undefined, site: url.searchParams.get('site') || undefined,
+      dept: url.searchParams.get('dept') || undefined, status: url.searchParams.get('status') || undefined,
+      cursor: url.searchParams.get('cursor') || undefined, limit: url.searchParams.get('limit') || undefined,
+    }) }) },
+  { method: 'GET', pattern: /^\/employees\/([0-9a-f-]+)\/documents$/i,
+    handler: async (req, m, url, s) => ({ status: 200, body: await employees.documents(s, m[1]) }) },
+  { method: 'POST', pattern: /^\/employees\/([0-9a-f-]+)\/change$/i,
+    handler: async (req, m, url, s) => ({ status: 200, body: await employees.submitChange(s, m[1], await readJson(req)) }) },
+  { method: 'GET', pattern: /^\/employees\/([0-9a-f-]+)$/i,
+    handler: async (req, m, url, s) => ({ status: 200, body: await employees.get(s, m[1]) }) },
+  { method: 'POST', pattern: /^\/field-change\/([0-9a-f-]+)\/approve$/i,
+    handler: async (req, m, url, s) => ({ status: 200, body: await employees.decide(s, m[1], true) }) },
+  { method: 'POST', pattern: /^\/field-change\/([0-9a-f-]+)\/decline$/i,
+    handler: async (req, m, url, s) => ({ status: 200, body: await employees.decide(s, m[1], false) }) },
+];
+
+// Guard: verify session, then A2 module / RBAC action if the route declares them.
+async function guard(route, req) {
+  if (route.auth === false) return null;
   const session = await auth.verifySession(bearer(req));
   if (!session) throw new HttpError(401, 'authentication required');
+  if (route.module && !roles.moduleAllowed(session.role_code, route.module)) throw new HttpError(403, 'forbidden');
+  if (route.action && !roles.canPerform(session.role_code, route.action)) throw new HttpError(403, 'forbidden');
   return session;
 }
 
-const routes = [
-  ['POST', /^\/auth\/console$/, async (req) => ({ status: 200, body: await auth.consoleLogin(await readJson(req)) })],
-  ['POST', /^\/auth\/field$/, async (req) => ({ status: 200, body: await auth.fieldLogin(await readJson(req)) })],
-  ['POST', /^\/auth\/reset\/password$/, async (req) => {
-    const s = await requireSession(req);
-    return { status: 200, body: await auth.resetPassword(s, await readJson(req)) };
-  }],
-  ['POST', /^\/auth\/reset\/pin$/, async (req) => {
-    const s = await requireSession(req);
-    return { status: 200, body: await auth.resetPin(s, await readJson(req)) };
-  }],
-  ['GET', /^\/me\/landing$/, async (req) => {
-    const s = await requireSession(req);
-    return { status: 200, body: auth.landing(s) };
-  }],
-  ['GET', /^\/me\/profile\/([0-9a-f-]+)$/i, async (req, m) => {
-    const s = await requireSession(req);
-    return { status: 200, body: await auth.readProfile(s, m[1]) };
-  }],
-  ['POST', /^\/action\/([\w.]+)$/, async (req, m) => {
-    const s = await requireSession(req);
-    return { status: 200, body: await auth.performAction(s, m[1]) };
-  }],
+const MIME = {
+  '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8',
+  '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.ico': 'image/x-icon',
+  '.json': 'application/json', '.map': 'application/json',
+};
 
-  // ── Slice 2: Employee Master ──────────────────────────────────────────────
-  ['GET', /^\/employees$/, async (req, _m, url) => {
-    const s = await requireSession(req);
-    const q = url.searchParams;
-    return { status: 200, body: await employees.list(s, {
-      q: q.get('q') || undefined, site: q.get('site') || undefined,
-      dept: q.get('dept') || undefined, status: q.get('status') || undefined,
-      cursor: q.get('cursor') || undefined, limit: q.get('limit') || undefined,
-    }) };
-  }],
-  ['GET', /^\/employees\/([0-9a-f-]+)\/documents$/i, async (req, m) => {
-    const s = await requireSession(req);
-    return { status: 200, body: await employees.documents(s, m[1]) };
-  }],
-  ['POST', /^\/employees\/([0-9a-f-]+)\/change$/i, async (req, m) => {
-    const s = await requireSession(req);
-    return { status: 200, body: await employees.submitChange(s, m[1], await readJson(req)) };
-  }],
-  ['GET', /^\/employees\/([0-9a-f-]+)$/i, async (req, m) => {
-    const s = await requireSession(req);
-    return { status: 200, body: await employees.get(s, m[1]) };
-  }],
-  ['POST', /^\/field-change\/([0-9a-f-]+)\/approve$/i, async (req, m) => {
-    const s = await requireSession(req);
-    return { status: 200, body: await employees.decide(s, m[1], true) };
-  }],
-  ['POST', /^\/field-change\/([0-9a-f-]+)\/decline$/i, async (req, m) => {
-    const s = await requireSession(req);
-    return { status: 200, body: await employees.decide(s, m[1], false) };
-  }],
-];
+// Serve a static asset from web/ (production frontend). Returns true if handled.
+function serveStatic(pathname, res) {
+  const rel = pathname === '/' ? 'index.html' : pathname.replace(/^\/+/, '');
+  const full = path.normalize(path.join(WEB_DIR, rel));
+  if (!full.startsWith(WEB_DIR)) return false;         // no path traversal
+  const ext = path.extname(full);
+  if (!MIME[ext]) return false;                         // whitelisted types only
+  let buf;
+  try { buf = fs.readFileSync(full); } catch { return false; }
+  res.writeHead(200, { 'content-type': MIME[ext] });
+  res.end(buf);
+  return true;
+}
 
 function createServer() {
   return http.createServer(async (req, res) => {
     try {
       const url = new URL(req.url, 'http://x');
-      for (const [method, re, handler] of routes) {
-        if (req.method !== method) continue;
-        const m = re.exec(url.pathname);
+      for (const route of routes) {
+        if (req.method !== route.method) continue;
+        const m = route.pattern.exec(url.pathname);
         if (!m) continue;
-        const out = await handler(req, m, url);
+        const session = await guard(route, req);
+        const out = await route.handler(req, m, url, session);
         return send(res, out.status, out.body);
       }
+      // Fall through to the production frontend (static assets).
+      if (req.method === 'GET' && serveStatic(url.pathname, res)) return;
       send(res, 404, { error: 'not found' });
     } catch (e) {
       if (e instanceof HttpError) return send(res, e.status, e.body);
-      // Never leak internals.
       // eslint-disable-next-line no-console
       console.error('[server] unexpected', e);
       send(res, 500, { error: 'internal error' });
@@ -116,7 +136,7 @@ function createServer() {
 
 if (require.main === module) {
   const port = Number(process.env.PORT || 3000);
-  createServer().listen(port, () => console.log(`HCMOS auth API on :${port}`));
+  createServer().listen(port, () => console.log(`HCMOS API + frontend on :${port}`));
 }
 
 module.exports = { createServer };
