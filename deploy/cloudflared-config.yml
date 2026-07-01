@@ -1,0 +1,19 @@
+# Cloudflare Tunnel ingress for the HCMOS UAT origin (RECOMMENDED — no inbound
+# ports open on the box). Install cloudflared on the Hostinger box, then:
+#
+#   cloudflared tunnel login
+#   cloudflared tunnel create hcmos-uat            # prints a Tunnel UUID + creds file
+#   cloudflared tunnel route dns hcmos-uat uat.taifamining.tz   # creates the proxied CNAME for you
+#   sudo cp deploy/cloudflared-config.yml /etc/cloudflared/config.yml   # edit the two placeholders
+#   sudo cloudflared service install && sudo systemctl enable --now cloudflared
+#
+# The tunnel dials OUT to Cloudflare, so the origin needs NO open inbound ports
+# (close 80/443 at the firewall; only outbound 443 to Cloudflare is required).
+
+tunnel: <TUNNEL-UUID>                       # from `cloudflared tunnel create`
+credentials-file: /etc/cloudflared/<TUNNEL-UUID>.json
+
+ingress:
+  - hostname: uat.taifamining.tz
+    service: http://localhost:3000          # the Node server (systemd hcmos.service)
+  - service: http_status:404                # catch-all
