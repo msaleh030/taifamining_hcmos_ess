@@ -21,6 +21,7 @@ const support = require('./support');
 const policy = require('./policy');
 const controls = require('./controls');
 const provision = require('./provision');
+const reports = require('./reports');
 const crypto = require('node:crypto');
 const roles = require('./roles');
 const cfg = require('./config');
@@ -81,6 +82,18 @@ const routes = [
   // test/f3.test.js (a reports/payroll-module role without pay-visibility → 403).
   { method: 'GET', pattern: /^\/reports\/summary$/, module: 'reports',
     handler: async (req, m, url, s) => ({ status: 200, body: { role: s.role_code, modules: auth.landing(s).modules, generated: true } }) },
+
+  // C17 Reports catalogue — any reports-module role sees it, but the FINANCIAL
+  // registers are listed only to pay-visibility roles (server filters).
+  { method: 'GET', pattern: /^\/reports\/catalogue$/, module: 'reports',
+    handler: async (req, m, url, s) => ({ status: 200, body: await reports.catalogue(s) }) },
+  // The Payroll + Leave-liability REGISTERS carry the C16 financial gate
+  // (a3.pay.roles), NOT module:'reports' — a report inherits the gate of its data.
+  // A reports-module role that is not pay-visibility is 403 here, server-side.
+  { method: 'GET', pattern: /^\/reports\/register\/payroll\/([0-9a-f-]+)$/i, allow: 'a3.pay.roles',
+    handler: async (req, m, url, s) => ({ status: 200, body: await reports.payrollRegister(s, m[1]) }) },
+  { method: 'GET', pattern: /^\/reports\/register\/leave-liability\/([0-9a-f-]+)$/i, allow: 'a3.pay.roles',
+    handler: async (req, m, url, s) => ({ status: 200, body: await reports.leaveLiabilityRegister(s, m[1]) }) },
 
   // ── Slice 2 / F1: Employee Master. The directory access rule is the registry
   // directory.deny.roles set — declared here so the F0 middleware enforces it at
