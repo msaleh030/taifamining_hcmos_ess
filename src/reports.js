@@ -1,9 +1,12 @@
 'use strict';
-// C17 — Reports. The Payroll and Leave-liability REGISTERS are financial data, so
-// they inherit the C16 pay-visibility gate (a3.pay.roles) — a report inherits the
-// gate of its data. The register endpoints enforce that gate server-side; the
-// catalogue additionally hides financial entries from non-pay roles so the UI
-// list matches the server rule (but the register endpoint is the real control).
+// C17 — Reports. A report inherits the GATE OF ITS DATA:
+//   • FINANCIAL registers (Payroll, Leave-liability) inherit the C16 pay-visibility
+//     gate (a3.pay.roles) — enforced at the register endpoints below; the catalogue
+//     also hides them from non-pay roles so the UI matches the server rule.
+//   • SITE-BOUND reports (C11 Performance — recruitment funnel / reviews, DEFERRED:
+//     no data model yet) inherit the site-scope gate (src/sitescope.js). When C11
+//     is built, its per-site data MUST be filtered via sitescope.scopeSite() so a
+//     site-bound role sees only its own site — the gate is not re-implemented.
 const db = require('./db');
 const cfg = require('./config');
 const exact = require('./exact');

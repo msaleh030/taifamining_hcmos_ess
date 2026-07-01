@@ -6,6 +6,7 @@
 const db = require('./db');
 const cfg = require('./config');
 const a3 = require('./a3');
+const sitescope = require('./sitescope');
 const { HttpError } = require('./errors');
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -22,20 +23,10 @@ async function directoryDenied(companyId, role) {
   return deny.has(role);
 }
 
-async function isScoped(client, role) {
-  const r = await client.query('SELECT scoped FROM site_scope WHERE role_code=$1', [role]);
-  if (r.rows[0]) return r.rows[0].scoped === true;
-  return cfg.SITE_SCOPE[role] === true; // fallback to seeded defaults
-}
-
-// The viewer's own site, resolved from their employee record (RLS-scoped).
-async function requesterSite(client, session) {
-  if (!session.user_id) return null;
-  const r = await client.query(
-    'SELECT e.site_id FROM app_user u JOIN employee e ON e.id = u.employee_id WHERE u.id=$1',
-    [session.user_id]);
-  return r.rows[0] ? r.rows[0].site_id : null;
-}
+// Site-scope is the shared gate (src/sitescope.js) — the SAME rule every per-site
+// endpoint must use (directory here; C11 Performance when built).
+const isScoped = sitescope.isScoped;
+const requesterSite = sitescope.requesterSite;
 
 async function actorEmail(client, session) {
   if (!session.user_id) return null;
