@@ -80,6 +80,9 @@ const DEFAULT_CONFIG = {
   'leave.carry.lapse_years':  '1',         // LR-4 carry lapses after ONE year (CHANGED from 2)
   'leave.max_continuous_days':'14',        // LR-5 max 14 continuous (HoH override)
   'leave.entitlement.default':'21',        // LR-1 entitlement map (default grade)
+  // LIAB-01: leave liability daily rate = monthly remuneration / 30 (calendar-day
+  // basis; distinct from the PC-1 payroll daily-rate divisor of 31).
+  'leave.liability.divisor':  '30',
   'leave.weeks_to_days':      PENDING,     // LR-2 [TBC]
   'leave.coverage.thresholds':PENDING,     // LR-6 [TBC] per-role coverage
   'leave.sick.rule':          PENDING,     // LR-7 [TBC]

@@ -128,7 +128,8 @@ test('EX-2/v1.4 daily-rate base sums the confirmed set; overtime and Rotation/Ni
   for (let c = 11; c <= 18; c++) cells[c] = '100'; // base set 11..18 → 800
   cells[19] = '50'; cells[20] = '50';              // rotation / night shift — EXCLUDED (v1.4)
   cells[21] = '500'; cells[24] = '500';            // overtime normal/holiday — EXCLUDED
-  assert.equal(await exact.dailyRateBase(session, cells), 800, 'only the confirmed base contributes');
+  // v1.4: Rotation & Night Shift are CONFIRMED excluded (no include flag to toggle).
+  assert.equal(await exact.dailyRateBase(session, cells), 800, 'overtime and Rotation/Night are confirmed excluded');
 });
 
 // ── Remaining [TBC]: full-period reconciliation still BLOCKS ─────────────────
