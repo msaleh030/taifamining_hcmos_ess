@@ -66,6 +66,9 @@ export const api = {
   // F4 — KPI scorecard (role-scoped, feature-flagged) + My KPIs (self only).
   scorecard: () => request('/kpi/scorecard'),
   myKpis: () => request('/kpi/mine'),
+
+  // F5 — attendance clock-in. The server re-validates; the client cannot assert in.
+  clockIn: (loc) => request('/attendance/clock-in', { method: 'POST', body: loc }),
 };
 
 // A3: the API OMITS confidential fields a role may not see, so the UI simply does

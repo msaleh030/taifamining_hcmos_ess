@@ -14,6 +14,7 @@ const disciplinary = require('./disciplinary');
 const leave = require('./leave');
 const liability = require('./liability');
 const kpi = require('./kpi');
+const attendance = require('./attendance');
 const roles = require('./roles');
 const cfg = require('./config');
 const { HttpError } = require('./errors');
@@ -116,6 +117,11 @@ const routes = [
     handler: async (req, m, url, s) => ({ status: 200, body: await kpi.scorecard(s) }) },
   { method: 'GET', pattern: /^\/kpi\/mine$/,
     handler: async (req, m, url, s) => ({ status: 200, body: await kpi.myKpis(s) }) },
+
+  // ── F5: Attendance clock-in (self-service). The server re-validates the
+  // location against the employee's site zones; the device verdict is never trusted.
+  { method: 'POST', pattern: /^\/attendance\/clock-in$/,
+    handler: async (req, m, url, s) => ({ status: 200, body: await attendance.clockIn(s, await readJson(req)) }) },
 ];
 
 // Guard: verify session, then A2 module / RBAC action / registry deny-set if the
