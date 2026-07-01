@@ -1,0 +1,45 @@
+name: CI
+
+# Runs the full suite (the 118 tests) on every push to main and every PR into
+# main. The regression nets — LR-2 weeks/divisor, PC-1=30, the C16/C17 financial
+# gate, the site-scope gate, every "pinned by a test" value — only actually fire
+# if something runs them; this makes that automatic so a UAT hotfix or a Phase-2
+# change cannot silently break a certified value.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    name: Full test suite
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # The runner ships a local PostgreSQL cluster; scripts/setup-db.sh (run by
+      # npm's pretest) starts it, creates the hcmos_owner/hcmos_app roles, the
+      # hcmos DB, the pg_trgm/btree_gin extensions and the local trust hba rules —
+      # the same reproducible setup used in development. We only need to tell it
+      # which cluster version is installed (it defaults to 16).
+      - name: Detect local PostgreSQL version
+        run: |
+          set -euo pipefail
+          PG_VER="$(pg_lsclusters -h | awk 'NR==1{print $1}')"
+          echo "PG_VER=${PG_VER:-16}" >> "$GITHUB_ENV"
+          echo "Using PostgreSQL ${PG_VER:-16}"
+
+      # No external deps are used (everything is vendored), but honour the step so
+      # a future dependency is installed the moment one is added.
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      # pretest = setup-db.sh + migrate + seed; test = node --test (118 tests).
+      - name: Run full test suite
+        run: npm test
