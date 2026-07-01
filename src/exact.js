@@ -146,19 +146,58 @@ async function publish(session, batchId, opts = {}) {
   });
 }
 
-// ── [TBC] downstream computations — BLOCK until the registry confirms them ───
-async function dailyRateBase(session /*, row */) {
-  await cfg.getRequired(session.company_id, 'exact.dailyrate.included'); // excl col21/col24; exact set [TBC]
-  throw new HttpError(409, 'daily-rate included set confirmed but computation not yet built');
+// Parse a cell to a number (tolerate thousands separators / blanks).
+function num(v) {
+  const n = Number(String(v == null ? '' : v).replace(/,/g, '').trim());
+  return Number.isFinite(n) ? n : 0;
 }
-async function netPay(session /*, row */) {
-  await cfg.getRequired(session.company_id, 'exact.netpay.source'); // col:<n> | compute [TBC]
-  throw new HttpError(409, 'net-pay source confirmed but computation not yet built');
+const round2 = (x) => Math.round(x * 100) / 100;
+const csvInts = (s) => String(s || '').split(',').map((x) => parseInt(x, 10)).filter(Number.isFinite);
+
+// ── EX-2 / PC-1: daily-rate base = confirmed earnings set, EXCLUDING overtime ─
+// cols 21 & 24. Rotation/Night Shift are [TBC]: included only if the registry
+// flag is on (default OUT). Operates on a row's cell array.
+async function dailyRateBase(session, cells) {
+  const co = session.company_id;
+  const base = csvInts(await cfg.getConfig(co, 'exact.dailyrate.base_cols', '', null));
+  const exclude = new Set(csvInts(await cfg.getConfig(co, 'exact.dailyrate.exclude_cols', '21,24', null)));
+  const includeRot = (await cfg.getConfig(co, 'exact.dailyrate.rotation_nightshift.include', 'false', null)) === 'true';
+  const rotCols = csvInts(await cfg.getConfig(co, 'exact.dailyrate.rotation_nightshift_cols', '', null));
+
+  let positions = base.filter((c) => !exclude.has(c));
+  if (includeRot) positions = positions.concat(rotCols.filter((c) => !exclude.has(c)));
+  return round2(positions.reduce((sum, c) => sum + num(cells[c]), 0));
 }
-// AC-EXACT-07 control-totals reconciliation — gated until a real populated period.
+
+// ── EX-3: NET PAY = Total Pay − Total Deduction; verify against col AS ───────
+async function netCheck(session, cells) {
+  const co = session.company_id;
+  const tp = await cfg.getInt(co, 'exact.col.total_pay', 28, null);
+  const td = await cfg.getInt(co, 'exact.col.total_deduction', 42, null);
+  const asCol = parseInt(String(await cfg.getConfig(co, 'exact.netpay.source', 'col:44', null)).split(':')[1], 10);
+  const computed = round2(num(cells[tp]) - num(cells[td]));
+  const col_as = round2(num(cells[asCol]));
+  return { computed, col_as, ok: computed === col_as };
+}
+
+// AC-EXACT-07 (partial): per-row net check across a staged batch. The FULL-period
+// control-totals reconciliation stays gated until a real populated period.
+async function netCheckBatch(session, batchId) {
+  return db.withTenant(session.company_id, async (c) => {
+    const rows = (await c.query(
+      'SELECT row_no, cells FROM exact_row WHERE batch_id=$1 ORDER BY row_no', [batchId])).rows;
+    const results = [];
+    for (const r of rows) results.push({ row_no: r.row_no, ...(await netCheck(session, r.cells)) });
+    return { checked: results.length, mismatches: results.filter((x) => !x.ok) };
+  });
+}
+
 async function reconcile(session, batchId) {
-  await cfg.getRequired(session.company_id, 'exact.reconciliation'); // BLOCK ([TBC], deferred)
+  await cfg.getRequired(session.company_id, 'exact.reconciliation'); // BLOCK ([TBC], full-period deferred)
   return { batch_id: batchId, reconciled: true };
 }
 
-module.exports = { parseCsv, gridHash, validateLayout, stage, match, publish, dailyRateBase, netPay, reconcile };
+module.exports = {
+  parseCsv, gridHash, validateLayout, stage, match, publish,
+  dailyRateBase, netCheck, netCheckBatch, reconcile, num,
+};

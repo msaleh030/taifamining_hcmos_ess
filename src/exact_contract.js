@@ -15,23 +15,41 @@
 const VERSION = 'v1.2';
 const LAST_POSITION = 49; // inclusive → 50 columns (see NOTE above)
 
-// position -> [section, exact header] for the CONFIRMED/named columns.
+// position -> [section, exact header, pinned]. `pinned` headers are enforced on
+// upload. The earnings/allowance components (EX-2) are recorded so the daily-rate
+// base and payslip labels are data-driven, but their POSITIONS are PROVISIONAL
+// pending the appendix, so they are NOT pinned (real files aren't rejected on
+// those labels). The confirmed identity/total/net columns ARE pinned.
 const NAMED = {
-  0:  ['identity', 'EMPLOYEE ID'],
-  1:  ['identity', 'FULL NAME'],
-  3:  ['identity', 'EMPLOYMENT DATE'],
-  4:  ['identity', 'DEPARTMENT'],
-  7:  ['identity', 'NIDA'],
-  9:  ['identity', 'TIN'],
-  10: ['identity', 'PENSION/NSSF NO'],
-  28: ['allowances', 'TOTAL ALLOWANCE'],
-  31: ['deductions', 'NSSF'],
-  32: ['deductions', 'PAYE'],
-  42: ['deductions', 'TOTAL DEDUCTION'],
-  45: ['employer', 'NSSF'],
-  47: ['employer', 'NHIF'],
-  48: ['employer', 'SDL'],
-  49: ['employer', 'WCF'],
+  0:  ['identity', 'EMPLOYEE ID', true],
+  1:  ['identity', 'FULL NAME', true],
+  3:  ['identity', 'EMPLOYMENT DATE', true],
+  4:  ['identity', 'DEPARTMENT', true],
+  7:  ['identity', 'NIDA', true],
+  9:  ['identity', 'TIN', true],
+  10: ['identity', 'PENSION/NSSF NO', true],
+  // EX-2 earnings/allowance components (positions provisional; not pinned).
+  11: ['allowances', 'BASIC SALARY', false],
+  12: ['allowances', 'HOUSING ALLOWANCE (15%)', false],
+  13: ['allowances', 'RESPONSIBILITY', false],
+  14: ['allowances', 'PROJECT', false],
+  15: ['allowances', 'MEDICAL', false],
+  16: ['allowances', 'HOUSING ALL (FIXED)', false],
+  17: ['allowances', 'FIXED OVERTIME', false],
+  18: ['allowances', 'TRANSPORT (10%)', false],
+  19: ['allowances', 'ROTATION ALLOWANCE', false],       // [TBC] in/out of base
+  20: ['allowances', 'NIGHT SHIFT ALLOWANCE', false],    // [TBC] in/out of base
+  21: ['allowances', 'OVERTIME NORMAL', false],          // EXCLUDED from base
+  24: ['allowances', 'OVERTIME HOLIDAY', false],         // EXCLUDED from base
+  28: ['allowances', 'TOTAL PAY', true],                 // EX-4: renamed from TOTAL ALLOWANCE
+  31: ['deductions', 'NSSF', true],
+  32: ['deductions', 'PAYE', true],
+  42: ['deductions', 'TOTAL DEDUCTION', true],
+  44: ['net', 'NET PAY', true],                          // EX-3: column AS (0-indexed 44)
+  45: ['employer', 'NSSF', true],
+  47: ['employer', 'NHIF', true],
+  48: ['employer', 'SDL', true],
+  49: ['employer', 'WCF', true],
 };
 
 // Section grouping for un-named positions (labels shown on the section row).
@@ -51,7 +69,7 @@ function build() {
     const named = NAMED[p];
     const section = named ? named[0] : sectionFor(p);
     const header = named ? named[1] : `${section.toUpperCase()} ${p}`;
-    cols.push({ version: VERSION, position: p, section, header, pinned: !!named });
+    cols.push({ version: VERSION, position: p, section, header, pinned: named ? !!named[2] : false });
   }
   return cols;
 }
