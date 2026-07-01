@@ -10,6 +10,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const auth = require('./auth');
 const employees = require('./employees');
+const disciplinary = require('./disciplinary');
 const roles = require('./roles');
 const cfg = require('./config');
 const { HttpError } = require('./errors');
@@ -82,6 +83,18 @@ const routes = [
     handler: async (req, m, url, s) => ({ status: 200, body: await employees.decide(s, m[1], true) }) },
   { method: 'POST', pattern: /^\/field-change\/([0-9a-f-]+)\/decline$/i, deny: 'directory.deny.roles',
     handler: async (req, m, url, s) => ({ status: 200, body: await employees.decide(s, m[1], false) }) },
+
+  // ── F2: Disciplinary action + fan-out. Only permitted issuers (registry
+  // allow-set) reach the endpoint; SoD (self / issuer≠checker) is enforced inside.
+  { method: 'POST', pattern: /^\/employees\/([0-9a-f-]+)\/disciplinary$/i, allow: 'disciplinary.issuer.roles',
+    handler: async (req, m, url, s) => {
+      const body = await readJson(req);
+      // Test-only fault injection at the endpoint layer (proves the fan-out
+      // transaction rolls back). Disabled in production.
+      const opts = process.env.NODE_ENV !== 'production' && body.faultStep ? { faultStep: body.faultStep } : {};
+      return { status: 200, body: await disciplinary.issueAction(s,
+        { employeeId: m[1], actionType: body.actionType, detail: body.detail, approverUserId: body.approverUserId }, opts) };
+    } },
 ];
 
 // Guard: verify session, then A2 module / RBAC action / registry deny-set if the
@@ -96,6 +109,10 @@ async function guard(route, req) {
   if (route.deny) {
     const denied = await cfg.getRoleSet(session.company_id, route.deny, '');
     if (denied.has(session.role_code)) throw new HttpError(403, 'forbidden');
+  }
+  if (route.allow) {
+    const allowed = await cfg.getRoleSet(session.company_id, route.allow, '');
+    if (!allowed.has(session.role_code)) throw new HttpError(403, 'forbidden');
   }
   return session;
 }

@@ -54,6 +54,9 @@ export const api = {
   requestChange: (id, field, value) => request(`/employees/${id}/change`, { method: 'POST', body: { field, value } }),
   approveChange: (changeId) => request(`/field-change/${changeId}/approve`, { method: 'POST' }),
   declineChange: (changeId) => request(`/field-change/${changeId}/decline`, { method: 'POST' }),
+
+  // F2 — disciplinary action + fan-out (one confirmed call).
+  issueDiscipline: (id, body) => request(`/employees/${id}/disciplinary`, { method: 'POST', body }),
 };
 
 // A3: the API OMITS confidential fields a role may not see, so the UI simply does

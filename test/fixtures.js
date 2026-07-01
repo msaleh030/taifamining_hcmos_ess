@@ -29,6 +29,7 @@ const EMP = {
   DSUBJ:  'a0000000-0000-0000-0000-000000000d51', // disciplinary subject
   DISS:   'a0000000-0000-0000-0000-000000000d52', // issuer
   DCHK:   'a0000000-0000-0000-0000-000000000d53', // checker/approver
+  DSUBJ2: 'a0000000-0000-0000-0000-000000000d55', // F2 suspension subject (kept active)
   BOB_B:  'b0000000-0000-0000-0000-0000000000b1', // tenant B
 };
 
@@ -44,6 +45,7 @@ const EMPLOYEES = {
   [EMP.DSUBJ]: { company: TENANT_A, site: SITE.A1, emp_no: 'E-A-0051', full_name: 'Dan Subject',       role_code: 'R01', dept: 'Mining',     status: 'active', phone: '0700000051', email: 'dan@a.example' },
   [EMP.DISS]:  { company: TENANT_A, site: SITE.A1, emp_no: 'E-A-0052', full_name: 'Ivy Issuer',        role_code: 'R05', dept: 'HSE',        status: 'active', phone: '0700000052', email: 'ivy@a.example' },
   [EMP.DCHK]:  { company: TENANT_A, site: SITE.A1, emp_no: 'E-A-0053', full_name: 'Cate Checker',      role_code: 'R04', dept: 'Admin',      status: 'active', phone: '0700000053', email: 'cate@a.example' },
+  [EMP.DSUBJ2]:{ company: TENANT_A, site: SITE.A1, emp_no: 'E-A-0055', full_name: 'Devon Subject',     role_code: 'R01', dept: 'Mining',     status: 'active', phone: '0700000055', email: 'devon@a.example' },
   [EMP.BOB_B]: { company: TENANT_B, site: SITE.B1, emp_no: 'E-B-0001', full_name: 'Bob Bravo',         role_code: 'R01', dept: 'Mining',     status: 'active', phone: '0800000001', email: 'bob@b.example' },
 };
 
@@ -97,6 +99,7 @@ const USERS = {
   DSUBJ_A:    { id: 'd0000000-0000-0000-0000-000000000d51', company: TENANT_A, employee: EMP.DSUBJ, email: 'dan@a.example',      password: 'DanPass!2026',   role: 'R01', status: 'active' }, // disciplinary subject
   DISS_A:     { id: 'd0000000-0000-0000-0000-000000000d52', company: TENANT_A, employee: EMP.DISS,  email: 'ivy@a.example',      password: 'IvyPass!2026',   role: 'R05', status: 'active' }, // permitted issuer
   DCHK_A:     { id: 'd0000000-0000-0000-0000-000000000d53', company: TENANT_A, employee: EMP.DCHK,  email: 'cate@a.example',     password: 'CatePass!2026',  role: 'R04', status: 'active' }, // permitted checker
+  DSUBJ2_A:   { id: 'd0000000-0000-0000-0000-000000000d55', company: TENANT_A, employee: EMP.DSUBJ2, email: 'devon@a.example',   password: 'DevonPass!2026', role: 'R01', status: 'active' }, // F2 suspension subject login
   TERM_A:     { id: 'd0000000-0000-0000-0000-0000000000e0', company: TENANT_A, employee: EMP.TERM,  email: 'term@a.example',     password: 'TermPass!2026',  role: 'R01', status: 'terminated' },
   BOB_B:      { id: 'd0000000-0000-0000-0000-0000000000b0', company: TENANT_B, employee: EMP.BOB_B, email: 'bob@b.example',      password: 'BobPass!2026',   role: 'R01', status: 'active' },
 };

@@ -4,6 +4,7 @@
 // maker-checker change-request flow (EMP-03); approval is separation-of-duties
 // enforced server-side.
 import { api } from './api.js';
+import { renderDisciplinary } from './disciplinary.js';
 
 const EDITABLE = ['phone', 'email', 'dept', 'home_address', 'full_name'];
 const esc = (v) => String(v == null ? '' : v).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -35,10 +36,12 @@ export async function renderProfile(el, id) {
       </form>
       <h3>Pending changes</h3>
       <ul id="pending">${pending || '<li>None.</li>'}</ul>
+      <button id="disc-btn" type="button">Disciplinary action…</button>
       <p id="p-msg"></p>
     </div>`;
 
   const msg = el.querySelector('#p-msg');
+  el.querySelector('#disc-btn').addEventListener('click', () => renderDisciplinary(el, id, () => renderProfile(el, id)));
   el.querySelector('#chg').addEventListener('submit', async (e) => {
     e.preventDefault();
     try {
