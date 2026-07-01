@@ -146,8 +146,17 @@ const routes = [
   { method: 'POST', pattern: /^\/exact\/batch\/([0-9a-f-]+)\/publish$/i, allow: 'a3.pay.roles',
     handler: async (req, m, url, s) => {
       const body = await readJson(req);
-      const opts = process.env.NODE_ENV !== 'production' && body.faultStep ? { faultStep: body.faultStep } : {};
+      const opts = process.env.NODE_ENV !== 'production' && (body.faultStep || body.faultLeg)
+        ? { faultStep: body.faultStep, faultLeg: body.faultLeg } : {};
       return { status: 200, body: await exact.publish(s, m[1], opts) };
+    } },
+  // Scoped retry of the publish fan-out: re-drives only the NON-posted legs (a
+  // posted GL leg is never re-attempted → no double-post). Not a re-publish.
+  { method: 'POST', pattern: /^\/exact\/batch\/([0-9a-f-]+)\/publish\/retry$/i, allow: 'a3.pay.roles',
+    handler: async (req, m, url, s) => {
+      const body = await readJson(req);
+      const opts = process.env.NODE_ENV !== 'production' && body.faultLeg ? { faultLeg: body.faultLeg } : {};
+      return { status: 200, body: await exact.retryPublishLegs(s, m[1], opts) };
     } },
   { method: 'GET', pattern: /^\/exact\/batch\/([0-9a-f-]+)$/i, allow: 'a3.pay.roles',
     handler: async (req, m, url, s) => ({ status: 200, body: await exact.getBatch(s, m[1]) }) },

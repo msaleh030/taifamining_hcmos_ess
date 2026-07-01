@@ -183,3 +183,38 @@ test('EXACT-10 a published batch is read-only — re-publish is refused, no endp
   assert.equal((await H.req('PUT', `/exact/batch/${up.body.batch_id}`, { token: pay, body: { status: 'staged' } })).status, 404,
     'no endpoint mutates a published batch');
 });
+
+// ── EXACT-11: publish fan-out reports PER-LEG status; retry is scoped to the
+// failed leg and never double-posts the GL ──────────────────────────────────
+test('EXACT-11 publish fan-out is per-leg; a scoped retry fixes ESS without double-posting GL', async () => {
+  const pay = await tok(F.USERS.PAYMGR_A);
+  const glCount = async (bid) => Number((await owner(`SELECT count(*)::int n FROM gl_posting WHERE batch_id=$1`, [bid])).rows[0].n);
+  const essCount = async (bid) => Number((await owner(`SELECT count(*)::int n FROM ess_push WHERE batch_id=$1`, [bid])).rows[0].n);
+
+  const up = await upload(pay, { period: '2026-06-f6-legs', control_totals: { total_pay: 1000, total_deduction: 300, net: 700 },
+    csv: toCsv(validGrid([payRow('E-A-0001', 'A-legs', 1000, 300, 700)])) });
+  const bid = up.body.batch_id;
+  await post(pay, `/exact/batch/${bid}/reconcile`);
+
+  // Publish with the ESS leg forced to fail → partial state: GL posted, ESS failed.
+  const pub = await H.req('POST', `/exact/batch/${bid}/publish`, { token: pay, body: { faultLeg: 'ess' } });
+  assert.equal(pub.status, 200, 'the batch still publishes — a failed leg is a partial state, not a rollback');
+  assert.equal(pub.body.status, 'published');
+  assert.equal(pub.body.legs.gl.status, 'posted', 'GL leg posted');
+  assert.equal(pub.body.legs.ess.status, 'failed', 'ESS leg failed (reported per-leg, not a blanket fail)');
+  assert.equal(await glCount(bid), 1, 'GL posted exactly once');
+  assert.equal(await essCount(bid), 0, 'ESS did not post');
+
+  // The read-only view reflects the partial state.
+  const mid = await get(pay, `/exact/batch/${bid}`);
+  assert.equal(mid.body.legs.gl.status, 'posted');
+  assert.equal(mid.body.legs.ess.status, 'failed');
+
+  // Scoped retry (no fault): re-drives ONLY the non-posted legs. GL is skipped.
+  const retry = await post(pay, `/exact/batch/${bid}/publish/retry`);
+  assert.equal(retry.status, 200);
+  assert.equal(retry.body.legs.ess.status, 'posted', 'ESS pushed on retry');
+  assert.equal(retry.body.legs.gl.skipped, true, 'GL leg was skipped (already posted) — not re-attempted');
+  assert.equal(await glCount(bid), 1, 'GL still posted exactly once — no double-post from the retry');
+  assert.equal(await essCount(bid), 1, 'ESS now pushed exactly once');
+});

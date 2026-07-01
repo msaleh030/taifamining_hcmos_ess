@@ -88,8 +88,8 @@ export function renderExact(el) {
     panel.querySelector('#ex-publish').addEventListener('click', async () => {
       try {
         const p = await api.exactPublish(batchId);
-        out.innerHTML = `<p class="ok">Published batch ${esc(p.batch_id)}. Payslips are now read-only.</p>`;
         panel.querySelector('#ex-publish').disabled = true; // read-only after publish
+        renderLegs(out, p.legs);
       } catch (err) {
         // Totals mismatch / pending match are BLOCKS, not warnings.
         const why = err.body && err.body.mismatches
@@ -98,5 +98,21 @@ export function renderExact(el) {
         out.innerHTML = `<p class="blocked">Publish blocked${why}.</p>`;
       }
     });
+
+    // Per-leg fan-out status. A partial state (e.g. GL posted, ESS failed) shows
+    // each leg's status and a retry SCOPED to the failed legs — never a full
+    // re-publish (which could double-post the GL).
+    function renderLegs(out, legs) {
+      const label = { gl: 'GL posting', ess: 'ESS payslip push' };
+      const items = Object.entries(legs).map(([leg, r]) =>
+        `<li class="leg leg-${r.status}">${label[leg] || leg}: <strong>${r.status}</strong>${r.error ? ` — ${esc(r.error)}` : ''}</li>`).join('');
+      const failed = Object.values(legs).some((r) => r.status !== 'posted');
+      out.innerHTML = `<p class="ok">Published — payslips are read-only.</p><ul class="legs">${items}</ul>` +
+        (failed ? `<button id="ex-retry">Retry failed legs</button>` : '<p>All legs posted.</p>');
+      if (failed) out.querySelector('#ex-retry').addEventListener('click', async () => {
+        const p = await api.exactPublishRetry(batchId); // scoped: posted legs are skipped
+        renderLegs(out, p.legs);
+      });
+    }
   }
 }

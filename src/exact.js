@@ -157,7 +157,8 @@ async function controlCheck(session, batchId, exec) {
 async function publish(session, batchId, opts = {}) {
   await cfg.getRequired(session.company_id, 'exact.match.key'); // publish needs a confirmed mapping
 
-  return db.withTenant(session.company_id, async (c) => {
+  // Phase 1: the core publish is atomic (status flip + audit + leg registration).
+  await db.withTenant(session.company_id, async (c) => {
     const b = (await c.query('SELECT status FROM exact_batch WHERE id=$1', [batchId])).rows[0];
     if (!b) throw new HttpError(404, 'batch not found');
     if (b.status === 'published') throw new HttpError(409, 'already published');
@@ -177,8 +178,76 @@ async function publish(session, batchId, opts = {}) {
     await c.query('SELECT audit_append($1,$2,$3,$4,$5,$6,$7,$8)', [
       session.company_id, String(session.user_id || 'system'), session.role_code || 'SYS',
       'exact.publish', 'exact_batch', batchId, null, { status: 'published' }]);
-    return { batch_id: batchId, status: 'published' };
+    // Register the fan-out legs as pending (idempotent). This commits WITH the
+    // status flip, so a published batch always has its legs to (re)drive.
+    for (const leg of LEGS) {
+      await c.query(
+        `INSERT INTO exact_publish_leg (company_id, batch_id, leg, status)
+         VALUES ($1,$2,$3,'pending') ON CONFLICT DO NOTHING`, [session.company_id, batchId, leg]);
+    }
   });
+
+  // ── AC-EXACT-11: fan-out AFTER the batch is published. Each leg runs in its own
+  // transaction and reports its OWN status; a leg failing does NOT unpublish the
+  // batch (partial state "GL posted, ESS push failed" is real and reportable).
+  const legs = await runLegs(session, batchId, opts);
+  return { batch_id: batchId, status: 'published', legs };
+}
+
+// The publish fan-out legs, in order.
+const LEGS = ['gl', 'ess'];
+
+// Perform a leg's real side effect (idempotent by a one-row-per-batch artifact).
+async function performLeg(c, session, batchId, leg) {
+  const co = session.company_id;
+  if (leg === 'gl') {
+    const control = await controlCheck(session, batchId, c);   // journal amount = net
+    await c.query('INSERT INTO gl_posting (company_id, batch_id, net) VALUES ($1,$2,$3)', [co, batchId, control.computed.net]);
+  } else if (leg === 'ess') {
+    await c.query('INSERT INTO ess_push (company_id, batch_id) VALUES ($1,$2)', [co, batchId]);
+  }
+}
+
+// Run ONE leg. A leg already 'posted' is SKIPPED (never re-run → no double-post).
+// The side effect + its 'posted' mark are one transaction (atomic); on failure
+// that rolls back and a SEPARATE transaction records 'failed'. opts.faultLeg
+// (TEST ONLY) forces the named leg to fail before its side effect commits.
+async function runLeg(session, batchId, leg, opts = {}) {
+  const co = session.company_id;
+  const cur = (await db.withTenant(co, (c) =>
+    c.query('SELECT status FROM exact_publish_leg WHERE batch_id=$1 AND leg=$2', [batchId, leg]))).rows[0];
+  if (cur && cur.status === 'posted') return { leg, status: 'posted', skipped: true };
+  try {
+    await db.withTenant(co, async (c) => {
+      if (opts.faultLeg === leg) throw new Error(`injected ${leg} fault (test)`);
+      await performLeg(c, session, batchId, leg);
+      await c.query(`UPDATE exact_publish_leg SET status='posted', detail=NULL, updated_at=now() WHERE batch_id=$1 AND leg=$2`, [batchId, leg]);
+    });
+    return { leg, status: 'posted' };
+  } catch (e) {
+    await db.withTenant(co, (c) =>
+      c.query(`UPDATE exact_publish_leg SET status='failed', detail=$3, updated_at=now() WHERE batch_id=$1 AND leg=$2`, [batchId, leg, String(e.message)]));
+    return { leg, status: 'failed', error: e.message };
+  }
+}
+
+// Drive every not-yet-posted leg; posted legs are skipped. Returns per-leg status.
+async function runLegs(session, batchId, opts = {}) {
+  const out = {};
+  for (const leg of LEGS) out[leg] = await runLeg(session, batchId, leg, opts);
+  return out;
+}
+
+// Scoped retry: re-drive ONLY the non-posted legs of an already-published batch.
+// This is NOT a re-publish — the GL leg is never re-attempted once posted, so a
+// retry after "GL posted, ESS failed" pushes ESS without double-posting the GL.
+async function retryPublishLegs(session, batchId, opts = {}) {
+  return db.withTenant(session.company_id, async (c) => {
+    const b = (await c.query('SELECT status FROM exact_batch WHERE id=$1', [batchId])).rows[0];
+    if (!b) throw new HttpError(404, 'batch not found');
+    if (b.status !== 'published') throw new HttpError(409, 'batch is not published — nothing to retry');
+  }).then(() => runLegs(session, batchId, opts))
+    .then((legs) => ({ batch_id: batchId, status: 'published', legs }));
 }
 
 // Parse a cell to a number (tolerate thousands separators / blanks).
@@ -263,11 +332,15 @@ async function getBatch(session, batchId) {
       `SELECT match_status, count(*)::int n FROM exact_row WHERE batch_id=$1 GROUP BY match_status`, [batchId])).rows;
     const by = { pending: 0, matched: 0, unmatched: 0 };
     for (const r of counts) by[r.match_status] = r.n;
-    return { batch: b, rows: by, read_only: b.status === 'published' };
+    const legRows = (await c.query(
+      'SELECT leg, status, detail FROM exact_publish_leg WHERE batch_id=$1', [batchId])).rows;
+    const legs = {};
+    for (const r of legRows) legs[r.leg] = { status: r.status, detail: r.detail };
+    return { batch: b, rows: by, legs, read_only: b.status === 'published' };
   });
 }
 
 module.exports = {
   parseCsv, gridHash, validateLayout, stage, match, publish, controlCheck, controlReport, getBatch,
-  dailyRateBase, netCheck, netCheckBatch, reconcile, num,
+  runLegs, retryPublishLegs, dailyRateBase, netCheck, netCheckBatch, reconcile, num,
 };

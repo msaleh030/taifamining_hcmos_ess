@@ -78,6 +78,9 @@ export const api = {
   exactNetCheck: (id) => request(`/exact/batch/${id}/net-check`),
   exactControlTotals: (id) => request(`/exact/batch/${id}/control-totals`),
   exactPublish: (id) => request(`/exact/batch/${id}/publish`, { method: 'POST' }),
+  // Scoped retry of the publish fan-out — re-drives only the failed legs (the GL
+  // leg is never re-posted once done).
+  exactPublishRetry: (id) => request(`/exact/batch/${id}/publish/retry`, { method: 'POST' }),
   exactBatch: (id) => request(`/exact/batch/${id}`),
 };
 
