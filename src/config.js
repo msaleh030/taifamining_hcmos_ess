@@ -82,15 +82,17 @@ const DEFAULT_CONFIG = {
   'payroll.gross_components': 'house,transport,responsibility', // PC-3 (must equal PC-1's set)
   'payroll.partial_period':   PENDING,     // PC-2 [TBC]
 
-  // ── Geofence clock-in (SS-3) ──────────────────────────────────────────────
+  // ── Geofence clock-in (SS-3, registry v1.2 CONFIRMED) ─────────────────────
   // Zones themselves live in geofence_zone (per site). These tune the validator.
-  // [OPEN] HO has no zones: interim 'allow' so an empty zone set does NOT reject
-  // (HO staff are not locked out); flip to 'reject' once the HO decision lands.
-  'geofence.empty_zone.policy': 'allow',
-  // [FLAGGED: confirm tolerance policy] accept when distance <= radius + accuracy,
-  // with accuracy capped at tolerance.max_m to bound spoofed-accuracy abuse.
+  // CONFIRMED: accept when distance <= radius + min(device_accuracy, 50m).
   'geofence.tolerance.policy':  'accuracy',  // accuracy | none
   'geofence.tolerance.max_m':   '50',
+  // CONFIRMED: above this reported accuracy the fix is too coarse to trust — the
+  // clock-in is neither accepted nor rejected; the caller is asked to retry.
+  'geofence.accuracy.retry_above_m': '100',
+  // Defensive: a site with NO zones does not hard-reject (HO now has a zone, so
+  // this no longer applies to HO; kept for any unmapped site). 'allow' | 'reject'.
+  'geofence.empty_zone.policy': 'allow',
 
   // ── Documents / retention / region (DA-1, AC-2) ──────────────────────────
   'doc.lead_time.contract':   '30',        // DA-1 lead times (days)

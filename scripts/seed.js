@@ -33,9 +33,11 @@ async function main() {
       }
     }
 
-    await c.query('INSERT INTO site(id,company_id,name) VALUES ($1,$2,$3),($4,$5,$6),($7,$8,$9),($10,$11,$12)',
-      [F.SITE.A1, F.TENANT_A, 'Mine North', F.SITE.A2, F.TENANT_A, 'Mine South',
-       F.SITE.HO, F.TENANT_A, 'Head Office', F.SITE.B1, F.TENANT_B, 'B Site']);
+    await c.query(
+      'INSERT INTO site(id,company_id,name) VALUES ($1,$2,$3),($4,$5,$6),($7,$8,$9),($10,$11,$12),($13,$14,$15)',
+      [F.SITE.A1, F.TENANT_A, 'North Mara', F.SITE.A2, F.TENANT_A, 'Mwadui',
+       F.SITE.HO, F.TENANT_A, 'Head Office', F.SITE.NZ, F.TENANT_A, 'Nyanzaga',
+       F.SITE.B1, F.TENANT_B, 'B Site']);
 
     for (const z of F.GEOFENCE_ZONES) {
       await c.query(

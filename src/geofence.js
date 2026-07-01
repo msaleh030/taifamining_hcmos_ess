@@ -8,13 +8,14 @@
 // a different site. Zones come from the registry (geofence_zone); nothing here
 // hard-codes a centre or radius.
 //
-// Accuracy tolerance [FLAGGED: confirm tolerance policy]: a fix is accepted when
-//   distance <= radius + min(device_accuracy, geofence.tolerance.max_m)
+// Accuracy tolerance (CONFIRMED v1.2): a fix is accepted when
+//   distance <= radius + min(device_accuracy, geofence.tolerance.max_m=50)
 // The cap bounds how far a (possibly inflated) accuracy figure can stretch a zone.
 //
-// HO has no zones [OPEN]: an empty zone set does NOT auto-reject — behaviour is
-// gated on geofence.empty_zone.policy (interim 'allow') so HO staff are never
-// locked out before that decision lands.
+// Three outcomes, not two: a fix reported with accuracy worse than
+// geofence.accuracy.retry_above_m (100 m) is NEITHER accepted nor rejected — the
+// caller is asked to retry in open sky. HO now has a zone, so an empty zone set is
+// only a defensive path (geofence.empty_zone.policy) for any unmapped site.
 const db = require('./db');
 const cfg = require('./config');
 const { HttpError } = require('./errors');
@@ -59,10 +60,21 @@ async function validateClockIn(session, loc = {}) {
       'SELECT name, center_lat, center_lng, radius_m FROM geofence_zone WHERE site_id=$1', [siteId])).rows;
 
     if (zones.length === 0) {
-      // [OPEN] HO: do not auto-reject an empty zone set — gate on the decision.
+      // Defensive: an unmapped site does not hard-reject (HO now has a zone).
       const policy = await cfg.getConfig(session.company_id, 'geofence.empty_zone.policy', 'allow', client);
       if (policy === 'reject') throw new HttpError(403, 'outside geofence (no zones, policy=reject)');
       return { ok: true, enforced: false, site_id: siteId, reason: `no_zones_policy_${policy}` };
+    }
+
+    // Too-coarse fix: neither accept nor reject — ask for a better one. Checked
+    // only where geofence is enforced (the site has zones).
+    const retryAbove = await cfg.getInt(session.company_id, 'geofence.accuracy.retry_above_m', 100, client);
+    if (accuracy > retryAbove) {
+      return {
+        ok: false, retry: true, site_id: siteId,
+        reason: 'no reliable GPS, retry in open sky',
+        accuracy_m: Math.round(accuracy), threshold_m: retryAbove,
+      };
     }
 
     const tolPolicy = await cfg.getConfig(session.company_id, 'geofence.tolerance.policy', 'accuracy', client);

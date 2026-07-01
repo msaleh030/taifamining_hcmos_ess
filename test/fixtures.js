@@ -8,12 +8,14 @@ const MFA_SECRET = 'JBSWY3DPEHPK3PXP';
 const TENANT_A = '11111111-1111-1111-1111-111111111111';
 const TENANT_B = '22222222-2222-2222-2222-222222222222';
 
-// Sites (Slice 2). Tenant A has two mines + a Head Office; tenant B one.
+// Sites (Slice 2). Tenant A: North Mara + Mwadui mines, Head Office, Nyanzaga.
+// tenant B one. UUIDs are stable (Slice-2 tests key on SITE.A1/A2).
 const SITE = {
-  A1: '5170e000-0000-0000-0000-0000000000a1', // Mine North (tenant A)
-  A2: '5170e000-0000-0000-0000-0000000000a2', // Mine South (tenant A)
-  HO: '5170e000-0000-0000-0000-0000000000d0', // Head Office (tenant A) — no geofence zones [OPEN]
-  B1: '5170e000-0000-0000-0000-0000000000b1', // tenant B
+  A1: '5170e000-0000-0000-0000-0000000000a1', // North Mara (NM)   — tenant A
+  A2: '5170e000-0000-0000-0000-0000000000a2', // Mwadui (MW)        — tenant A
+  HO: '5170e000-0000-0000-0000-0000000000d0', // Head Office (HO)   — tenant A
+  NZ: '5170e000-0000-0000-0000-0000000000e0', // Nyanzaga (NZ)      — tenant A
+  B1: '5170e000-0000-0000-0000-0000000000b1', // tenant B (no zones)
 };
 
 const EMP = {
@@ -38,12 +40,23 @@ const EMPLOYEES = {
   [EMP.BOB_B]: { company: TENANT_B, site: SITE.B1, emp_no: 'E-B-0001', full_name: 'Bob Bravo',         role_code: 'R01', dept: 'Mining',     status: 'active', phone: '0800000001', email: 'bob@b.example' },
 };
 
-// Geofence zones (SS-3). Site A1 has TWO zones (proves "inside ANY zone"); A2 has
-// one elsewhere; HO has none [OPEN]. Coordinates are arbitrary but fixed.
+// Geofence zones (SS-3, registry v1.2) — 7 zones. RADII are confirmed. HO centre
+// is CONFIRMED (-6.754188, 39.273797). The mine centres (MW/NM/NZ) are APPROXIMATE
+// pending precise survey — flagged; they live here in the registry (never in code)
+// so they can be corrected without a deploy. Centres are spaced km apart so a
+// small drift cannot fall into a neighbouring zone (keeps tests deterministic).
 const GEOFENCE_ZONES = [
-  { company: TENANT_A, site: SITE.A1, name: 'North Pit',  lat: -3.5000, lng: 32.0000, radius: 100 },
-  { company: TENANT_A, site: SITE.A1, name: 'North Camp', lat: -3.5500, lng: 32.0500, radius: 120 },
-  { company: TENANT_A, site: SITE.A2, name: 'South Pit',  lat: -3.6000, lng: 32.2000, radius: 150 },
+  // Head Office — CONFIRMED centre + radius.
+  { company: TENANT_A, site: SITE.HO, name: 'HO',               lat: -6.754188, lng: 39.273797, radius: 150 },
+  // Mwadui (MW) — radii confirmed, centres approximate.
+  { company: TENANT_A, site: SITE.A2, name: 'MW Workshop',      lat: -3.5560, lng: 33.6070, radius: 300 },
+  { company: TENANT_A, site: SITE.A2, name: 'MW Production',    lat: -3.5760, lng: 33.6070, radius: 100 }, // ZKTeco non-functional: GPS only
+  // North Mara (NM) — radii confirmed, centres approximate.
+  { company: TENANT_A, site: SITE.A1, name: 'NM TSF',           lat: -1.4500, lng: 34.4500, radius: 400 },
+  { company: TENANT_A, site: SITE.A1, name: 'Gokona Workshop',  lat: -1.4700, lng: 34.4500, radius: 200 },
+  { company: TENANT_A, site: SITE.A1, name: 'Gokona Admin',     lat: -1.4500, lng: 34.4700, radius: 100 },
+  // Nyanzaga (NZ) — radius confirmed, centre approximate.
+  { company: TENANT_A, site: SITE.NZ, name: 'NZ',               lat: -2.7500, lng: 32.5000, radius: 800 },
 ];
 
 // Confidential rows for CAROL (separate tables).
