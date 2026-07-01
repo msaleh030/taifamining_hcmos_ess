@@ -34,10 +34,13 @@ async function lapseCarry(companyId, asOf) {
     const lapseYears = await cfg.getRequiredInt(companyId, 'leave.carry.lapse_years', c);
 
     // A carry for year Y lapses once asOf's calendar year exceeds Y + lapseYears.
+    // OPENING BUCKET (OB-5): opening-balance rows are a PROTECTED bucket, EXEMPT
+    // from the lapse until the carry policy is decided — never lapsed here.
     const r = await c.query(
       `UPDATE leave_carry
           SET lapsed_at = $1::timestamptz
         WHERE lapsed_at IS NULL
+          AND opening_bucket = false
           AND carried_for_year + $2 < EXTRACT(YEAR FROM $1::date)
         RETURNING id, employee_id, days, carried_for_year`,
       [asOf, lapseYears]);

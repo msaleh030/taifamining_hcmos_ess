@@ -184,6 +184,12 @@ const DEFAULT_CONFIG = {
   // so a reports guard would wrongly exclude a DA-2 recipient. UAT: faithful-rule-
   // correct as-is; ratify. Pinned by test/f7.test.js.
   'alerts.view.roles':        'R03,R04,R05,R06,R10,R11,R12',
+  // Opening-Balance & Document Ingestion — the HIGHEST-privilege load path (it
+  // writes the owed numbers). Restricted to the high-authority lead set (HR
+  // Director R11 + System Admin R12), NOT general HR; two DISTINCT users of this
+  // set act as maker + checker. POLICY VALUE pinned by test/ingest.test.js;
+  // UAT-ratifiable (do not change without Kira).
+  'ingest.roles':             'R11,R12',
   // Controls & Checker / audit view — the AUD/SOD oversight set: HR Director
   // (R11, exec oversight) + System Administrator (R12). No one else reads the
   // SoD-breach / leaver-access / audit-chain evidence. UAT: confirm AUD/SOD

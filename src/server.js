@@ -22,6 +22,7 @@ const policy = require('./policy');
 const controls = require('./controls');
 const provision = require('./provision');
 const reports = require('./reports');
+const ingest = require('./ingest');
 const crypto = require('node:crypto');
 const roles = require('./roles');
 const cfg = require('./config');
@@ -242,6 +243,29 @@ const routes = [
       return { status: 200, body: await provision.provisionTenant(
         { companyId: crypto.randomUUID(), name: body.name, actor: String(s.user_id || 'system'), role: s.role_code || 'SYS' }, opts) };
     } },
+
+  // ── Opening-Balance & Document Ingestion (maker-checker, atomic, dry-run).
+  // Highest-privilege load path — guarded to the high-authority set (ingest.roles).
+  // preview = dry-run (writes nothing); commit = SUBMIT (maker, no batch_id) then
+  // APPROVE (checker, batch_id — must be a DIFFERENT user). NODE_ENV fault seam.
+  { method: 'POST', pattern: /^\/ingest\/opening-balance\/preview$/, allow: 'ingest.roles',
+    handler: async (req, m, url, s) => ({ status: 200, body: await ingest.preview(s, 'opening_balance', await readJson(req)) }) },
+  { method: 'POST', pattern: /^\/ingest\/opening-balance\/commit$/, allow: 'ingest.roles',
+    handler: async (req, m, url, s) => {
+      const body = await readJson(req);
+      const opts = process.env.NODE_ENV !== 'production' && body.faultStep ? { faultStep: body.faultStep } : {};
+      return { status: 200, body: await ingest.commit(s, 'opening_balance', body, opts) };
+    } },
+  { method: 'POST', pattern: /^\/ingest\/permits\/preview$/, allow: 'ingest.roles',
+    handler: async (req, m, url, s) => ({ status: 200, body: await ingest.preview(s, 'permit', await readJson(req)) }) },
+  { method: 'POST', pattern: /^\/ingest\/permits\/commit$/, allow: 'ingest.roles',
+    handler: async (req, m, url, s) => {
+      const body = await readJson(req);
+      const opts = process.env.NODE_ENV !== 'production' && body.faultStep ? { faultStep: body.faultStep } : {};
+      return { status: 200, body: await ingest.commit(s, 'permit', body, opts) };
+    } },
+  { method: 'GET', pattern: /^\/ingest\/batch\/([0-9a-f-]+)\/exceptions$/i, allow: 'ingest.roles',
+    handler: async (req, m, url, s) => ({ status: 200, body: await ingest.exceptionReport(s, m[1]) }) },
 ];
 
 // Guard: verify session, then A2 module / RBAC action / registry deny-set if the

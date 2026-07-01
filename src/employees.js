@@ -244,4 +244,25 @@ async function documents(session, id) {
   });
 }
 
-module.exports = { list, get, submitChange, decide, documents, EDITABLE_FIELDS };
+// ── The application's employee-creation path ────────────────────────────────
+// The ONLY sanctioned way to create an employee — never a raw INSERT — so all the
+// companion setup the directory relies on happens: a site_id is REQUIRED (site-
+// bound roles filter on it; a null-site employee is invisible to a scoped HR user),
+// and the composite search indexes (company_id + full_name / emp_no) auto-populate
+// on insert. Runs on the caller's transaction client `exec` so a bulk ingest is
+// atomic. Returns the new employee id. `legacy_id` carries the pre-go-live PF.
+async function create(exec, companyId, data = {}) {
+  const full_name = String(data.full_name || '').trim();
+  if (!full_name) throw new HttpError(400, 'full_name required');
+  if (!isUuid(data.site_id)) throw new HttpError(400, 'site_id required (employee must be scoped to a site)');
+  const role_code = data.role_code || 'R01';
+  const status = data.status || 'active';
+  const r = await exec.query(
+    `INSERT INTO employee (company_id, full_name, emp_no, legacy_id, role_code, site_id, dept, status, phone, email, joined_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING id`,
+    [companyId, full_name, data.emp_no || null, data.legacy_id || null, role_code, data.site_id,
+     data.dept || null, status, data.phone || null, data.email || null, data.joined_at || null]);
+  return r.rows[0].id;
+}
+
+module.exports = { list, get, submitChange, decide, documents, create, EDITABLE_FIELDS };
