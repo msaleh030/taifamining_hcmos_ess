@@ -57,6 +57,11 @@ export const api = {
 
   // F2 — disciplinary action + fan-out (one confirmed call).
   issueDiscipline: (id, body) => request(`/employees/${id}/disciplinary`, { method: 'POST', body }),
+
+  // F3 — leave (self-service) + liability (pay-adjacent, guarded).
+  leaveBalance: () => request('/leave/balance'),
+  leaveApply: (body) => request('/leave/apply', { method: 'POST', body }),
+  liabilityBatch: (batchId) => request(`/liability/batch/${batchId}`),
 };
 
 // A3: the API OMITS confidential fields a role may not see, so the UI simply does

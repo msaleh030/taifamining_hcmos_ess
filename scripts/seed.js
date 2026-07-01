@@ -15,7 +15,7 @@ async function main() {
     // trigger), so TRUNCATE it — which also resets the chain to genesis.
     await c.query('TRUNCATE audit RESTART IDENTITY');
     for (const t of ['idempotency', 'exact_row', 'exact_batch', 'notification', 'activity_feed',
-      'attendance', 'doc_alert', 'support_ticket', 'policy_ack', 'policy',
+      'attendance', 'doc_alert', 'support_ticket', 'policy_ack', 'policy', 'leave_request',
       'field_change', 'leave_carry', 'geofence_zone', 'employee_document', 'employee_asset',
       'disciplinary', 'employee_medical', 'employee_pay', 'session', 'empno_counter', 'device',
       'app_user', 'employee', 'site', 'config', 'site_scope', 'exact_column', 'tenant']) {

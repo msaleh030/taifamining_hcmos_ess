@@ -4,6 +4,8 @@
 import { api, session } from './api.js';
 import { renderDirectory } from './directory.js';
 import { renderProfile } from './profile.js';
+import { renderLeave } from './leave.js';
+import { renderLiability } from './liability.js';
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -48,14 +50,25 @@ async function showLanding() {
       <span class="role">${landing.role} · ${landing.name}</span>
       <button id="logout">Sign out</button>
     </header>
-    <nav><ul id="modules"><li data-view="directory">directory</li>${nav}</ul></nav>
+    <nav><ul id="modules"><li data-view="directory">directory</li><li data-view="liability">liability</li>${nav}</ul></nav>
     <main id="view"><p>Select a module.</p></main>`;
   $('#logout').addEventListener('click', () => { api.logout(); showLogin(); });
 
   const view = $('#view');
   const openProfile = (id) => renderProfile(view, id);
   $('[data-view="directory"]').addEventListener('click', () => renderDirectory(view, openProfile));
-  // Further per-screen views (F2..Fn) mount into #view the same way.
+
+  // A2 module views: 'leave' is self-service; the server enforces access per endpoint.
+  document.querySelectorAll('#modules [data-module="leave"]').forEach((li) =>
+    li.addEventListener('click', () => renderLeave(view)));
+
+  // Liability (pay-adjacent) — the endpoint is guarded to pay-visibility roles.
+  const liab = document.querySelector('[data-view="liability"]');
+  if (liab) liab.addEventListener('click', () => {
+    const batch = prompt('Exact batch id for liability:');
+    if (batch) renderLiability(view, batch);
+  });
+  // Further per-screen views (F4..Fn) mount into #view the same way.
 }
 
 function boot() {

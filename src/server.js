@@ -11,6 +11,8 @@ const path = require('node:path');
 const auth = require('./auth');
 const employees = require('./employees');
 const disciplinary = require('./disciplinary');
+const leave = require('./leave');
+const liability = require('./liability');
 const roles = require('./roles');
 const cfg = require('./config');
 const { HttpError } = require('./errors');
@@ -95,6 +97,16 @@ const routes = [
       return { status: 200, body: await disciplinary.issueAction(s,
         { employeeId: m[1], actionType: body.actionType, detail: body.detail, approverUserId: body.approverUserId }, opts) };
     } },
+
+  // ── F3: Leave (self-service) + liability. Liability is pay-adjacent, so it is
+  // guarded to the SAME registry set that sees pay (a3.pay.roles) — a role that
+  // cannot see pay cannot see liability.
+  { method: 'GET', pattern: /^\/leave\/balance$/,
+    handler: async (req, m, url, s) => ({ status: 200, body: await leave.balance(s) }) },
+  { method: 'POST', pattern: /^\/leave\/apply$/,
+    handler: async (req, m, url, s) => ({ status: 200, body: await leave.apply(s, await readJson(req)) }) },
+  { method: 'GET', pattern: /^\/liability\/batch\/([0-9a-f-]+)$/i, allow: 'a3.pay.roles',
+    handler: async (req, m, url, s) => ({ status: 200, body: await liability.batchLiability(s, m[1]) }) },
 ];
 
 // Guard: verify session, then A2 module / RBAC action / registry deny-set if the
