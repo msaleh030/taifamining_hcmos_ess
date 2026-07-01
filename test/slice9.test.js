@@ -82,6 +82,31 @@ test('an expiring document raises an alert to the DA-2 role and clears on renewa
   }
 });
 
+// ── 2b. Each document type routes to its APPLIED DA-2 registry role ──────────
+test('expiry alerts route each document type to its registry DA-2 role', async () => {
+  // valid_until 2026-07-10 is within every DA-1 lead window at this asOf.
+  const expected = { contract: 'R05', permit: 'R06', licence: 'R10', medical: 'R10' };
+  const ids = {};
+  for (const kind of Object.keys(expected)) {
+    ids[kind] = (await owner(
+      `INSERT INTO employee_document(company_id,employee_id,kind,name,valid_until)
+       VALUES ($1,$2,$3,$4,'2026-07-10') RETURNING id`, [A, F.EMP.CAROL, kind, `T-${kind}`])).rows[0].id;
+  }
+  try {
+    const r = await docalerts.runExpiryAlerts(admin, '2026-06-29');
+    for (const [kind, role] of Object.entries(expected)) {
+      const raised = r.raised.find((x) => x.document_id === ids[kind]);
+      assert.ok(raised, `${kind} raised an alert`);
+      assert.equal(raised.notify_role, role, `${kind} → ${role} (registry DA-2 role)`);
+    }
+  } finally {
+    for (const id of Object.values(ids)) {
+      await owner(`DELETE FROM notification WHERE kind='doc.expiry' AND body->>'document_id'=$1`, [id]);
+      await owner(`DELETE FROM employee_document WHERE id=$1`, [id]);
+    }
+  }
+});
+
 // ── 3. Support tickets (E12): full lifecycle with notifications ──────────────
 test('a support ticket walks its full lifecycle with a notification on each change', async () => {
   const raiser = { company_id: A, user_id: F.USERS.EMP_A.id, role_code: 'R01' };

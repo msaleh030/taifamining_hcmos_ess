@@ -136,12 +136,12 @@ const DEFAULT_CONFIG = {
   'doc.lead_time.permit':     '60',
   'doc.lead_time.licence':    '45',
   'doc.lead_time.medical':    '30',
-  // DA-2 notified role per document type (wired in Slice 9; flagged pending final
-  // governance sign-off, but set so alerts route to a real desk, never nowhere).
-  'doc.notify.role.contract': 'R04',       // HR Manager
-  'doc.notify.role.permit':   'R06',       // HSE / Medical Manager
-  'doc.notify.role.licence':  'R04',       // HR Manager
-  'doc.notify.role.medical':  'R06',       // HSE / Medical Manager
+  // DA-2 notified role per document type — APPLIED registry values (pending
+  // UAT ratification, but these ARE the values, not placeholders).
+  'doc.notify.role.contract': 'R05',       // HR Officer
+  'doc.notify.role.permit':   'R06',       // Project HR
+  'doc.notify.role.licence':  'R10',       // SHEQ
+  'doc.notify.role.medical':  'R10',       // SHEQ
   // Support ticket channels (ES-5).
   'support.channels':         'in_app,email',
   'retention.audit_years':    '7',
