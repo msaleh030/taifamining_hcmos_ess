@@ -1,11 +1,9 @@
 'use strict';
 // Slice 8 — Exact payroll ingestion. Uploads are validated against the versioned
 // column contract (exact_column, seeded from the registry v1.2 appendix), staged,
-// matched (EMPLOYEE ID → employee), and published atomically. Several downstream
-// rules are [TBC] and BLOCK until the registry confirms them:
-//   - exact.match.key          (EMPLOYEE ID == HCMOS number or legacy_id)
-//   - exact.dailyrate.included (fixed-allowance set for the daily-rate base)
-//   - exact.netpay.source      (NET PAY column location vs computed)
+// matched (EMPLOYEE ID → employee), and published atomically. Registry v1.3/v1.4
+// confirmed match.key=legacy_id, netpay.source=col AS, and the daily-rate base
+// (overtime + Rotation/Night CONFIRMED excluded). The only remaining [TBC]:
 //   - exact.reconciliation     (AC-EXACT-07, gated until a real populated period)
 const crypto = require('node:crypto');
 const db = require('./db');
