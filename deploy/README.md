@@ -6,14 +6,25 @@ subdomain of `taifamining.tz`, gated to named testers. This directory holds the
 with the accounts/secrets (this repo's CI environment cannot reach Hostinger,
 Cloudflare, DNS, or the secret store, and does not contain the real test-data files).
 
-> ⚠️ **STOP-AND-ASK — data residency.** The DPA/registry commits the origin **and**
-> Postgres to **af-south-1 (Cape Town)** or an equivalent compliant location
-> (`region: af-south-1` in the registry). **Hostinger has no South-Africa region.**
-> Deploying on Hostinger-EU/other breaks the residency commitment — a weaker
-> security posture. Do **not** proceed on a non-in-region host without Kira's
-> explicit decision (compliant provider in-region, an agreed equivalent, or a
-> documented UAT-only test-data waiver). Everything below is region-agnostic and
-> applies once the host/region is settled.
+> ⚠️ **Data residency — waiver on record.** The DPA/registry commit the origin +
+> Postgres to **af-south-1**, but Hostinger has no South-Africa region. Kira has
+> accepted **Hostinger-EU for UAT (test data only)** under a documented waiver —
+> see `deploy/UAT-RESIDENCY-WAIVER.md`. The registry value stays `af-south-1`;
+> **production must be in-region.** All other hardening below still applies in full.
+
+## Concrete values for this deploy
+
+- Subdomain: `uat.taifamining.tz` (or `hcmos-uat.taifamining.tz`).
+- UAT tenant `company_id`: **`11111111-1111-1111-1111-111111111111`** (the seeded test tenant).
+- Loaded sites (names for `UAT_SITE`): `Head Office`, `Nyanzaga`, `North Mara`, `Mwadui`.
+- Origin: Hostinger-EU box; Postgres local; Cloudflare Tunnel → `localhost:3000`.
+
+Example — provision Kira (central HR Director, sees every site):
+```
+UAT_COMPANY=11111111-1111-1111-1111-111111111111 UAT_EMAIL=kira@taifamining.tz \
+UAT_NAME='Kira <surname>' UAT_ROLE=R11 UAT_SITE='Head Office' \
+  node scripts/provision-uat-user.js
+```
 
 ## Host
 
