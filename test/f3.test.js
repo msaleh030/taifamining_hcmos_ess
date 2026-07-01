@@ -64,6 +64,17 @@ test('liability endpoint: figure from the single base, missing→not-available, 
     const nopay = await tok(F.USERS.HR_A); // R03 ∉ a3.pay.roles
     const denied = await H.req('GET', `/liability/batch/${setup.batchId}`, { token: nopay });
     assert.equal(denied.status, 403, 'liability restricted to the pay-visibility set');
+
+    // C16/C17 sweep gap: the financial-register gate is a3.pay.roles and is STRONGER
+    // than the 'reports' (or 'payroll') MODULE. A role that holds those modules but
+    // is NOT pay-visibility must still be 403 — access to a financial register is
+    // never conferred by the reports module alone.
+    const hrMgr = await tok(F.USERS.HR2_A); // R04 — HAS 'reports', ∉ a3.pay.roles
+    assert.equal((await H.req('GET', `/liability/batch/${setup.batchId}`, { token: hrMgr })).status, 403,
+      'reports-module role without pay-visibility is refused the liability register');
+    const finance = await tok(F.USERS.FIN_A); // R08 — HAS 'reports' AND 'payroll' modules, ∉ a3.pay.roles
+    assert.equal((await H.req('GET', `/liability/batch/${setup.batchId}`, { token: finance })).status, 403,
+      'even the payroll-module role is refused unless it is in the pay-visibility set');
   } finally {
     await owner(`DELETE FROM leave_carry WHERE id=$1`, [setup.carryId]);
     await owner(`DELETE FROM exact_batch WHERE id=$1`, [setup.batchId]); // cascades exact_row

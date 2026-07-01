@@ -70,7 +70,15 @@ const routes = [
 
   // F0: a module-guarded endpoint — proves the A2 guard is enforced at the HTTP
   // layer (roles with the 'reports' module get 200, others 403). Per-screen
-  // slices declare their own module/action the same way.
+  // slices declare their own module/action the same way. This handler returns NO
+  // financial data — only the role/module context.
+  //
+  // C16/C17 GUARD RULE: the 'reports' module is broader than pay-visibility
+  // (R02/R04/R05/R06/R08/R12 hold 'reports' but are NOT in a3.pay.roles). Any
+  // report that emits the Payroll or Leave-liability REGISTER must therefore carry
+  // allow:'a3.pay.roles' (like /liability/batch/:id) — module:'reports' ALONE is
+  // NOT a sufficient gate for a financial register. Enforced/regression-pinned in
+  // test/f3.test.js (a reports/payroll-module role without pay-visibility → 403).
   { method: 'GET', pattern: /^\/reports\/summary$/, module: 'reports',
     handler: async (req, m, url, s) => ({ status: 200, body: { role: s.role_code, modules: auth.landing(s).modules, generated: true } }) },
 
