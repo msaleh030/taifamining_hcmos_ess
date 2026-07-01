@@ -3,10 +3,11 @@
 //   • FINANCIAL registers (Payroll, Leave-liability) inherit the C16 pay-visibility
 //     gate (a3.pay.roles) — enforced at the register endpoints below; the catalogue
 //     also hides them from non-pay roles so the UI matches the server rule.
-//   • SITE-BOUND reports (C11 Performance — recruitment funnel / reviews, DEFERRED:
-//     no data model yet) inherit the site-scope gate (src/sitescope.js). When C11
-//     is built, its per-site data MUST be filtered via sitescope.scopeSite() so a
-//     site-bound role sees only its own site — the gate is not re-implemented.
+//   • SITE-BOUND reports (C11 Performance — recruitment funnel / ROSTER / reviews,
+//     DEFERRED: not exposed, no route/table yet) inherit the site-scope gate
+//     (src/sitescope.js). When C11 is built, its per-site data MUST be filtered via
+//     sitescope.scopeSite() so a site-bound role sees only its own site — never
+//     org-wide — and the gate is not re-implemented.
 const db = require('./db');
 const cfg = require('./config');
 const exact = require('./exact');

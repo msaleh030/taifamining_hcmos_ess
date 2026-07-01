@@ -8,11 +8,12 @@
 // site-bound role MUST filter to the requester's site — the same way the directory
 // does. This is enforced here so every consumer applies the identical rule.
 //
-// Used today by the Employee directory (src/employees.js). C11 Performance
-// (recruitment funnel / reviews) is DEFERRED (no data model yet); when built it
-// MUST route its per-site data through isScoped()/requesterSite() so a site-bound
-// role (e.g. R02 Supervisor) only ever sees its own site — the gate cannot be
-// re-implemented ad hoc.
+// Used today by the Employee directory (src/employees.js). C11 Performance (the
+// recruitment FUNNEL / ROSTER and performance reviews) is DEFERRED — NOT exposed:
+// no route, no table, and its KPIs are not-available (uncaptured inputs). So there
+// is no org-wide leak today. When it IS wired, its per-site data (funnel/roster/
+// reviews) MUST route through scopeSite() so a site-bound role (e.g. R02
+// Supervisor) only ever sees its own site — the gate cannot be re-implemented ad hoc.
 const cfg = require('./config');
 
 // Is this role site-bound? Reads the site_scope table (config), falling back to
