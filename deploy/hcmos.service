@@ -1,0 +1,24 @@
+[Unit]
+Description=HCMOS/ESS API + frontend (UAT)
+After=network.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+Type=simple
+User=hcmos
+WorkingDirectory=/opt/hcmos
+EnvironmentFile=/etc/hcmos/hcmos.env
+# NODE_ENV=production (from the env file) disables the test-only fault seams.
+ExecStart=/usr/bin/node src/server.js
+Restart=on-failure
+RestartSec=3
+# Hardening: no new privileges, private tmp, read-only system dirs.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/hcmos
+AmbientCapabilities=
+
+[Install]
+WantedBy=multi-user.target

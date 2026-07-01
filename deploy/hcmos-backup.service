@@ -1,0 +1,9 @@
+[Unit]
+Description=HCMOS Postgres backup (oneshot, driven by hcmos-backup.timer)
+After=postgresql.service
+
+[Service]
+Type=oneshot
+User=hcmos
+EnvironmentFile=/etc/hcmos/hcmos.env
+ExecStart=/opt/hcmos/deploy/backup.sh

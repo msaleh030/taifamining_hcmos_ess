@@ -16,9 +16,14 @@
     .login { max-width: 320px; margin: 4rem auto; display: grid; gap: .6rem; }
     .login input, .login button { padding: .6rem; font-size: 1rem; }
     .login .error { color: #b00020; }
+    /* UAT instance label — clearly marks this as test data, not production.
+       Remove (or gate behind a build flag) for a production build. */
+    #uat-banner { background: #8a5a00; color: #fff; text-align: center; font-size: .8rem;
+      font-weight: 600; letter-spacing: .04em; padding: .3rem; text-transform: uppercase; }
   </style>
 </head>
 <body>
+  <div id="uat-banner">UAT · Test data · Not production · Carry policy pending</div>
   <div id="app"></div>
   <script type="module" src="./app.js"></script>
 </body>
