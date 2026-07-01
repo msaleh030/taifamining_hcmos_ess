@@ -1,11 +1,14 @@
 'use strict';
 // Runtime configuration lives in the `config` table, per tenant — NEVER in code.
-// These are the DEFAULT values seeded for a tenant. Auth lockout (threshold /
-// duration) runs on defensible defaults documented as pending ratification — it
-// is NOT gated, because auth cannot block a login on a [TBC] value; it stays
-// overridable in `config`. The genuinely-gated items use the PENDING sentinel
-// and BLOCK at use. Every value is read from `config` at request time so it can
-// change without a deploy — none of this is hard-coded policy.
+// These are the DEFAULT values seeded for a tenant. Two categories of not-yet-
+// client-confirmed values:
+//   • APPLIED, pending ratification — a real value applies now and is on the
+//     ratify-at-UAT list (e.g. the DA-2 notify roles, and auth lockout). These
+//     are NOT gated: they are the values, subject to confirmation, not blanks.
+//   • [TBC]-gated — the PENDING sentinel; any code path that needs one BLOCKS
+//     rather than defaulting (governance-critical unknowns).
+// Every value is read from `config` at request time so it can change without a
+// deploy — none of this is hard-coded policy.
 const { query } = require('./db');
 const { HttpError } = require('./errors');
 
@@ -16,8 +19,10 @@ const { HttpError } = require('./errors');
 const PENDING = '__TBC__';
 
 const DEFAULT_CONFIG = {
-  // Auth lockout — defensible default, PENDING RATIFICATION (not gated: auth must
-  // function, so these apply now and stay overridable in config).
+  // Auth lockout — APPLIED default (5 attempts / 15 min), pending client
+  // ratification at UAT. Same category as the other Applied access refinements
+  // (e.g. DA-2 notify roles): a real value that applies now, NOT [TBC]-gated —
+  // auth cannot gate a login on a pending value. Overridable per tenant in config.
   'auth.lockout.threshold': '5',     // failed attempts before lock
   'auth.lockout.duration':  '900',   // lock seconds (15 min)
 
