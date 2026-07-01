@@ -102,6 +102,16 @@ const DEFAULT_CONFIG = {
   // this no longer applies to HO; kept for any unmapped site). 'allow' | 'reject'.
   'geofence.empty_zone.policy': 'allow',
 
+  // ── Exact payroll ingestion (Slice 8, contract v1.2 appendix) ─────────────
+  'exact.contract.version': 'v1.2',
+  'exact.section_row':      '6',   // two-row header: section labels on row 6…
+  'exact.header_row':       '7',   // …column headers on row 7 (1-based)
+  // [TBC] — BLOCK until confirmed, do not default:
+  'exact.match.key':        PENDING, // EMPLOYEE ID == 'hcmos' | 'legacy_id'
+  'exact.dailyrate.included': PENDING, // fixed-allowance set (excl col21/col24)
+  'exact.netpay.source':    PENDING, // 'col:<n>' | 'compute'
+  'exact.reconciliation':   PENDING, // AC-EXACT-07, gated until a real period
+
   // ── Documents / retention / region (DA-1, AC-2) ──────────────────────────
   'doc.lead_time.contract':   '30',        // DA-1 lead times (days)
   'doc.lead_time.permit':     '60',

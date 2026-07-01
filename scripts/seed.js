@@ -6,6 +6,7 @@
 const db = require('../src/db');
 const C = require('../src/crypto');
 const { DEFAULT_CONFIG, SITE_SCOPE } = require('../src/config');
+const exactContract = require('../src/exact_contract');
 const F = require('../test/fixtures');
 
 async function main() {
@@ -13,11 +14,17 @@ async function main() {
     // Clean slate (FK-safe order). audit is append-only (DELETE is blocked by a
     // trigger), so TRUNCATE it — which also resets the chain to genesis.
     await c.query('TRUNCATE audit RESTART IDENTITY');
-    for (const t of ['idempotency', 'notification', 'activity_feed', 'field_change', 'leave_carry',
-      'geofence_zone', 'employee_document', 'employee_asset', 'disciplinary', 'employee_medical',
-      'employee_pay', 'session', 'empno_counter', 'device', 'app_user', 'employee', 'site',
-      'config', 'site_scope', 'tenant']) {
+    for (const t of ['idempotency', 'exact_row', 'exact_batch', 'notification', 'activity_feed',
+      'field_change', 'leave_carry', 'geofence_zone', 'employee_document', 'employee_asset',
+      'disciplinary', 'employee_medical', 'employee_pay', 'session', 'empno_counter', 'device',
+      'app_user', 'employee', 'site', 'config', 'site_scope', 'exact_column', 'tenant']) {
       await c.query(`DELETE FROM ${t}`);
+    }
+
+    // Exact column contract (reference data, versioned; seeded once, not per-tenant).
+    for (const col of exactContract.build()) {
+      await c.query('INSERT INTO exact_column(version,position,section,header,pinned) VALUES ($1,$2,$3,$4,$5)',
+        [col.version, col.position, col.section, col.header, col.pinned]);
     }
 
     await c.query('INSERT INTO tenant(company_id,name,status) VALUES ($1,$2,$3),($4,$5,$6)',
