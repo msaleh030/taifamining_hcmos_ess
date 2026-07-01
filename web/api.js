@@ -96,6 +96,8 @@ export const api = {
   policyOutstanding: (code) => request(`/policy/${encodeURIComponent(code)}/outstanding`),
   policyPublish: (body) => request('/policy', { method: 'POST', body }),
   controls: () => request('/controls'),
+  // F8 — tenant provisioning (platform-admin only; companyId minted server-side).
+  provisionTenant: (name) => request('/tenants', { method: 'POST', body: { name } }),
 };
 
 // A3: the API OMITS confidential fields a role may not see, so the UI simply does

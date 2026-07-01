@@ -20,6 +20,8 @@ const docalerts = require('./docalerts');
 const support = require('./support');
 const policy = require('./policy');
 const controls = require('./controls');
+const provision = require('./provision');
+const crypto = require('node:crypto');
 const roles = require('./roles');
 const cfg = require('./config');
 const { HttpError } = require('./errors');
@@ -205,6 +207,20 @@ const routes = [
   // evidence grid (green + counts) distinctly from the fail-with-offenders grid.
   { method: 'GET', pattern: /^\/controls$/, allow: 'controls.view.roles',
     handler: async (req, m, url, s) => ({ status: 200, body: await controls.runControls(s) }) },
+
+  // ── F8: Tenant provisioning wizard (C21, TEN-01/02/03). The highest-privilege
+  // action — restricted to the platform admin role (action admin.tenant.manage =
+  // R12). The companyId is MINTED server-side (crypto.randomUUID), so a caller
+  // cannot target an existing tenant; provisioning only ever creates a fresh,
+  // RLS-isolated company. The provision is one owner transaction — a mid-provision
+  // fault (NODE_ENV seam) rolls the whole tenant back (nothing half-created).
+  { method: 'POST', pattern: /^\/tenants$/, action: 'admin.tenant.manage',
+    handler: async (req, m, url, s) => {
+      const body = await readJson(req);
+      const opts = process.env.NODE_ENV !== 'production' && body.faultStep ? { faultStep: body.faultStep } : {};
+      return { status: 200, body: await provision.provisionTenant(
+        { companyId: crypto.randomUUID(), name: body.name, actor: String(s.user_id || 'system'), role: s.role_code || 'SYS' }, opts) };
+    } },
 ];
 
 // Guard: verify session, then A2 module / RBAC action / registry deny-set if the
