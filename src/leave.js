@@ -2,9 +2,10 @@
 // Leave service — currently the LR-4 carry-forward lapse nightly job.
 //
 // LR-3 (calendar-year) + LR-4 (carry lapses after a configurable number of
-// years; LOCKED = 1, CHANGED from 2). The lapse window is read from the registry
+// years; = 1, CHANGED from 2). The lapse window is read from the registry
 // per request — nothing here hard-codes "1" (or "2"). A carried entry for year Y
 // remains usable through the end of year Y + lapse_years and lapses thereafter.
+// The window value (1) is pinned by test/leave.test.js, not by this comment.
 const db = require('./db');
 const cfg = require('./config');
 const { HttpError } = require('./errors');

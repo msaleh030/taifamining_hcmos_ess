@@ -2,7 +2,8 @@
 -- 005 — Leave carry-forward ledger (supports LR-4 nightly lapse)
 -- ===========================================================================
 -- Minimal structure to support the LR-4 rule: carried-forward leave lapses after
--- a configurable number of years (registry: leave.carry.lapse_years, LOCKED = 1).
+-- a configurable number of years (registry: leave.carry.lapse_years; value = 1,
+-- pinned by test/leave.test.js — not by this comment).
 -- A nightly job (src/leave.js) marks expired carry as lapsed. Entitlement/accrual
 -- (LR-1) is out of scope here; this table only records carry and its lapse state.
 -- Additive — no data dropped. Tenant-isolated by RLS like every other table.

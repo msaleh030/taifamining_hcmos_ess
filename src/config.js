@@ -71,6 +71,9 @@ const DEFAULT_CONFIG = {
   // Format is prefix + location code + per-location zero-padded sequence, no year
   // segment. Everything below is config: the generator/validator (src/empno.js)
   // hard-codes none of it.
+  // prefix/width/enum + Nyanzaga=NZ pinned by test/empno.test.js (format regex
+  // ^TMCL-(HO|MW|NM|NZ)-\d{4}$, NZ generation, out-of-enum rejection). The regex
+  // also proves there is no company segment in the string (empno.company_segment).
   'empno.prefix':     'TMCL',
   'empno.seq_width':  '4',          // SEQ is 4-digit zero-padded
   // Single source of truth for locations: "key:code" pairs. An EMPTY code blocks
@@ -85,26 +88,31 @@ const DEFAULT_CONFIG = {
 
   // ── Leave (LR-*) ──────────────────────────────────────────────────────────
   'leave.year.basis':         'calendar',  // LR-3 calendar-year
-  'leave.carry.lapse_years':  '1',         // LR-4 carry lapses after ONE year (CHANGED from 2)
-  'leave.max_continuous_days':'14',        // LR-5 max 14 continuous (HoH override)
+  // LR-4 carry lapses after ONE year (CHANGED from 2). Value pinned by
+  // test/leave.test.js ('LR-4 nightly job lapses … window read from registry').
+  'leave.carry.lapse_years':  '1',
+  'leave.max_continuous_days':'14',        // LR-5 max 14 continuous (HoH override, pinned by test/f3.test.js)
   'leave.entitlement.default':'21',        // LR-1 entitlement map (default grade)
   // LR-2 CONFIRMED (v1.4): entitlement WEEKS convert to real days at 7 CALENDAR
   // days/week (LR-1's 4 weeks = 28 days, 2 weeks = 14). This is a calendar
   // conversion — NOT the pay divisor. The "30" (monthly amount → daily value)
   // is a DIFFERENT conversion and lives ONLY in the daily-rate/liability path
   // (payroll.daily_rate.divisor). The two must never be collapsed: using 30 here
-  // would over-credit every entitlement by ~2 days/week.
+  // would over-credit every entitlement by ~2 days/week. Both values pinned:
+  // test/f3.test.js (LR-2 weeks→days 2→14/4→28) and test/payroll.test.js (PC-1=30).
   'leave.weeks_to_days':      '7',         // LR-2 (weeks → days; 7 days/week)
   'leave.coverage.thresholds':PENDING,     // LR-6 [TBC] per-role coverage
   // LR-7 CONFIRMED (v1.4): sick leave = 63 days full pay + 63 days half pay
   // (126 total); a medical certificate is required from day one. full/half is a
-  // PAY split; both count against the 126-day entitlement for balance purposes.
+  // PAY split; both count against the 126-day entitlement. Pinned by
+  // test/f3.test.js (sick card entitlement 126, 63/63, cert_from_day 1).
   'leave.sick.rule':          'full:63,half:63,cert_from_day:1', // LR-7
 
   // ── Payroll (PC-*) ────────────────────────────────────────────────────────
-  // PC-1 daily-rate divisor = 30 (registry). This is THE pay daily-rate basis,
-  // used by payroll AND by leave pay/liability. There is no 31 divisor; a 31-day
-  // proration, if ever needed, must be raised as its own registry item.
+  // PC-1 daily-rate divisor = 30 (registry). THE pay daily-rate basis, used by
+  // payroll AND by leave pay/liability. There is no 31 divisor. Value pinned by
+  // test/payroll.test.js ('PC-1 daily rate uses the registry divisor (30);
+  // nothing computes on 31'); a 31-day proration would be its own registry item.
   'payroll.daily_rate.divisor':'30',
   'payroll.fixed_allowances': 'house,transport,responsibility', // PC-1 fixed-allowance set
   'payroll.gross_components': 'house,transport,responsibility', // PC-3 (must equal PC-1's set)
@@ -112,7 +120,9 @@ const DEFAULT_CONFIG = {
 
   // ── Geofence clock-in (SS-3, registry v1.4 CONFIRMED) ─────────────────────
   // Zones themselves live in geofence_zone (per site). These tune the validator.
-  // CONFIRMED: accept when distance <= radius + min(device_accuracy, 50m).
+  // CONFIRMED: accept when distance <= radius + min(device_accuracy, 50m). The
+  // 50m tolerance and the 100m retry threshold below are pinned by test/f5.test.js
+  // (ATT-03 tolerance-accepts-near-boundary / accuracy>100→retry).
   'geofence.tolerance.policy':  'accuracy',  // accuracy | none
   'geofence.tolerance.max_m':   '50',
   // CONFIRMED: above this reported accuracy the fix is too coarse to trust — the
@@ -123,6 +133,9 @@ const DEFAULT_CONFIG = {
   'geofence.empty_zone.policy': 'allow',
 
   // ── Exact payroll ingestion (Slice 8, contract v1.2 / registry v1.3) ──────
+  // The EX-* values below are pinned by test/exact.test.js and test/f6.test.js
+  // (schema validation, EX-1 legacy_id match, EX-3 per-row net == col AS, EX-2
+  // name-keyed base). A wrong column index fails those tests, not just this note.
   'exact.contract.version': 'v1.2',
   'exact.section_row':      '6',   // two-row header: section labels on row 6…
   'exact.header_row':       '7',   // …column headers on row 7 (1-based)

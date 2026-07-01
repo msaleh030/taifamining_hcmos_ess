@@ -7,6 +7,9 @@
 // positions below are CONFIRMED from the appendix and are `pinned` (their header
 // text is enforced on upload). Un-named positions carry a canonical placeholder
 // header and are NOT pinned — their exact appendix labels still need reconciling.
+// The base-driving positions (ROTATION=11, FIXED OVERTIME=19, TRANSPORT=20,
+// OVERTIME NORMAL=21, OVERTIME HOLIDAY=24, NIGHT SHIFT=26) are pinned by
+// test/exact.test.js ('EX-2 base is name-keyed'): a moved column fails that test.
 //
 // NOTE (flagged): the appendix cites position 49 (WCF) with SDL at 48, i.e. a
 // 0..49 grid = 50 physical columns, while the summary says "49 cols". The column

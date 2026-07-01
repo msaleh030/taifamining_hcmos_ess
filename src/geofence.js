@@ -8,9 +8,11 @@
 // a different site. Zones come from the registry (geofence_zone); nothing here
 // hard-codes a centre or radius.
 //
-// Accuracy tolerance (CONFIRMED v1.2): a fix is accepted when
+// Accuracy tolerance (CONFIRMED v1.4): a fix is accepted when
 //   distance <= radius + min(device_accuracy, geofence.tolerance.max_m=50)
 // The cap bounds how far a (possibly inflated) accuracy figure can stretch a zone.
+// The 50 m cap and 100 m retry threshold are pinned by test/f5.test.js (ATT-03),
+// not by these comments — a changed threshold fails that test.
 //
 // Three outcomes, not two: a fix reported with accuracy worse than
 // geofence.accuracy.retry_above_m (100 m) is NEITHER accepted nor rejected — the
