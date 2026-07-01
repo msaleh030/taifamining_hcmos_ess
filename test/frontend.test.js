@@ -5,8 +5,22 @@
 // the production frontend.
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+const { pathToFileURL } = require('node:url');
 const H = require('./helpers');
 const { F } = H;
+
+// Import a browser ESM module from web/ inside node: copy it (with its relative
+// deps) into a temp dir marked type:module so the ./api.js specifier resolves
+// unchanged. api.js has no top-level browser calls, so it imports cleanly.
+async function importWeb(entry, deps = []) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'web-'));
+  fs.writeFileSync(path.join(dir, 'package.json'), '{"type":"module"}');
+  for (const f of [entry, ...deps]) fs.copyFileSync(path.join(__dirname, '..', 'web', f), path.join(dir, f));
+  return import(pathToFileURL(path.join(dir, entry)).href);
+}
 
 let base;
 before(async () => { base = await H.start(); });
@@ -51,4 +65,24 @@ test('F0 serves the production frontend (static assets), with traversal blocked'
   // path traversal outside web/ is refused
   const bad = await raw('/%2e%2e/package.json');
   assert.notEqual(bad.status, 200);
+});
+
+// F4 flag-off: the endpoint returns {enabled:false, cards:[]} (kpi.test #50); this
+// asserts the FRONTEND render of that payload is a DISTINCT disabled panel — a
+// module-off explainer + enable-pointer — NOT a fall-through to empty/blank (C3).
+test('F4 flag-off renders the distinct disabled panel, not empty/blank', async () => {
+  const { scorecardView } = await importWeb('kpi.js', ['api.js']);
+
+  const off = scorecardView({ enabled: false, cards: [] });
+  assert.match(off, /data-state="module-disabled"/, 'flag-off is the disabled panel state');
+  assert.match(off, /scorecard-disabled/);
+  assert.match(off, /switched off/i, 'the panel EXPLAINS the module is off');
+  assert.match(off, /enable-pointer/, 'the panel carries an enable-pointer');
+  assert.doesNotMatch(off, /data-state="empty"/, 'flag-off is NOT the empty state');
+  assert.doesNotMatch(off, /class="cards"/, 'flag-off does not fall through to blank cards');
+
+  // Enabled-but-no-cards is the EMPTY state — must be distinct from disabled.
+  const empty = scorecardView({ enabled: true, cards: [] });
+  assert.match(empty, /data-state="empty"/);
+  assert.doesNotMatch(empty, /scorecard-disabled/, 'empty is NOT the disabled panel');
 });
