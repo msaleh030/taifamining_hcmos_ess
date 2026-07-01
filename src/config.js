@@ -138,6 +138,11 @@ const DEFAULT_CONFIG = {
   'retention.safety_years':   '10',
   'region':                   'af-south-1',
 
+  // ── Analytics scorecard (Slice 7, KPI) ────────────────────────────────────
+  // Steering decision: the org KPI scorecard is active only if the client buys
+  // analytics. The engine + personal My KPIs (E8) exist regardless.
+  'analytics.enabled':        'false',
+
   // ── Pending governance refinements (registered so they are gated, not silently
   //    defaulted; nothing reads these until a value is set) ───────────────────
   'pending.a3.r08_pay':       PENDING,     // A3: R08 pay visibility
