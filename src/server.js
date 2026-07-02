@@ -82,7 +82,7 @@ const routes = [
   // financial data — only the role/module context.
   //
   // C16/C17 GUARD RULE: the 'reports' module is broader than pay-visibility
-  // (R02/R04/R05/R06/R08/R12 hold 'reports' but are NOT in a3.pay.roles). Any
+  // (R02/R04/R05/R06/R12/R14 hold 'reports' but are NOT in a3.pay.roles). Any
   // report that emits the Payroll or Leave-liability REGISTER must therefore carry
   // allow:'a3.pay.roles' (like /liability/batch/:id) — module:'reports' ALONE is
   // NOT a sufficient gate for a financial register. Enforced/regression-pinned in

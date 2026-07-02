@@ -24,7 +24,7 @@ const round2 = (x) => Math.round(x * 100) / 100;
 const HR   = ['R03', 'R04', 'R11', 'R12'];
 const EXEC = ['R11', 'R12'];
 const HSE  = ['R05', 'R06'];
-const PAY  = ['R09', 'R11', 'R12'];
+const PAY  = ['R11', 'R12', 'R15', 'R16']; // v1.5: R09 → Finance Manager/CFC
 const SUP  = ['R02', 'R04', 'R11'];
 
 // count of ACTIVE employees (LVR-02) — leavers excluded.

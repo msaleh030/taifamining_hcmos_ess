@@ -36,11 +36,13 @@ UAT_NAME='Mohammed Saleh' UAT_ROLE=R11 UAT_SITE='Head Office' node scripts/provi
 R11 (HR Director) is central — sees every site's directory + permit alerts (I-5).
 Enrol the printed `otpauth://` in your authenticator; rotate the printed password.
 
-Provision a SECOND ingest-set user (e.g. R12 sysadmin) — the data load is
-maker-checker and needs **two distinct users** from `ingest.roles` (R11/R12):
+Provision the TWO finance users for the data load (v1.5 LI-6: the ingest
+maker-checker is a role-split SoD — Finance Manager submits, CFC approves):
 ```
-UAT_COMPANY=11111111-1111-1111-1111-111111111111 UAT_EMAIL=sysadmin@taifamining.tz \
-UAT_NAME='HCMOS SysAdmin' UAT_ROLE=R12 UAT_SITE='Head Office' node scripts/provision-uat-user.js
+UAT_COMPANY=11111111-1111-1111-1111-111111111111 UAT_EMAIL=finmgr@taifamining.tz \
+UAT_NAME='<Finance Manager>' UAT_ROLE=R15 UAT_SITE='Head Office' node scripts/provision-uat-user.js
+UAT_COMPANY=11111111-1111-1111-1111-111111111111 UAT_EMAIL=cfc@taifamining.tz \
+UAT_NAME='<Chief Financial Controller>' UAT_ROLE=R16 UAT_SITE='Head Office' node scripts/provision-uat-user.js
 ```
 
 ## 5. Cloudflare — DNS + TLS + Access + cache  (→ I-1)  [your account]
@@ -64,13 +66,13 @@ check), then load through the ingestion discipline via the loader:
 cd /opt/hcmos; set -a; . /etc/hcmos/hcmos.env; set +a
 # dry-run first — prints clean/exception split + control check, loads NOTHING:
 node scripts/load-ingest.js opening-balance balances.csv control.json \
-     admin@taifamining.tz sysadmin@taifamining.tz
-# review balances.csv.exceptions.json, then commit (maker admin@, checker sysadmin@):
+     finmgr@taifamining.tz cfc@taifamining.tz
+# review balances.csv.exceptions.json, then commit (maker finmgr@ R15, checker cfc@ R16):
 node scripts/load-ingest.js opening-balance balances.csv control.json \
-     admin@taifamining.tz sysadmin@taifamining.tz --commit
+     finmgr@taifamining.tz cfc@taifamining.tz --commit
 # permits mirror (control.json = {"count": N}):
 node scripts/load-ingest.js permits permits.csv permits-control.json \
-     admin@taifamining.tz sysadmin@taifamining.tz --commit
+     finmgr@taifamining.tz cfc@taifamining.tz --commit
 ```
 Balances land in the protected **opening bucket** (lapse-exempt). Verify with
 `bash deploy/smoke-test.sh`, then log in as the R11 account and confirm the

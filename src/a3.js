@@ -16,7 +16,7 @@ const BASE_FIELDS = [
 
 async function permittedSets(companyId) {
   return {
-    pay: await cfg.getRoleSet(companyId, 'a3.pay.roles', 'R07,R09,R11'),
+    pay: await cfg.getRoleSet(companyId, 'a3.pay.roles', 'R07,R11,R15,R16'),
     medical: await cfg.getRoleSet(companyId, 'a3.medical.roles', 'R03,R05,R06'),
     disciplinary: await cfg.getRoleSet(companyId, 'a3.disciplinary.roles', 'R05,R06,R07,R11'),
   };

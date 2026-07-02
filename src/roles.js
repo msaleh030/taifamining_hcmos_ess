@@ -31,8 +31,8 @@ const LANDING = {
   R05: { name: 'HSE Officer',             modules: ['dashboard', 'health_safety', 'permits', 'disciplinary', 'reports'] },
   R06: { name: 'HSE / Medical Manager',   modules: ['dashboard', 'health_safety', 'permits', 'medical', 'disciplinary', 'reports'] },
   R07: { name: 'Payroll Officer',         modules: ['dashboard', 'payroll', 'disciplinary', 'reports'] },
-  R08: { name: 'Finance Officer',         modules: ['dashboard', 'finance', 'payroll', 'reports'] },
-  R09: { name: 'Payroll Manager',         modules: ['dashboard', 'payroll', 'finance', 'reports'] },
+  // R08 (Finance Officer) + R09 (Payroll Manager) REMOVED — registry v1.5 LI-3:
+  // merged into R15 Finance Manager; R16 CFC added as the senior approver.
   // R10 (Clinic / Medical Staff) REMOVED — registry v1.5 LI-2: Taifa has no
   // separate clinic staff; HR Officer (R03) absorbs clinic/medical administration.
   R11: { name: 'HR Director',             modules: ['dashboard', 'profile', 'payroll', 'performance', 'disciplinary', 'reports'] },
@@ -44,13 +44,23 @@ const LANDING = {
   // CEO sees aggregates/reports, NOT individual pay — pinned by test; do not add
   // pay visibility without Kira. Flagged for design reconciliation at UAT.
   R14: { name: 'CEO / Executive',         modules: ['dashboard', 'reports'] },
+  // v1.5 LI-3/LI-6: Finance Manager OPERATES payroll + opening-balance ingestion
+  // (the MAKER); the Chief Financial Controller APPROVES the ingestion commit
+  // (the CHECKER). Disjoint maker/checker roles = SoD by construction (the same
+  // pattern as disciplinary issuer/checker); the same-user-403 rule still applies
+  // on top. Both see pay/bank. Flagged for design reconciliation at UAT.
+  R15: { name: 'Finance Manager',         modules: ['dashboard', 'finance', 'payroll', 'reports'] },
+  R16: { name: 'Chief Financial Controller', modules: ['dashboard', 'finance', 'payroll', 'reports'] },
 };
 
 // A3 confidential profile fields -> roles permitted to SEE them. Any field not
 // permitted for the viewer's role is omitted from the response entirely.
 const FIELD_RULES = {
-  pay_grade:    ['R07', 'R09', 'R11'],   // pay/bank
-  bank_account: ['R07', 'R09', 'R11'],   // pay/bank
+  // v1.5 LI-3: pay/bank = Payroll Officer, Finance Manager, CFC, HR Director.
+  // R09 removed; CEO (R14) and HR Officer (R03) deliberately NOT added — pinned
+  // by test/roles_v15.test.js.
+  pay_grade:    ['R07', 'R11', 'R15', 'R16'],   // pay/bank
+  bank_account: ['R07', 'R11', 'R15', 'R16'],   // pay/bank
   // v1.5 LI-5 (OPEN — held for Kira's ratify): R03 added because HR Officer now
   // does clinic/medical administration. This WIDENS medical visibility to all HR
   // Officers — a confidentiality-boundary change, pinned by test/roles_v15.test.js.
@@ -69,7 +79,9 @@ const ACTIONS = {
   'admin.config.write':  ['R12'],
   'admin.user.suspend':  ['R12'],
   'admin.tenant.manage': ['R12'],
-  'payroll.run':         ['R09', 'R12'],
+  // v1.5 LI-6: payroll is RUN by finance (Finance Manager + CFC). R09 removed;
+  // R12 (System Admin) deliberately REMOVED — admin must not run payroll. Pinned.
+  'payroll.run':         ['R15', 'R16'],
   'leave.approve':       ['R02', 'R04', 'R11'],
 };
 

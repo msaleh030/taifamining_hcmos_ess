@@ -56,7 +56,7 @@ after(H.stop);
 
 // ── EXACT-01/02/03 + guard: schema validation + pay-role guard, at the endpoint ─
 test('EXACT-01/02/03 schema validation blocks malformed files; endpoint is pay-guarded', async () => {
-  const pay = await tok(F.USERS.PAYMGR_A); // R09 ∈ a3.pay.roles
+  const pay = await tok(F.USERS.FINMGR_A); // R15 ∈ a3.pay.roles (v1.5)
   const emp = await tok(F.USERS.EMP_A);    // R01 ∉ a3.pay.roles
 
   // Guard: a non-pay role cannot run the payroll upload (same discipline as liability).
@@ -87,7 +87,7 @@ test('EXACT-01/02/03 schema validation blocks malformed files; endpoint is pay-g
 
 // ── EXACT-04/05: reconcile → unmatched report incl. a TMCL-only joiner ──────
 test('EXACT-04/05 reconcile matches on legacy_id; ghost + TMCL-only joiner surface as unmatched', async () => {
-  const pay = await tok(F.USERS.PAYMGR_A);
+  const pay = await tok(F.USERS.FINMGR_A);
   const up = await upload(pay, { period: '2026-06-f6-match', csv: toCsv(validGrid([
     dataRow('E-A-0001', 'A-match'),       // legacy_id → matches
     dataRow('E-A-9999', 'G-match'),       // no such legacy_id → unmatched
@@ -104,7 +104,7 @@ test('EXACT-04/05 reconcile matches on legacy_id; ghost + TMCL-only joiner surfa
 
 // ── EXACT-06: idempotent re-load ────────────────────────────────────────────
 test('EXACT-06 re-loading the identical file is idempotent (one batch)', async () => {
-  const pay = await tok(F.USERS.PAYMGR_A);
+  const pay = await tok(F.USERS.FINMGR_A);
   const csv = toCsv(validGrid([dataRow('E-A-0001', 'A-idem'), dataRow('E-A-0002', 'C-idem')]));
   const first = await upload(pay, { period: '2026-06-f6-idem', csv });
   assert.equal(first.body.deduped, false);
@@ -115,7 +115,7 @@ test('EXACT-06 re-loading the identical file is idempotent (one batch)', async (
 
 // ── EXACT-07: per-row net check runs (computed net == col AS) ────────────────
 test('EXACT-07 per-row net check runs at the endpoint (computed net == col AS)', async () => {
-  const pay = await tok(F.USERS.PAYMGR_A);
+  const pay = await tok(F.USERS.FINMGR_A);
   const up = await upload(pay, { period: '2026-06-f6-net', csv: toCsv(validGrid([
     payRow('E-A-0001', 'A-net', 1000, 300, 700), // net 700 == AS 700 → ok
     payRow('E-A-0002', 'C-net', 1000, 300, 999), // net 700 != AS 999 → mismatch
@@ -128,7 +128,7 @@ test('EXACT-07 per-row net check runs at the endpoint (computed net == col AS)',
 
 // ── EXACT-08: atomic publish — an injected mid-publish fault commits nothing ──
 test('EXACT-08 publish is atomic: an injected fault rolls back; a clean run publishes once', async () => {
-  const pay = await tok(F.USERS.PAYMGR_A);
+  const pay = await tok(F.USERS.FINMGR_A);
   const up = await upload(pay, { period: '2026-06-f6-atomic', control_totals: { total_pay: 3000, total_deduction: 800, net: 2200 },
     csv: toCsv(validGrid([payRow('E-A-0001', 'A-atomic', 1000, 300, 700), payRow('E-A-0002', 'C-atomic', 2000, 500, 1500)])) });
   await post(pay, `/exact/batch/${up.body.batch_id}/reconcile`);
@@ -145,7 +145,7 @@ test('EXACT-08 publish is atomic: an injected fault rolls back; a clean run publ
 
 // ── EXACT-09: control-totals mismatch BLOCKS publish (not a warning) ─────────
 test('EXACT-09 a file whose control totals do not reconcile BLOCKS publish', async () => {
-  const pay = await tok(F.USERS.PAYMGR_A);
+  const pay = await tok(F.USERS.FINMGR_A);
   // Declared net (9999) does not match the summed rows (700+1500 = 2200).
   const up = await upload(pay, { period: '2026-06-f6-ctrl', control_totals: { net: 9999 },
     csv: toCsv(validGrid([payRow('E-A-0001', 'A-ctrl', 1000, 300, 700), payRow('E-A-0002', 'C-ctrl', 2000, 500, 1500)])) });
@@ -166,7 +166,7 @@ test('EXACT-09 a file whose control totals do not reconcile BLOCKS publish', asy
 
 // ── EXACT-10: published pay is READ-ONLY (re-publish refused; no mutation route) ─
 test('EXACT-10 a published batch is read-only — re-publish is refused, no endpoint mutates pay', async () => {
-  const pay = await tok(F.USERS.PAYMGR_A);
+  const pay = await tok(F.USERS.FINMGR_A);
   const up = await upload(pay, { period: '2026-06-f6-ro', control_totals: { total_pay: 1000, total_deduction: 300, net: 700 },
     csv: toCsv(validGrid([payRow('E-A-0001', 'A-ro', 1000, 300, 700)])) });
   await post(pay, `/exact/batch/${up.body.batch_id}/reconcile`);
@@ -187,7 +187,7 @@ test('EXACT-10 a published batch is read-only — re-publish is refused, no endp
 // ── EXACT-11: publish fan-out reports PER-LEG status; retry is scoped to the
 // failed leg and never double-posts the GL ──────────────────────────────────
 test('EXACT-11 publish fan-out is per-leg; a scoped retry fixes ESS without double-posting GL', async () => {
-  const pay = await tok(F.USERS.PAYMGR_A);
+  const pay = await tok(F.USERS.FINMGR_A);
   const glCount = async (bid) => Number((await owner(`SELECT count(*)::int n FROM gl_posting WHERE batch_id=$1`, [bid])).rows[0].n);
   const essCount = async (bid) => Number((await owner(`SELECT count(*)::int n FROM ess_push WHERE batch_id=$1`, [bid])).rows[0].n);
 

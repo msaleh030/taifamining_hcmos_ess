@@ -23,7 +23,7 @@ test('EMP-01 directory lists via HTTP; directory-denied role 403 via middleware;
   const search = await H.req('GET', '/employees?q=Carol&limit=25', { token: pay });
   assert.ok(search.body.rows.some((r) => /carol/i.test(r.full_name)), 'server-side search works');
 
-  const fin = await tok(F.USERS.FIN_A);     // R08 — in directory.deny.roles
+  const fin = await tok(F.USERS.CFC_A);     // R16 — in directory.deny.roles (v1.5)
   const denied = await H.req('GET', '/employees', { token: fin });
   assert.equal(denied.status, 403, 'directory-denied role refused by the HTTP-layer deny guard');
 

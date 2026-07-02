@@ -16,7 +16,7 @@ const contractDef = require('../src/exact_contract');
 const { F } = H;
 
 const A = F.TENANT_A;
-const session = { company_id: A, user_id: F.USERS.PAYMGR_A.id, role_code: 'R09' };
+const session = { company_id: A, user_id: F.USERS.FINMGR_A.id, role_code: 'R15' };
 
 const CONTRACT = contractDef.build();
 const N = CONTRACT.length;

@@ -79,3 +79,45 @@ test('v1.5 LI-4: CEO (R14) lands read-only on dashboard+reports and gets NO indi
   assert.equal((await H.req('GET', '/reports/register/payroll/00000000-0000-0000-0000-000000000000', { token: ceo })).status, 403,
     'CEO refused the payroll register (module reports is not a pay backdoor)');
 });
+
+// ── LI-3 (addendum): R08/R09 removed; Finance Manager (R15) + CFC (R16) added ─
+test('v1.5 LI-3: R08/R09 are removed; R15/R16 carry finance+payroll and pay visibility', async () => {
+  for (const gone of ['R08', 'R09']) {
+    assert.ok(!(gone in roles.LANDING), `${gone} has no landing entry`);
+    assert.deepEqual(roles.landingFor(gone).modules, [], `${gone} lands nowhere`);
+    for (const [field, set] of Object.entries(roles.FIELD_RULES)) {
+      assert.ok(!set.includes(gone), `${field} does not reference ${gone}`);
+    }
+  }
+  for (const code of ['R15', 'R16']) {
+    assert.deepEqual(roles.landingFor(code).modules, ['dashboard', 'finance', 'payroll', 'reports']);
+  }
+  // Pay/bank visibility is EXACTLY Payroll Officer + HR Director + FM + CFC —
+  // not CEO (R14), not HR Officer (R03).
+  assert.deepEqual([...roles.FIELD_RULES.pay_grade].sort(), ['R07', 'R11', 'R15', 'R16']);
+  assert.deepEqual([...roles.FIELD_RULES.bank_account].sort(), ['R07', 'R11', 'R15', 'R16']);
+
+  // HTTP: the Finance Manager and CFC receive pay fields on a real profile read
+  // ... but stay OUT of the directory list (directory.deny.roles, finance class).
+  for (const u of [F.USERS.FINMGR_A, F.USERS.CFC_A]) {
+    const t = await tok(u);
+    const p = (await H.req('GET', `/employees/${F.EMP.CAROL}`, { token: t }));
+    assert.equal(p.status, 403, `${u.role} is directory-denied like its predecessors (list/profile routes)`);
+    // Pay visibility is exercised where finance actually works: the registers.
+    assert.equal((await H.req('GET', '/reports/catalogue', { token: t })).body.pay_visible, true,
+      `${u.role} is pay-visible (a3.pay.roles) — sees the financial registers`);
+  }
+});
+
+// ── LI-6 (addendum): payroll.run belongs to finance; admin may NOT run payroll ─
+test('v1.5 LI-6: payroll.run = Finance Manager + CFC; R12 admin and old R09 refused', async () => {
+  assert.equal(roles.canPerform('R15', 'payroll.run'), true);
+  assert.equal(roles.canPerform('R16', 'payroll.run'), true);
+  assert.equal(roles.canPerform('R09', 'payroll.run'), false, 'retired R09 cannot run payroll');
+  assert.equal(roles.canPerform('R12', 'payroll.run'), false, 'System Admin must NOT run payroll (explicit v1.5)');
+
+  const fm = await tok(F.USERS.FINMGR_A);
+  assert.equal((await H.req('POST', '/action/payroll.run', { token: fm })).status, 200, 'Finance Manager runs payroll');
+  const admin = await tok(F.USERS.ADMIN_A);
+  assert.equal((await H.req('POST', '/action/payroll.run', { token: admin })).status, 403, 'admin refused at the endpoint');
+});

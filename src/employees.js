@@ -19,7 +19,7 @@ const EDITABLE_FIELDS = new Set(['phone', 'email', 'dept', 'home_address', 'full
 const LIST_COLS = 'id, emp_no, full_name, role_code, site_id, dept, status, phone, email';
 
 async function directoryDenied(companyId, role) {
-  const deny = await cfg.getRoleSet(companyId, 'directory.deny.roles', 'R08,R09,R12,R13');
+  const deny = await cfg.getRoleSet(companyId, 'directory.deny.roles', 'R12,R13,R15,R16');
   return deny.has(role);
 }
 

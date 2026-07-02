@@ -88,8 +88,8 @@ const USERS = {
   HSE5_A:     { id: 'd0000000-0000-0000-0000-000000000005', company: TENANT_A, employee: EMP.ALICE, email: 'hse5@a.example',     password: 'Hse5Pass!2026',  role: 'R05', status: 'active' }, // medical (Section 17.1)
   CEO_A:      { id: 'd0000000-0000-0000-0000-000000000014', company: TENANT_A, employee: EMP.ALICE, email: 'ceo@a.example',      password: 'CeoPass!2026',   role: 'R14', status: 'active' }, // v1.5 CEO/Executive (read-only oversight)
   EMP_A:      { id: 'd0000000-0000-0000-0000-000000000001', company: TENANT_A, employee: EMP.ALICE, email: 'emp@a.example',      password: 'EmpPass!2026',   role: 'R01', status: 'active' },
-  FIN_A:      { id: 'd0000000-0000-0000-0000-000000000008', company: TENANT_A, employee: EMP.ALICE, email: 'fin@a.example',      password: 'FinPass!2026',   role: 'R08', status: 'active' }, // no directory
-  PAYMGR_A:   { id: 'd0000000-0000-0000-0000-000000000009', company: TENANT_A, employee: EMP.ALICE, email: 'paymgr@a.example',   password: 'PmgrPass!2026',  role: 'R09', status: 'active' }, // no directory
+  CFC_A:      { id: 'd0000000-0000-0000-0000-000000000008', company: TENANT_A, employee: EMP.ALICE, email: 'cfc@a.example',      password: 'CfcPass!2026',   role: 'R16', status: 'active' }, // v1.5 CFC — ingest checker; no directory
+  FINMGR_A:   { id: 'd0000000-0000-0000-0000-000000000009', company: TENANT_A, employee: EMP.ALICE, email: 'finmgr@a.example',   password: 'FmgrPass!2026',  role: 'R15', status: 'active' }, // v1.5 Finance Manager — ingest maker; no directory
   LOCK_A:     { id: 'd0000000-0000-0000-0000-0000000000aa', company: TENANT_A, employee: EMP.ALICE, email: 'lock@a.example',     password: 'LockPass!2026',  role: 'R01', status: 'active' },
   RESET_A:    { id: 'd0000000-0000-0000-0000-0000000000a5', company: TENANT_A, employee: EMP.ALICE, email: 'reset@a.example',    password: 'ResetPass!2026', role: 'R01', status: 'active' },
   RESET2_A:   { id: 'd0000000-0000-0000-0000-0000000000a6', company: TENANT_A, employee: EMP.ALICE, email: 'reset2@a.example',   password: 'Reset2Pass!26',  role: 'R01', status: 'active' },

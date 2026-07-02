@@ -14,7 +14,7 @@ const contractDef = require('../src/exact_contract');
 const { F } = H;
 
 const A = F.TENANT_A;
-const session = { company_id: A, user_id: F.USERS.PAYMGR_A.id, role_code: 'R09' };
+const session = { company_id: A, user_id: F.USERS.FINMGR_A.id, role_code: 'R15' };
 const N = contractDef.build().length;
 
 // EX-2 base sums to 3000 (→ daily rate 3000/30 = 100). Basic sits at col 12

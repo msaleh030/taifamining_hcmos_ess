@@ -37,18 +37,20 @@ async function purge(pfs, batchIds = []) {
 before(H.start);
 after(H.stop);
 
-// ── Guard: only the high-authority ingest.roles set may load ─────────────────
-test('ingest is guarded to the high-authority set (ingest.roles); general HR is refused', async () => {
+// ── Guard (v1.5 LI-6): ingest belongs to FINANCE — Finance Manager + CFC only ─
+test('ingest is guarded to the finance set (ingest.roles); HR, admin and exec are refused', async () => {
   const body = { rows: [] };
   assert.equal((await post(await tok(F.USERS.HR_A), OBP, body)).status, 403, 'R03 (HR Officer) refused');
   assert.equal((await post(await tok(F.USERS.EMP_A), OBP, body)).status, 403, 'R01 refused');
-  assert.equal((await post(await tok(F.USERS.DIRECTOR_A), OBP, body)).status, 200, 'R11 (HR Director) allowed');
-  assert.equal((await post(await tok(F.USERS.ADMIN_A), OBP, body)).status, 200, 'R12 (System Admin) allowed');
+  assert.equal((await post(await tok(F.USERS.DIRECTOR_A), OBP, body)).status, 403, 'R11 refused (v1.5: ingest moved to finance)');
+  assert.equal((await post(await tok(F.USERS.ADMIN_A), OBP, body)).status, 403, 'R12 admin refused (v1.5)');
+  assert.equal((await post(await tok(F.USERS.FINMGR_A), OBP, body)).status, 200, 'R15 Finance Manager allowed');
+  assert.equal((await post(await tok(F.USERS.CFC_A), OBP, body)).status, 200, 'R16 CFC allowed (preview is open to both legs)');
 });
 
 // ── OB-1: preview returns clean/exception split + control totals, writes nothing ─
 test('OB-1 preview splits clean/exception, reports control totals, and writes NOTHING', async () => {
-  const maker = await tok(F.USERS.DIRECTOR_A);
+  const maker = await tok(F.USERS.FINMGR_A);
   const before = Number((await owner(`SELECT count(*)::int n FROM ingest_batch`)).rows[0].n);
   const rows = [
     { pf: '90000001', name: 'Op One', site: 'North Mara', accrued: 20, taken: 5, balance: 15 }, // clean
@@ -71,22 +73,28 @@ test('OB-1 preview splits clean/exception, reports control totals, and writes NO
   assert.equal(await empByPf('90000001'), undefined, 'preview created no employee');
 });
 
-// ── OB-2: maker-checker — commit by a second authorised user only ────────────
-test('OB-2 commit requires an approver distinct from the submitter (same-user → 403)', async () => {
-  const maker = await tok(F.USERS.DIRECTOR_A); // R11
-  const checker = await tok(F.USERS.ADMIN_A);  // R12 (distinct user)
+// ── OB-2 (v1.5 LI-6): Finance Manager submits, CFC approves — SoD on disjoint
+// roles PLUS the same-user rule. Same person for both legs → 403 either way. ──
+test('OB-2 Finance Manager submits, CFC approves → committed; same person / wrong leg → 403', async () => {
+  const maker = await tok(F.USERS.FINMGR_A); // R15 Finance Manager (maker)
+  const checker = await tok(F.USERS.CFC_A);  // R16 CFC (checker, distinct user)
   const rows = [
     { pf: '90010001', name: 'MC One', site: 'North Mara', accrued: 12, taken: 2, balance: 10 },
     { pf: '90010002', name: 'MC Two', site: 'North Mara', accrued: 6, taken: 1, balance: 5 },
   ];
   const control_totals = [{ site: 'North Mara', count: 2, sum_balance: 15 }];
+
+  // Role-split (SoD by construction): the CFC cannot SUBMIT (not a maker).
+  assert.equal((await post(checker, OBC, { rows, control_totals })).status, 403, 'CFC cannot act as the maker');
+
   const sub = await post(maker, OBC, { rows, control_totals }); // SUBMIT (maker)
   assert.equal(sub.body.status, 'submitted');
   const batchId = sub.body.batch_id;
   try {
-    // same-user approve → 403
+    // Same person for both legs → 403 (the Finance Manager is not a checker; the
+    // same-user rule additionally backstops any future set overlap).
     assert.equal((await post(maker, OBC, { batch_id: batchId })).status, 403, 'submitter cannot approve their own batch');
-    // distinct-user approve → committed
+    // distinct-user, checker-role approve → committed
     const appr = await post(checker, OBC, { batch_id: batchId });
     assert.equal(appr.status, 200);
     assert.equal(appr.body.status, 'committed');
@@ -104,8 +112,8 @@ test('OB-2 commit requires an approver distinct from the submitter (same-user �
 
 // ── OB-3: control-total mismatch HARD-BLOCKS commit (409), nothing written ────
 test('OB-3 a control-total mismatch blocks commit (409) and writes nothing', async () => {
-  const maker = await tok(F.USERS.DIRECTOR_A);
-  const checker = await tok(F.USERS.ADMIN_A);
+  const maker = await tok(F.USERS.FINMGR_A);
+  const checker = await tok(F.USERS.CFC_A);
   const rows = [{ pf: '90020001', name: 'CT One', site: 'North Mara', accrued: 10, taken: 0, balance: 10 }];
   // Declared sum (999) does not match the clean set (10).
   const sub = await post(maker, OBC, { rows, control_totals: [{ site: 'North Mara', count: 1, sum_balance: 999 }] });
@@ -123,8 +131,8 @@ test('OB-3 a control-total mismatch blocks commit (409) and writes nothing', asy
 
 // ── OB-4: atomic — an injected mid-batch fault rolls the whole batch back ─────
 test('OB-4 an injected mid-batch fault rolls back the whole load; a clean run commits', async () => {
-  const maker = await tok(F.USERS.DIRECTOR_A);
-  const checker = await tok(F.USERS.ADMIN_A);
+  const maker = await tok(F.USERS.FINMGR_A);
+  const checker = await tok(F.USERS.CFC_A);
   const rows = [
     { pf: '90030001', name: 'Atom One', site: 'North Mara', accrued: 8, taken: 0, balance: 8 },
     { pf: '90030002', name: 'Atom Two', site: 'North Mara', accrued: 4, taken: 0, balance: 4 },
@@ -149,8 +157,8 @@ test('OB-4 an injected mid-batch fault rolls back the whole load; a clean run co
 
 // ── OB-5: opening-bucket rows are exempt from the lapse sweep ─────────────────
 test('OB-5 opening-bucket carry is exempt from the LR-4 lapse; normal carry lapses', async () => {
-  const maker = await tok(F.USERS.DIRECTOR_A);
-  const checker = await tok(F.USERS.ADMIN_A);
+  const maker = await tok(F.USERS.FINMGR_A);
+  const checker = await tok(F.USERS.CFC_A);
   // Opening balance dated 2020 → would be well past the 1-year lapse window.
   const rows = [{ pf: '90040001', name: 'Lapse One', site: 'North Mara', accrued: 9, taken: 0, balance: 9, year: 2020 }];
   const sub = await post(maker, OBC, { rows, control_totals: [{ site: 'North Mara', count: 1, sum_balance: 9 }] });
@@ -180,8 +188,8 @@ test('OB-5 opening-bucket carry is exempt from the LR-4 lapse; normal carry laps
 
 // ── OB-6: provisioning goes through the creation path (scoped directory shows them) ─
 test('OB-6 loaded employees are created via the app path and visible to a site-scoped HR user', async () => {
-  const maker = await tok(F.USERS.DIRECTOR_A);
-  const checker = await tok(F.USERS.ADMIN_A);
+  const maker = await tok(F.USERS.FINMGR_A);
+  const checker = await tok(F.USERS.CFC_A);
   const rows = [{ pf: '90050001', name: 'Zzdirectory Loadtest', site: 'North Mara', accrued: 7, taken: 0, balance: 7 }];
   const sub = await post(maker, OBC, { rows, control_totals: [{ site: 'North Mara', count: 1, sum_balance: 7 }] });
   const batchId = sub.body.batch_id;
@@ -200,7 +208,7 @@ test('OB-6 loaded employees are created via the app path and visible to a site-s
 
 // ── OB-7: the exception report is downloadable and complete ──────────────────
 test('OB-7 the exception report lists every blocking row with its reasons', async () => {
-  const maker = await tok(F.USERS.DIRECTOR_A);
+  const maker = await tok(F.USERS.FINMGR_A);
   const rows = [
     { pf: '90060001', name: 'Good', site: 'North Mara', accrued: 5, taken: 0, balance: 5 }, // clean
     { pf: 'xx', name: 'Bad PF', site: 'North Mara', accrued: 5, taken: 0, balance: 5 },      // exception
@@ -221,8 +229,8 @@ test('OB-7 the exception report lists every blocking row with its reasons', asyn
 
 // ── Permits mirror: match by PF, unmatched → exception; maker-checker + load ──
 test('permits: PF-matched loads to employee_document; unmatched goes to the exception report', async () => {
-  const maker = await tok(F.USERS.DIRECTOR_A);
-  const checker = await tok(F.USERS.ADMIN_A);
+  const maker = await tok(F.USERS.FINMGR_A);
+  const checker = await tok(F.USERS.CFC_A);
   const rows = [
     { pf: 'E-A-0001', name: 'Alice Admin', permit: 'Confined Space', expiry: '2027-01-01' }, // matches ALICE by PF
     { pf: '77777777', name: 'Ghost', permit: 'Orphan Permit', expiry: '2027-01-01' },          // no match

@@ -58,12 +58,13 @@ async function runLoad({ kind: kindIn, csvPath, controlPath, makerEmail, checker
   if (maker.company_id !== checker.company_id) throw new Error('maker and checker are in different tenants');
   if (maker.id === checker.id) throw new Error('maker-checker: maker and checker must be DIFFERENT users');
 
-  // Faithful guard: both actors must hold an ingest.roles role — the SAME registry
-  // set the endpoint enforces. (maker ≠ checker is also re-enforced by the service.)
-  const allowed = await cfg.getRoleSet(maker.company_id, 'ingest.roles', '');
-  for (const [who, u] of [['maker', maker], ['checker', checker]]) {
-    if (!allowed.has(u.role_code)) throw new Error(`${who} role ${u.role_code} is not in ingest.roles — refused`);
-  }
+  // Faithful guard (v1.5 LI-6): the maker must hold an ingest.maker.roles role
+  // (Finance Manager) and the checker an ingest.checker.roles role (CFC) — the
+  // SAME disjoint SoD sets the service enforces. maker ≠ checker re-enforced too.
+  const makers = await cfg.getRoleSet(maker.company_id, 'ingest.maker.roles', '');
+  const checkers = await cfg.getRoleSet(checker.company_id, 'ingest.checker.roles', '');
+  if (!makers.has(maker.role_code)) throw new Error(`maker role ${maker.role_code} is not in ingest.maker.roles — refused`);
+  if (!checkers.has(checker.role_code)) throw new Error(`checker role ${checker.role_code} is not in ingest.checker.roles — refused`);
 
   const makerSession = { company_id: maker.company_id, user_id: maker.id, role_code: maker.role_code };
   const checkerSession = { company_id: checker.company_id, user_id: checker.id, role_code: checker.role_code };

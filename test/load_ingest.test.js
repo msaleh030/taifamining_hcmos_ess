@@ -31,7 +31,7 @@ test('load-ingest: dry-run stages nothing; role + same-user guards hold; --commi
   const base = { kind: 'opening-balance', csvPath: csv, controlPath: ctl };
 
   // Dry-run (default): preview + exception report only — nothing staged or loaded.
-  const prev = await runLoad({ ...base, makerEmail: F.USERS.DIRECTOR_A.email, checkerEmail: F.USERS.ADMIN_A.email });
+  const prev = await runLoad({ ...base, makerEmail: F.USERS.FINMGR_A.email, checkerEmail: F.USERS.CFC_A.email });
   assert.equal(prev.committed, false);
   assert.equal(prev.clean, 2);
   assert.equal(prev.control_ok, true);
@@ -40,13 +40,13 @@ test('load-ingest: dry-run stages nothing; role + same-user guards hold; --commi
 
   // Guards: same-user maker/checker refused; a non-ingest role refused.
   await assert.rejects(runLoad({ ...base, commit: true,
-    makerEmail: F.USERS.DIRECTOR_A.email, checkerEmail: F.USERS.DIRECTOR_A.email }), /maker-checker|DIFFERENT/i);
+    makerEmail: F.USERS.FINMGR_A.email, checkerEmail: F.USERS.FINMGR_A.email }), /maker-checker|DIFFERENT/i);
   await assert.rejects(runLoad({ ...base, commit: true,
-    makerEmail: F.USERS.HR_A.email, checkerEmail: F.USERS.ADMIN_A.email }), /ingest\.roles/);
+    makerEmail: F.USERS.HR_A.email, checkerEmail: F.USERS.CFC_A.email }), /ingest\.maker\.roles/);
 
   // Commit: maker (R11) submits, checker (R12) approves → the opening bucket.
   const res = await runLoad({ ...base, commit: true,
-    makerEmail: F.USERS.DIRECTOR_A.email, checkerEmail: F.USERS.ADMIN_A.email });
+    makerEmail: F.USERS.FINMGR_A.email, checkerEmail: F.USERS.CFC_A.email });
   try {
     assert.equal(res.committed, true);
     assert.equal(res.loaded, 2);

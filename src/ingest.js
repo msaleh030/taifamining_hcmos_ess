@@ -164,10 +164,22 @@ async function commit(session, kind, body = {}, opts = {}) {
   return body.batch_id ? approve(session, kind, body, opts) : submit(session, kind, body);
 }
 
+// v1.5 LI-6: role-differentiated maker/checker (SoD on disjoint roles) — the
+// endpoint's ingest.roles union gets you in the door; the LEG you may perform is
+// decided here. Finance Manager (ingest.maker.roles) submits; the CFC
+// (ingest.checker.roles) approves. Same-user-403 still applies on top.
+async function requireLegRole(exec, session, key, leg) {
+  const set = await cfg.getRoleSet(session.company_id, key, '', exec);
+  if (!set.has(session.role_code)) {
+    throw new HttpError(403, `${leg} requires a role in ${key} (SoD: maker and checker are disjoint roles)`);
+  }
+}
+
 // SUBMIT (maker): stage the batch; writes NOTHING to the live owed tables.
 async function submit(session, kind, body) {
   const rows = Array.isArray(body.rows) ? body.rows : [];
   return db.withTenant(session.company_id, async (c) => {
+    await requireLegRole(c, session, 'ingest.maker.roles', 'submit');
     const results = await evaluate(c, session.company_id, kind, rows);
     const clean = results.filter((r) => r.status === 'clean');
     const exceptions = results.filter((r) => r.status === 'exception');
@@ -190,9 +202,10 @@ async function submit(session, kind, body) {
   });
 }
 
-// APPROVE (checker): distinct user, control-totals gate, ATOMIC live write.
+// APPROVE (checker): checker role, distinct user, control-totals gate, ATOMIC write.
 async function approve(session, kind, body, opts = {}) {
   return db.withTenant(session.company_id, async (c) => {
+    await requireLegRole(c, session, 'ingest.checker.roles', 'approve');
     const b = (await c.query('SELECT * FROM ingest_batch WHERE id=$1', [body.batch_id])).rows[0];
     if (!b) throw new HttpError(404, 'batch not found');
     if (b.kind !== kind) throw new HttpError(400, 'batch kind mismatch');

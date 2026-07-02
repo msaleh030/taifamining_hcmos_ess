@@ -132,8 +132,8 @@ test('17.3 maker-checker: pending does not mutate; maker≠checker enforced; app
 });
 
 // ── Section 17.4: no-directory roles blocked server-side ───────────────────
-test('17.4 no-directory roles (R08/R09/R12/R13) get 403 on every /employees route', async () => {
-  for (const u of [F.USERS.FIN_A, F.USERS.PAYMGR_A, F.USERS.ADMIN_A, F.USERS.FIELD_A]) {
+test('17.4 no-directory roles (R12/R13/R15/R16) get 403 on every /employees route', async () => {
+  for (const u of [F.USERS.CFC_A, F.USERS.FINMGR_A, F.USERS.ADMIN_A, F.USERS.FIELD_A]) {
     const s = await H.loginConsole(u);
     const list = await H.req('GET', '/employees', { token: s.body.token });
     const one = await H.req('GET', `/employees/${F.EMP.CAROL}`, { token: s.body.token });

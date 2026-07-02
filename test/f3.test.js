@@ -72,9 +72,9 @@ test('liability endpoint: figure from the single base, missing→not-available, 
     const hrMgr = await tok(F.USERS.HR2_A); // R04 — HAS 'reports', ∉ a3.pay.roles
     assert.equal((await H.req('GET', `/liability/batch/${setup.batchId}`, { token: hrMgr })).status, 403,
       'reports-module role without pay-visibility is refused the liability register');
-    const finance = await tok(F.USERS.FIN_A); // R08 — HAS 'reports' AND 'payroll' modules, ∉ a3.pay.roles
-    assert.equal((await H.req('GET', `/liability/batch/${setup.batchId}`, { token: finance })).status, 403,
-      'even the payroll-module role is refused unless it is in the pay-visibility set');
+    const ceo = await tok(F.USERS.CEO_A); // R14 — org-wide reports oversight, ∉ a3.pay.roles (v1.5)
+    assert.equal((await H.req('GET', `/liability/batch/${setup.batchId}`, { token: ceo })).status, 403,
+      'even org-wide oversight is refused unless it is in the pay-visibility set');
   } finally {
     await owner(`DELETE FROM leave_carry WHERE id=$1`, [setup.carryId]);
     await owner(`DELETE FROM exact_batch WHERE id=$1`, [setup.batchId]); // cascades exact_row

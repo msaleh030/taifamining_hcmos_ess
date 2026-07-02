@@ -3,7 +3,7 @@
 // REGISTERS carry the C16 pay-visibility gate (a3.pay.roles), NOT the broad
 // 'reports' module — a report inherits the gate of its data. Proven at the
 // endpoint: pay-visibility roles get the register; a site role (R03), a reports-
-// module role (R04), and even a payroll-module role (R08) are all 403 unless they
+// module role (R04), and even the CEO (R14, org-wide oversight) are all 403 unless they
 // are in the pay-visibility set. The catalogue hides financial entries from non-pay.
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
@@ -53,7 +53,7 @@ test('C17 registers inherit the C16 pay-gate server-side; catalogue hides financ
     for (const [user, who] of [
       [F.USERS.HR_A, 'R03 site HR (no reports module)'],
       [F.USERS.HR2_A, 'R04 HR Manager (has reports, not pay)'],
-      [F.USERS.FIN_A, 'R08 Finance (has reports + payroll, not pay)'],
+      [F.USERS.CEO_A, 'R14 CEO (has reports, org-wide oversight, not pay)'],
     ]) {
       const t = await tok(user);
       assert.equal((await H.req('GET', payReg, { token: t })).status, 403, `payroll register 403 for ${who}`);

@@ -39,15 +39,18 @@ const DEFAULT_CONFIG = {
   'field.default.role':     'R13',
 
   // ── Slice 2: Employee Master ──────────────────────────────────────────────
-  // A3 confidential-field visibility (role lists). [TBC] 4 July: +R08 pay, +R11
+  // A3 confidential-field visibility (role lists). [TBC] 4 July: +R11
   // medical — kept OUT by default (conservative least privilege), flip in config.
-  'a3.pay.roles':          'R07,R09,R11',
+  // v1.5 LI-3: R09 removed; Finance Manager (R15) + CFC (R16) see pay/bank.
+  'a3.pay.roles':          'R07,R11,R15,R16',
   // v1.5 LI-5 (OPEN): R03 added (HR Officer absorbs clinic/medical), R10 removed.
   'a3.medical.roles':      'R03,R05,R06',
   'a3.disciplinary.roles': 'R05,R06,R07,R11',
 
   // Roles with NO directory access at all (server returns 403 on /employees*).
-  'directory.deny.roles':  'R08,R09,R12,R13',
+  // v1.5: R08/R09 retired; the finance class (R15/R16) stays directory-denied
+  // like its predecessors (finance manages money, not people). Confirm at UAT.
+  'directory.deny.roles':  'R12,R13,R15,R16',
 
   // ── Disciplinary (Slice 4, SoD matrix per registry RTL/CR/TM/001/2026) ────
   // Issuer and checker role-sets are DISJOINT, so a permitted issuer and a
@@ -189,11 +192,16 @@ const DEFAULT_CONFIG = {
   // faithful-rule-correct as-is; ratify. Pinned by test/f7.test.js.
   'alerts.view.roles':        'R03,R04,R05,R06,R11,R12',
   // Opening-Balance & Document Ingestion — the HIGHEST-privilege load path (it
-  // writes the owed numbers). Restricted to the high-authority lead set (HR
-  // Director R11 + System Admin R12), NOT general HR; two DISTINCT users of this
-  // set act as maker + checker. POLICY VALUE pinned by test/ingest.test.js;
-  // UAT-ratifiable (do not change without Kira).
-  'ingest.roles':             'R11,R12',
+  // writes the owed numbers). v1.5 LI-6: the maker/checker split is a REAL SoD
+  // control on DISJOINT roles (the disciplinary issuer/checker pattern):
+  //   maker (submit)  = Finance Manager (R15) — operates the ingestion;
+  //   checker (approve)= Chief Financial Controller (R16) — approves the commit;
+  // plus the same-user-403 rule on top. ingest.roles is the UNION (the endpoint
+  // gate); the per-leg sets are enforced in the service. POLICY VALUES pinned by
+  // test/ingest.test.js + test/roles_v15.test.js; do not change without Kira.
+  'ingest.roles':             'R15,R16',
+  'ingest.maker.roles':       'R15',
+  'ingest.checker.roles':     'R16',
   // Controls & Checker / audit view — the AUD/SOD oversight set: HR Director
   // (R11, exec oversight) + System Administrator (R12). No one else reads the
   // SoD-breach / leaver-access / audit-chain evidence. UAT: confirm AUD/SOD
@@ -221,7 +229,6 @@ const DEFAULT_CONFIG = {
 
   // ── Pending governance refinements (registered so they are gated, not silently
   //    defaulted; nothing reads these until a value is set) ───────────────────
-  'pending.a3.r08_pay':       PENDING,     // A3: R08 pay visibility
   'pending.a3.r11_medical':   PENDING,     // A3: R11 CEO medical
   'pending.a3.r05_scope':     PENDING,     // A3: R05 HR scope (central vs site)
   'jml.probation':            PENDING,     // JML-3 [TBC]
@@ -236,7 +243,8 @@ const DEFAULT_CONFIG = {
 // scoped=true by decision; flip in the table if governance says central.
 const SITE_SCOPE = {
   R01: true,  R02: true,  R03: true,  R04: true,  R05: true,  R06: true,
-  R07: false, R08: false, R09: false, R11: false, R12: false, R13: false,
+  R07: false, R11: false, R12: false, R13: false,
+  R15: false, R16: false, // finance roles — central (v1.5)
   R14: false, // CEO/Executive — org-wide oversight, never site-scoped (v1.5)
 };
 
