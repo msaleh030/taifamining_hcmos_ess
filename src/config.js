@@ -42,7 +42,8 @@ const DEFAULT_CONFIG = {
   // A3 confidential-field visibility (role lists). [TBC] 4 July: +R08 pay, +R11
   // medical — kept OUT by default (conservative least privilege), flip in config.
   'a3.pay.roles':          'R07,R09,R11',
-  'a3.medical.roles':      'R05,R06,R10',
+  // v1.5 LI-5 (OPEN): R03 added (HR Officer absorbs clinic/medical), R10 removed.
+  'a3.medical.roles':      'R03,R05,R06',
   'a3.disciplinary.roles': 'R05,R06,R07,R11',
 
   // Roles with NO directory access at all (server returns 403 on /employees*).
@@ -170,8 +171,11 @@ const DEFAULT_CONFIG = {
   // UAT ratification, but these ARE the values, not placeholders).
   'doc.notify.role.contract': 'R05',       // HR Officer
   'doc.notify.role.permit':   'R06',       // Project HR
-  'doc.notify.role.licence':  'R10',       // SHEQ
-  'doc.notify.role.medical':  'R10',       // SHEQ
+  // v1.5 LI-2: R10 removed. Licence (SHEQ-owned) → R06 HSE/Medical Manager;
+  // medical → R03 HR Officer (absorbs clinic/medical admin). Reassigned per the
+  // registry intent — confirm both at the UAT design reconciliation.
+  'doc.notify.role.licence':  'R06',       // HSE / Medical Manager (was R10)
+  'doc.notify.role.medical':  'R03',       // HR Officer (was R10)
   // Support ticket channels (ES-5).
   'support.channels':         'in_app,email',
   // ── F7 guards (Slice 9 modules exposed over HTTP). All four are APPLIED,
@@ -179,11 +183,11 @@ const DEFAULT_CONFIG = {
   //    real values that apply now, NOT [TBC]-gated. Each guard is pinned by a test.
   //
   // Document-expiry alerts → document-compliance owners: the DA-2 notified roles
-  // (R05/R06/R10) + the HR line and admin oversight. DELIBERATELY not reports-
-  // scoped: R10 (clinic) receives medical/licence alerts but has no reports module,
-  // so a reports guard would wrongly exclude a DA-2 recipient. UAT: faithful-rule-
-  // correct as-is; ratify. Pinned by test/f7.test.js.
-  'alerts.view.roles':        'R03,R04,R05,R06,R10,R11,R12',
+  // (R03/R05/R06 after v1.5) + the HR line and admin oversight. DELIBERATELY not
+  // reports-scoped: R03 (HR Officer, a DA-2 recipient since v1.5) has no reports
+  // module, so a reports guard would wrongly exclude a DA-2 recipient. UAT:
+  // faithful-rule-correct as-is; ratify. Pinned by test/f7.test.js.
+  'alerts.view.roles':        'R03,R04,R05,R06,R11,R12',
   // Opening-Balance & Document Ingestion — the HIGHEST-privilege load path (it
   // writes the owed numbers). Restricted to the high-authority lead set (HR
   // Director R11 + System Admin R12), NOT general HR; two DISTINCT users of this
@@ -232,7 +236,8 @@ const DEFAULT_CONFIG = {
 // scoped=true by decision; flip in the table if governance says central.
 const SITE_SCOPE = {
   R01: true,  R02: true,  R03: true,  R04: true,  R05: true,  R06: true,
-  R07: false, R08: false, R09: false, R10: false, R11: false, R12: false, R13: false,
+  R07: false, R08: false, R09: false, R11: false, R12: false, R13: false,
+  R14: false, // CEO/Executive — org-wide oversight, never site-scoped (v1.5)
 };
 
 // Cached per-tenant reads are unnecessary here; config_get is a cheap indexed

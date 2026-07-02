@@ -233,7 +233,7 @@ async function documents(session, id) {
       const mySite = await requesterSite(client, session);
       if (!mySite || emp.site_id !== mySite) throw new HttpError(404, 'not found');
     }
-    const medSet = await cfg.getRoleSet(session.company_id, 'a3.medical.roles', 'R05,R06,R10');
+    const medSet = await cfg.getRoleSet(session.company_id, 'a3.medical.roles', 'R03,R05,R06');
     const canMedical = medSet.has(session.role_code);
     const sql = canMedical
       ? `SELECT id, kind, name, valid_until, uri FROM employee_document WHERE employee_id=$1 ORDER BY kind, name`

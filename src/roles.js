@@ -24,17 +24,26 @@ const MODULES = [
 const LANDING = {
   R01: { name: 'Employee (Self-Service)', modules: ['dashboard', 'profile', 'leave', 'timesheet', 'training'] },
   R02: { name: 'Supervisor',              modules: ['dashboard', 'profile', 'leave', 'timesheet', 'performance', 'reports'] },
-  R03: { name: 'HR Officer',              modules: ['dashboard', 'profile', 'leave', 'recruitment', 'training'] },
+  // v1.5 LI-2: HR Officer ABSORBS clinic/medical administration (R10 removed) —
+  // hence health_safety/medical/permits. Flagged for design reconciliation at UAT.
+  R03: { name: 'HR Officer',              modules: ['dashboard', 'profile', 'leave', 'recruitment', 'training', 'health_safety', 'medical', 'permits'] },
   R04: { name: 'HR Manager',              modules: ['dashboard', 'profile', 'leave', 'recruitment', 'training', 'performance', 'reports'] },
   R05: { name: 'HSE Officer',             modules: ['dashboard', 'health_safety', 'permits', 'disciplinary', 'reports'] },
   R06: { name: 'HSE / Medical Manager',   modules: ['dashboard', 'health_safety', 'permits', 'medical', 'disciplinary', 'reports'] },
   R07: { name: 'Payroll Officer',         modules: ['dashboard', 'payroll', 'disciplinary', 'reports'] },
   R08: { name: 'Finance Officer',         modules: ['dashboard', 'finance', 'payroll', 'reports'] },
   R09: { name: 'Payroll Manager',         modules: ['dashboard', 'payroll', 'finance', 'reports'] },
-  R10: { name: 'Clinic / Medical Staff',  modules: ['dashboard', 'health_safety', 'medical', 'permits'] },
+  // R10 (Clinic / Medical Staff) REMOVED — registry v1.5 LI-2: Taifa has no
+  // separate clinic staff; HR Officer (R03) absorbs clinic/medical administration.
   R11: { name: 'HR Director',             modules: ['dashboard', 'profile', 'payroll', 'performance', 'disciplinary', 'reports'] },
   R12: { name: 'System Administrator',    modules: ['dashboard', 'admin', 'reports'] },
   R13: { name: 'Field Operator',          modules: ['field_ops', 'timesheet'] },
+  // v1.5: CEO / Executive — READ-ONLY organisation-wide oversight (all sites, not
+  // site-scoped). Deliberately NOT in ACTIONS (no admin/payroll/approve powers)
+  // and NOT in FIELD_RULES.pay_grade/bank_account: per LI-4 (pending confirm) the
+  // CEO sees aggregates/reports, NOT individual pay — pinned by test; do not add
+  // pay visibility without Kira. Flagged for design reconciliation at UAT.
+  R14: { name: 'CEO / Executive',         modules: ['dashboard', 'reports'] },
 };
 
 // A3 confidential profile fields -> roles permitted to SEE them. Any field not
@@ -42,8 +51,11 @@ const LANDING = {
 const FIELD_RULES = {
   pay_grade:    ['R07', 'R09', 'R11'],   // pay/bank
   bank_account: ['R07', 'R09', 'R11'],   // pay/bank
-  medical_notes:['R05', 'R06', 'R10'],   // medical/permits
-  permits:      ['R05', 'R06', 'R10'],   // medical/permits
+  // v1.5 LI-5 (OPEN — held for Kira's ratify): R03 added because HR Officer now
+  // does clinic/medical administration. This WIDENS medical visibility to all HR
+  // Officers — a confidentiality-boundary change, pinned by test/roles_v15.test.js.
+  medical_notes:['R03', 'R05', 'R06'],   // medical/permits (R10 removed, v1.5)
+  permits:      ['R03', 'R05', 'R06'],   // medical/permits (R10 removed, v1.5)
   disciplinary: ['R05', 'R06', 'R07', 'R11'],
 };
 

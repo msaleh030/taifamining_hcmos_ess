@@ -197,7 +197,7 @@ const routes = [
 
   // ── F7: Document-expiry alerts (DA-1/DA-2). Guarded to the document-compliance
   // owners (alerts.view.roles) — the DA-2 notified roles + HR/admin oversight;
-  // faithful to who OWNS documents, not the broad reports set (R10 has no reports
+  // faithful to who OWNS documents, not the broad reports set (R03 has no reports
   // but IS a DA-2 role).
   { method: 'POST', pattern: /^\/alerts\/run$/, allow: 'alerts.view.roles',
     handler: async (req, m, url, s) => ({ status: 200, body: await docalerts.runExpiryAlerts(s, (await readJson(req)).asOf) }) },

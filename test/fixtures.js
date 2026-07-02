@@ -86,7 +86,7 @@ const USERS = {
   DIRECTOR_A: { id: 'd0000000-0000-0000-0000-000000000011', company: TENANT_A, employee: EMP.ALICE, email: 'director@a.example', password: 'DirPass!2026',   role: 'R11', status: 'active' }, // central
   HSE_A:      { id: 'd0000000-0000-0000-0000-000000000006', company: TENANT_A, employee: EMP.ALICE, email: 'hse@a.example',      password: 'HsePass!2026',   role: 'R06', status: 'active' }, // medical+disciplinary
   HSE5_A:     { id: 'd0000000-0000-0000-0000-000000000005', company: TENANT_A, employee: EMP.ALICE, email: 'hse5@a.example',     password: 'Hse5Pass!2026',  role: 'R05', status: 'active' }, // medical (Section 17.1)
-  CLINIC_A:   { id: 'd0000000-0000-0000-0000-000000000010', company: TENANT_A, employee: EMP.ALICE, email: 'clinic@a.example',   password: 'ClinPass!2026',  role: 'R10', status: 'active' }, // central medical
+  CEO_A:      { id: 'd0000000-0000-0000-0000-000000000014', company: TENANT_A, employee: EMP.ALICE, email: 'ceo@a.example',      password: 'CeoPass!2026',   role: 'R14', status: 'active' }, // v1.5 CEO/Executive (read-only oversight)
   EMP_A:      { id: 'd0000000-0000-0000-0000-000000000001', company: TENANT_A, employee: EMP.ALICE, email: 'emp@a.example',      password: 'EmpPass!2026',   role: 'R01', status: 'active' },
   FIN_A:      { id: 'd0000000-0000-0000-0000-000000000008', company: TENANT_A, employee: EMP.ALICE, email: 'fin@a.example',      password: 'FinPass!2026',   role: 'R08', status: 'active' }, // no directory
   PAYMGR_A:   { id: 'd0000000-0000-0000-0000-000000000009', company: TENANT_A, employee: EMP.ALICE, email: 'paymgr@a.example',   password: 'PmgrPass!2026',  role: 'R09', status: 'active' }, // no directory

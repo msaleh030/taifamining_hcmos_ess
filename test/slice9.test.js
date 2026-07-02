@@ -85,7 +85,7 @@ test('an expiring document raises an alert to the DA-2 role and clears on renewa
 // ── 2b. Each document type routes to its APPLIED DA-2 registry role ──────────
 test('expiry alerts route each document type to its registry DA-2 role', async () => {
   // valid_until 2026-07-10 is within every DA-1 lead window at this asOf.
-  const expected = { contract: 'R05', permit: 'R06', licence: 'R10', medical: 'R10' };
+  const expected = { contract: 'R05', permit: 'R06', licence: 'R06', medical: 'R03' };
   const ids = {};
   for (const kind of Object.keys(expected)) {
     ids[kind] = (await owner(
