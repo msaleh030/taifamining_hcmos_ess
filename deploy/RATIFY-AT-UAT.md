@@ -35,7 +35,7 @@ Kira; a drifted value fails CI.
 | LR-6 coverage thresholds | client | `leave.coverage.thresholds` [TBC] — blocks |
 | PC-2 partial period | client | `payroll.partial_period` [TBC] — blocks |
 | Emp-no rollover >9999 | governance | Generator refuses to overflow |
-| A3 refinements (R08 pay, R11 medical, R05 scope) | 4-July return | `pending.a3.*` [TBC] |
+| A3 refinements (R11 medical, R05 scope) | 4-July return | `pending.a3.*` [TBC] (r08_pay removed — superseded by v1.5 LI-3 finance pay visibility) |
 | HSEQ competency (SQ-3), asset owner, ES-1/ES-4, JML-3 | governance | Each [TBC] — blocks at use |
 | `exact.reconciliation` (full-period EXACT-07) | first populated period | Full control-totals reconciliation gated (per-row net check runs now) |
 
