@@ -1,11 +1,14 @@
 'use strict';
-// Leave service — currently the LR-4 carry-forward lapse nightly job.
+// Leave service — balances, applications, and the GOING-FORWARD carry rule.
 //
-// LR-3 (calendar-year) + LR-4 (carry lapses after a configurable number of
-// years; = 1, CHANGED from 2). The lapse window is read from the registry
-// per request — nothing here hard-codes "1" (or "2"). A carried entry for year Y
-// remains usable through the end of year Y + lapse_years and lapses thereafter.
-// The window value (1) is pinned by test/leave.test.js, not by this comment.
+// v1.5 LR-4/LR-8/LR-9 (REPLACES the old flat one-year lapse): at each employee's
+// EMPLOYMENT ANNIVERSARY carried annual leave is capped at leave.carry.cap_days
+// (excess forfeited then); at anniversary + leave.carry.grace_months any carried
+// days still UNUSED are forfeited (days taken since the anniversary survive —
+// they were spent, never clawed back). The opening bucket (opening_bucket=true)
+// is EXEMPT — never touched — until the carry policy lands (OB-5). Both policy
+// values (10 days / 3 months) live in the registry and are pinned by
+// test/leave.test.js — do not change without Kira.
 const db = require('./db');
 const cfg = require('./config');
 const { HttpError } = require('./errors');
@@ -24,35 +27,121 @@ const takenOf = async (c, empId, type) => Number((await c.query(
   `SELECT coalesce(sum(days),0)::float8 d FROM leave_request WHERE employee_id=$1 AND leave_type=$2 AND ${OPEN}`,
   [empId, type])).rows[0].d);
 
-// Run the nightly carry-lapse for one tenant, as of `asOf` (a YYYY-MM-DD string;
-// injected so the job is deterministic and testable rather than clock-bound).
-// Marks every still-open carry whose window has closed as lapsed, on the audit
-// chain. Returns the rows it lapsed.
-async function lapseCarry(companyId, asOf) {
+// ── Date helpers for the anniversary math (pure string arithmetic on
+// 'YYYY-MM-DD'; day clamped so 29 Feb / month-length overflows land on the last
+// valid day, matching Postgres interval semantics). ─────────────────────────
+const daysInMonth = (y, m) => new Date(Date.UTC(y, m, 0)).getUTCDate(); // m is 1-based
+const iso = (y, m, d) => `${String(y).padStart(4, '0')}-${String(m).padStart(2, '0')}-${String(Math.min(d, daysInMonth(y, m))).padStart(2, '0')}`;
+
+// The most recent employment anniversary on or before asOf, and its cycle year.
+function anniversaryOf(joined, asOf) {
+  const [jy, jm, jd] = joined.slice(0, 10).split('-').map(Number);
+  let y = Number(asOf.slice(0, 4));
+  if (iso(y, jm, jd) > asOf) y -= 1;
+  if (y <= jy) y = jy + 1; // the first anniversary is one year after joining
+  const ann = iso(y, jm, jd);
+  return ann <= asOf ? { cycleYear: y, anniversary: ann } : null;
+}
+
+function addMonths(dateStr, months) {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const total = (m - 1) + months;
+  return iso(y + Math.floor(total / 12), (total % 12) + 1, d);
+}
+
+// Forfeit `amount` carried days FIFO (oldest carried_for_year first) across the
+// employee's OPEN, NON-OPENING carry rows. A row drawn to zero is closed
+// (lapsed_at set); a partially drawn row keeps its remainder.
+async function forfeitFifo(c, employeeId, amount, asOf) {
+  let left = amount;
+  const rows = (await c.query(
+    `SELECT id, days FROM leave_carry
+      WHERE employee_id=$1 AND lapsed_at IS NULL AND opening_bucket=false
+      ORDER BY carried_for_year, id`, [employeeId])).rows;
+  for (const r of rows) {
+    if (left <= 0) break;
+    const take = Math.min(Number(r.days), left);
+    const remain = round1(Number(r.days) - take);
+    if (remain <= 0) await c.query(`UPDATE leave_carry SET days=0, lapsed_at=$2::timestamptz WHERE id=$1`, [r.id, asOf]);
+    else await c.query(`UPDATE leave_carry SET days=$2 WHERE id=$1`, [r.id, remain]);
+    left = round1(left - take);
+  }
+}
+
+// ── v1.5 LR-4/LR-8/LR-9: the daily carry sweep (REPLACES the flat lapse). ────
+// Deterministic (asOf injected) and IDEMPOTENT: the leave_carry_sweep ledger
+// records one row per (employee, cycle, phase), so a re-run forfeits nothing.
+// Opening-bucket rows are exempt by construction (every query here filters
+// opening_bucket=false). Each forfeiture writes an audit row (employee, days,
+// reason, timestamp).
+async function carrySweep(companyId, asOf) {
   return db.withTenant(companyId, async (c) => {
-    // Registry-gated: lapse window must be a confirmed value (blocks if [TBC]).
-    const lapseYears = await cfg.getRequiredInt(companyId, 'leave.carry.lapse_years', c);
+    // Policy values from the registry — pinned by test/leave.test.js; BLOCK if unset.
+    const cap = await cfg.getRequiredInt(companyId, 'leave.carry.cap_days', c);
+    const graceMonths = await cfg.getRequiredInt(companyId, 'leave.carry.grace_months', c);
 
-    // A carry for year Y lapses once asOf's calendar year exceeds Y + lapseYears.
-    // OPENING BUCKET (OB-5): opening-balance rows are a PROTECTED bucket, EXEMPT
-    // from the lapse until the carry policy is decided — never lapsed here.
-    const r = await c.query(
-      `UPDATE leave_carry
-          SET lapsed_at = $1::timestamptz
-        WHERE lapsed_at IS NULL
-          AND opening_bucket = false
-          AND carried_for_year + $2 < EXTRACT(YEAR FROM $1::date)
-        RETURNING id, employee_id, days, carried_for_year`,
-      [asOf, lapseYears]);
+    // Employees with an employment date on record AND open non-opening carry.
+    const emps = (await c.query(
+      `SELECT DISTINCT e.id, e.joined_at::text AS joined FROM employee e
+         JOIN leave_carry lc ON lc.employee_id = e.id
+        WHERE e.joined_at IS NOT NULL AND lc.lapsed_at IS NULL AND lc.opening_bucket=false`)).rows;
 
-    for (const row of r.rows) {
-      await c.query('SELECT audit_append($1,$2,$3,$4,$5,$6,$7,$8)', [
-        companyId, 'system@nightly', 'SYS', 'leave.carry.lapse',
-        'leave_carry', row.id,
-        { days: Number(row.days), carried_for_year: row.carried_for_year },
-        { days: 0, lapsed: true }]);
+    const openOf = async (id) => Number((await c.query(
+      `SELECT coalesce(sum(days),0)::float8 d FROM leave_carry
+        WHERE employee_id=$1 AND lapsed_at IS NULL AND opening_bucket=false`, [id])).rows[0].d);
+    const ledgered = async (id, year, phase) => (await c.query(
+      `SELECT 1 FROM leave_carry_sweep WHERE employee_id=$1 AND cycle_year=$2 AND phase=$3`,
+      [id, year, phase])).rows.length > 0;
+    const audit = (empId, action, before, after) => c.query('SELECT audit_append($1,$2,$3,$4,$5,$6,$7,$8)', [
+      companyId, 'system@nightly', 'SYS', action, 'leave_carry', empId, before, after]);
+
+    const processed = [];
+    for (const e of emps) {
+      const cycle = anniversaryOf(e.joined, asOf);
+      if (!cycle) continue; // no anniversary reached yet
+      const { cycleYear, anniversary } = cycle;
+
+      // Phase 1 (LR-8): AT the anniversary, cap carried days at `cap`.
+      if (!(await ledgered(e.id, cycleYear, 'cap'))) {
+        const open = await openOf(e.id);
+        const excess = round1(Math.max(0, open - cap));
+        if (excess > 0) {
+          await forfeitFifo(c, e.id, excess, asOf);
+          await audit(e.id, 'leave.carry.cap',
+            { carried: open, cap },
+            { carried: round1(open - excess), forfeited: excess, reason: `carry capped at ${cap}d at anniversary ${anniversary}`, as_of: asOf });
+        }
+        await c.query(
+          `INSERT INTO leave_carry_sweep (company_id, employee_id, cycle_year, phase, days_forfeited)
+           VALUES ($1,$2,$3,'cap',$4)`, [companyId, e.id, cycleYear, excess]);
+        processed.push({ employee_id: e.id, cycle_year: cycleYear, phase: 'cap', forfeited: excess });
+      }
+
+      // Phase 2 (LR-9): at anniversary + grace, forfeit carried days still UNUSED.
+      // Days taken since the anniversary count as consumed carry (used days
+      // survive — never clawed back); only the remainder is forfeited.
+      const graceEnd = addMonths(anniversary, graceMonths);
+      if (asOf >= graceEnd && !(await ledgered(e.id, cycleYear, 'forfeit'))) {
+        const open = await openOf(e.id);
+        const taken = Number((await c.query(
+          `SELECT coalesce(sum(days),0)::float8 d FROM leave_request
+            WHERE employee_id=$1 AND leave_type='annual' AND ${OPEN}
+              AND applied_at >= $2::date AND applied_at::date <= $3::date`,
+          [e.id, anniversary, asOf])).rows[0].d);
+        const unused = round1(Math.max(0, open - taken));
+        if (unused > 0) {
+          await forfeitFifo(c, e.id, unused, asOf);
+          await audit(e.id, 'leave.carry.forfeit',
+            { carried: open, taken_since_anniversary: taken },
+            { carried: round1(open - unused), forfeited: unused, reason: `unused carry forfeited at anniversary+${graceMonths}mo (${graceEnd})`, as_of: asOf });
+        }
+        await c.query(
+          `INSERT INTO leave_carry_sweep (company_id, employee_id, cycle_year, phase, days_forfeited)
+           VALUES ($1,$2,$3,'forfeit',$4)`, [companyId, e.id, cycleYear, unused]);
+        processed.push({ employee_id: e.id, cycle_year: cycleYear, phase: 'forfeit', forfeited: unused });
+      }
     }
-    return { lapsed: r.rows, lapse_years: lapseYears, as_of: asOf };
+    return { as_of: asOf, cap_days: cap, grace_months: graceMonths, processed };
   });
 }
 
@@ -128,4 +217,4 @@ async function apply(session, input = {}) {
   });
 }
 
-module.exports = { lapseCarry, balance, apply };
+module.exports = { carrySweep, balance, apply };

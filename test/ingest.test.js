@@ -26,6 +26,7 @@ async function purge(pfs, batchIds = []) {
   for (const pf of pfs) {
     const e = await empByPf(pf);
     if (e) {
+      await owner(`DELETE FROM leave_carry_sweep WHERE employee_id=$1`, [e.id]);
       await owner(`DELETE FROM leave_carry WHERE employee_id=$1`, [e.id]);
       await owner(`DELETE FROM employee_document WHERE employee_id=$1`, [e.id]);
       await owner(`DELETE FROM employee WHERE id=$1`, [e.id]);
@@ -155,33 +156,32 @@ test('OB-4 an injected mid-batch fault rolls back the whole load; a clean run co
   }
 });
 
-// ── OB-5: opening-bucket rows are exempt from the lapse sweep ─────────────────
-test('OB-5 opening-bucket carry is exempt from the LR-4 lapse; normal carry lapses', async () => {
+// ── OB-5: opening-bucket rows are exempt from the v1.5 carry sweep ───────────
+test('OB-5 opening-bucket carry is exempt from the carry sweep; normal carry on the same employee is forfeited', async () => {
   const maker = await tok(F.USERS.FINMGR_A);
   const checker = await tok(F.USERS.CFC_A);
-  // Opening balance dated 2020 → would be well past the 1-year lapse window.
-  const rows = [{ pf: '90040001', name: 'Lapse One', site: 'North Mara', accrued: 9, taken: 0, balance: 9, year: 2020 }];
+  // Opening balance of 9 days for a loaded employee.
+  const rows = [{ pf: '90040001', name: 'Sweep Exempt', site: 'North Mara', accrued: 9, taken: 0, balance: 9 }];
   const sub = await post(maker, OBC, { rows, control_totals: [{ site: 'North Mara', count: 1, sum_balance: 9 }] });
   const batchId = sub.body.batch_id;
   await post(checker, OBC, { batch_id: batchId });
-  // A NORMAL (non-opening) 2020 carry on a seeded employee, as the control that DOES lapse.
+  const e = await empByPf('90040001');
+  // Give the employee an employment date + a NORMAL carry row, so the sweep
+  // processes them: past anniversary+grace the normal carry is fully forfeited
+  // (nothing used) while the opening bucket must remain untouched.
+  await owner(`UPDATE employee SET joined_at='2020-01-15' WHERE id=$1`, [e.id]);
   const normalCarry = (await owner(
     `INSERT INTO leave_carry(company_id,employee_id,days,carried_for_year,opening_bucket)
-     VALUES ($1,$2,3,2020,false) RETURNING id`, [A, F.EMP.DAVE])).rows[0].id;
-  // lapseCarry acts on the WHOLE tenant, so snapshot every carry's lapsed_at and
-  // restore it afterwards — otherwise this test would lapse the seed carry that
-  // leave.test.js depends on being un-lapsed.
-  const snap = (await owner(`SELECT id, lapsed_at FROM leave_carry WHERE company_id=$1`, [A])).rows;
+     VALUES ($1,$2,3,2025,false) RETURNING id`, [A, e.id])).rows[0].id;
   try {
-    const e = await empByPf('90040001');
-    await leave.lapseCarry(A, '2026-07-01');
-    const opening = (await owner(`SELECT lapsed_at FROM leave_carry WHERE employee_id=$1`, [e.id])).rows[0];
-    assert.equal(opening.lapsed_at, null, 'opening-bucket row NOT lapsed');
+    await leave.carrySweep(A, '2026-07-01'); // anniversary 2026-01-15; grace end 2026-04-15 → both phases run
+    const opening = (await owner(
+      `SELECT days, lapsed_at FROM leave_carry WHERE employee_id=$1 AND opening_bucket=true`, [e.id])).rows[0];
+    assert.equal(Number(opening.days), 9, 'opening-bucket days untouched');
+    assert.equal(opening.lapsed_at, null, 'opening-bucket row NOT forfeited by either phase');
     const normal = (await owner(`SELECT lapsed_at FROM leave_carry WHERE id=$1`, [normalCarry])).rows[0];
-    assert.notEqual(normal.lapsed_at, null, 'a normal 2020 carry DID lapse (control)');
+    assert.notEqual(normal.lapsed_at, null, 'the normal carry on the SAME employee was forfeited (control)');
   } finally {
-    for (const row of snap) await owner(`UPDATE leave_carry SET lapsed_at=$2 WHERE id=$1`, [row.id, row.lapsed_at]);
-    await owner(`DELETE FROM leave_carry WHERE id=$1`, [normalCarry]);
     await purge(['90040001'], [batchId]);
   }
 });

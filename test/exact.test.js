@@ -155,10 +155,44 @@ test('EX-2 base is name-keyed — excluded columns never enter it; Fixed Overtim
   const onlyFixedOtTransport = Array(N).fill('0');
   onlyFixedOtTransport[19] = '100'; onlyFixedOtTransport[20] = '100';
   assert.equal(await exact.dailyRateBase(session, onlyFixedOtTransport), 200, 'Fixed Overtime + Transport are included by name');
+
+  const grossOnly = Array(N).fill('0');
+  grossOnly[28] = '827000000'; // the mislabelled TOTAL ALLOWANCE (= GROSS) column
+  assert.equal(await exact.dailyRateBase(session, grossOnly), 0,
+    'v1.5: GROSS never enters the daily-rate base — mapping it as an allowance would double-count');
 });
 
 // ── Remaining [TBC]: full-period reconciliation still BLOCKS ─────────────────
 test('full-period reconciliation (AC-EXACT-07) is still gated', async () => {
   const staged = await exact.stage(session, { period: '2026-06-rec', grid: validGrid([dataRow('E-A-0001', 'Alice')]) });
   await assert.rejects(exact.reconcile(session, staged.batch_id), /pending governance/);
+});
+
+// ── v1.5 gross mapping (North Mara reconciliation): the mislabelled TOTAL
+// ALLOWANCE column IS GROSS, and the period foots on the identity
+// net = gross + round-up − total-deductions − round-down. The round columns are
+// [TBC] positions; this fixture sets them (43/30) for the test tenant and
+// restores the sentinel after. Pinned so the mapping cannot silently regress.
+test('v1.5 North Mara period reconciles: gross 551,896,561.41 − deductions 254,837,938.35 ∓ rounding = net 297,058,000.00', async () => {
+  const setCfg = (k, v) => db.withOwner((c) =>
+    c.query(`UPDATE config SET value=$1 WHERE company_id=$2 AND key=$3`, [v, A, k]));
+  await setCfg('exact.col.roundup', '43');
+  await setCfg('exact.col.rounddown', '30');
+  const staged = await exact.stage(session, { period: '2026-06-nm-recon', grid: validGrid([
+    dataRow('E-A-0001', 'NM-1', { 28: '200000000.00', 42: '100000000.00', 30: '500.00', 43: '0', 44: '99999500.00' }),
+    dataRow('E-A-0002', 'NM-2', { 28: '200000000.00', 42: '100000000.00', 30: '123.06', 43: '0', 44: '99999876.94' }),
+    dataRow('E-A-0051', 'NM-3', { 28: '151896561.41', 42: '54837938.35', 30: '0', 43: '0', 44: '97058623.06' }),
+  ]) });
+  try {
+    const nc = await exact.netCheckBatch(session, staged.batch_id);
+    assert.equal(nc.mismatches.length, 0, 'every row satisfies net = gross + ru − ded − rd against col AS');
+    const ctl = await exact.controlReport(session, staged.batch_id);
+    assert.equal(ctl.computed.gross, 551896561.41, 'period gross (the mislabelled col, mapped as gross)');
+    assert.equal(ctl.computed.total_deduction, 254837938.35, 'period deductions');
+    assert.equal(ctl.computed.net, 297058000.00, 'period NET foots exactly — the mapping cannot silently regress');
+  } finally {
+    await setCfg('exact.col.roundup', cfg.PENDING);
+    await setCfg('exact.col.rounddown', cfg.PENDING);
+    await db.withOwner((c) => c.query('DELETE FROM exact_batch WHERE id=$1', [staged.batch_id]));
+  }
 });

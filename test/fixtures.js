@@ -116,8 +116,10 @@ const BULK_COUNT = 5200;
 // Leave carry (LR-4). With lapse window = 1 year and a 2026 "as of" date: the
 // 2024 entry is past its window (lapses), the 2025 entry is still inside it.
 const LEAVE_CARRY = [
-  { company: TENANT_A, employee: EMP.CAROL, days: 5, year: 2024 }, // should lapse
-  { company: TENANT_A, employee: EMP.CAROL, days: 3, year: 2025 }, // should survive
+  // v1.5: the carry rule keys off the employment anniversary; CAROL has no
+  // joined_at, so these rows are INERT under the sweep (test fixtures only).
+  { company: TENANT_A, employee: EMP.CAROL, days: 5, year: 2024 },
+  { company: TENANT_A, employee: EMP.CAROL, days: 3, year: 2025 },
 ];
 
 module.exports = {

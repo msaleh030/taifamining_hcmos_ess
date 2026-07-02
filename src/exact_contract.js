@@ -48,7 +48,11 @@ const NAMED = {
   21: ['allowances', 'OVERTIME NORMAL', true],     // CONFIRMED — EXCLUDED from base
   24: ['allowances', 'OVERTIME HOLIDAY', true],    // CONFIRMED — EXCLUDED from base
   26: ['allowances', 'NIGHT SHIFT', true],         // CONFIRMED — EXCLUDED from base
-  28: ['allowances', 'TOTAL PAY', true],           // EX-4: renamed from TOTAL ALLOWANCE
+  // v1.5 (North Mara reconciliation, supersedes EX-4): the file's label at 28 is
+  // 'TOTAL ALLOWANCE' but the column is actually GROSS PAY (basic + ALL
+  // allowances). It is mapped as GROSS (exact.col.gross) — NEVER also summed with
+  // the individual allowance columns (double-count → the 827M nonsense gross).
+  28: ['totals', 'TOTAL ALLOWANCE', true],
   31: ['deductions', 'NSSF', true],
   32: ['deductions', 'PAYE', true],
   42: ['deductions', 'TOTAL DEDUCTION', true],

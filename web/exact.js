@@ -16,7 +16,7 @@ export function renderExact(el) {
         <input id="ex-period" placeholder="period (e.g. 2026-06)" />
         <textarea id="ex-csv" rows="6" placeholder="paste the Exact CSV export"></textarea>
         <fieldset><legend>declared control totals</legend>
-          <input id="ex-tp" inputmode="decimal" placeholder="total pay" />
+          <input id="ex-tp" inputmode="decimal" placeholder="gross (the TOTAL ALLOWANCE col)" />
           <input id="ex-td" inputmode="decimal" placeholder="total deduction" />
           <input id="ex-net" inputmode="decimal" placeholder="net" />
         </fieldset>
@@ -34,7 +34,7 @@ export function renderExact(el) {
     e.preventDefault();
     panel.innerHTML = '';
     const control_totals = {
-      total_pay: el.querySelector('#ex-tp').value.trim() || null,
+      gross: el.querySelector('#ex-tp').value.trim() || null, // v1.5: col 28 is GROSS
       total_deduction: el.querySelector('#ex-td').value.trim() || null,
       net: el.querySelector('#ex-net').value.trim() || null,
     };

@@ -20,6 +20,7 @@ Kira; a drifted value fails CI.
 | 9 | **LI-4** — CEO pay visibility (v1.5) | R14 CEO/Executive: read-only dashboard+reports, org-wide, **NO individual pay/medical** | **OPEN**: default is aggregates-only. Do NOT add R14 to pay field rules / a3.pay.roles without Kira | `roles_v15.test.js` |
 | 10 | **LI-3** — finance restructure (v1.5) | R08/R09 removed (rows migrated to R15); R15 Finance Manager + R16 CFC added; pay/bank = R07,R11,R15,R16; finance stays directory-denied | Confirm the merge, the pay set, the R08→R15/R09→R15 migration; and whether FM/CFC need DIRECTORY lookup (denied today, inherited from R08/R09 — Code's inference, held for UAT) | `roles_v15.test.js` |
 | 11 | **LI-6** — payroll.run + ingest SoD (v1.5) | `payroll.run` = R15,R16 (**R12 admin removed**); ingest maker=R15 / checker=R16 | Confirm admin-may-not-run-payroll and the finance maker/checker split | `roles_v15.test.js`, `ingest.test.js` |
+| 12 | **LR-8/LR-9** — carry policy values (v1.5) | cap **10 days** at the employment anniversary; forfeit unused at anniversary + **3 months**; opening bucket exempt | Confirm the 10-day cap and 3-month window (the flat one-year lapse is REPLACED) | `leave.test.js` |
 
 > **Design reconciliation (v1.5):** per `src/roles.js`'s standing caveat, the exact
 > module-per-role rows are a derivation — the v1.5 changes (R03's absorbed clinic
@@ -30,7 +31,7 @@ Kira; a drifted value fails CI.
 
 | Item | Owner | What is gated |
 |---|---|---|
-| **Carry policy** | Baraka | Opening-bucket rows stay lapse-EXEMPT; the bucket→normal-carry conversion is deliberately unbuilt |
+| **Carry policy (opening bucket)** | Baraka | The GOING-FORWARD rule is BUILT (v1.5 LR-4/8/9); opening-bucket rows stay EXEMPT and the bucket→normal-carry conversion stays deliberately unbuilt until Baraka decides |
 | **Duplicate-file question** | Baraka | Treatment of cross-file duplicate PFs beyond flagging to the exception report |
 | LR-6 coverage thresholds | client | `leave.coverage.thresholds` [TBC] — blocks |
 | PC-2 partial period | client | `payroll.partial_period` [TBC] — blocks |
@@ -38,6 +39,7 @@ Kira; a drifted value fails CI.
 | A3 refinements (R11 medical, R05 scope) | 4-July return | `pending.a3.*` [TBC] (r08_pay removed — superseded by v1.5 LI-3 finance pay visibility) |
 | HSEQ competency (SQ-3), asset owner, ES-1/ES-4, JML-3 | governance | Each [TBC] — blocks at use |
 | `exact.reconciliation` (full-period EXACT-07) | first populated period | Full control-totals reconciliation gated (per-row net check runs now) |
+| Exact round-up/round-down column positions | appendix | `exact.col.roundup` / `exact.col.rounddown` [TBC] — contribute 0 to the net identity until set; the identity + North Mara footing are pinned by fixture (`exact.test.js`) |
 
 ## C. Standing caveats
 

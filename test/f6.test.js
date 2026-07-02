@@ -129,7 +129,7 @@ test('EXACT-07 per-row net check runs at the endpoint (computed net == col AS)',
 // ── EXACT-08: atomic publish — an injected mid-publish fault commits nothing ──
 test('EXACT-08 publish is atomic: an injected fault rolls back; a clean run publishes once', async () => {
   const pay = await tok(F.USERS.FINMGR_A);
-  const up = await upload(pay, { period: '2026-06-f6-atomic', control_totals: { total_pay: 3000, total_deduction: 800, net: 2200 },
+  const up = await upload(pay, { period: '2026-06-f6-atomic', control_totals: { gross: 3000, total_deduction: 800, net: 2200 },
     csv: toCsv(validGrid([payRow('E-A-0001', 'A-atomic', 1000, 300, 700), payRow('E-A-0002', 'C-atomic', 2000, 500, 1500)])) });
   await post(pay, `/exact/batch/${up.body.batch_id}/reconcile`);
 
@@ -167,7 +167,7 @@ test('EXACT-09 a file whose control totals do not reconcile BLOCKS publish', asy
 // ── EXACT-10: published pay is READ-ONLY (re-publish refused; no mutation route) ─
 test('EXACT-10 a published batch is read-only — re-publish is refused, no endpoint mutates pay', async () => {
   const pay = await tok(F.USERS.FINMGR_A);
-  const up = await upload(pay, { period: '2026-06-f6-ro', control_totals: { total_pay: 1000, total_deduction: 300, net: 700 },
+  const up = await upload(pay, { period: '2026-06-f6-ro', control_totals: { gross: 1000, total_deduction: 300, net: 700 },
     csv: toCsv(validGrid([payRow('E-A-0001', 'A-ro', 1000, 300, 700)])) });
   await post(pay, `/exact/batch/${up.body.batch_id}/reconcile`);
   assert.equal((await post(pay, `/exact/batch/${up.body.batch_id}/publish`)).body.status, 'published');
@@ -191,7 +191,7 @@ test('EXACT-11 publish fan-out is per-leg; a scoped retry fixes ESS without doub
   const glCount = async (bid) => Number((await owner(`SELECT count(*)::int n FROM gl_posting WHERE batch_id=$1`, [bid])).rows[0].n);
   const essCount = async (bid) => Number((await owner(`SELECT count(*)::int n FROM ess_push WHERE batch_id=$1`, [bid])).rows[0].n);
 
-  const up = await upload(pay, { period: '2026-06-f6-legs', control_totals: { total_pay: 1000, total_deduction: 300, net: 700 },
+  const up = await upload(pay, { period: '2026-06-f6-legs', control_totals: { gross: 1000, total_deduction: 300, net: 700 },
     csv: toCsv(validGrid([payRow('E-A-0001', 'A-legs', 1000, 300, 700)])) });
   const bid = up.body.batch_id;
   await post(pay, `/exact/batch/${bid}/reconcile`);

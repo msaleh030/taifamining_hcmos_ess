@@ -45,6 +45,13 @@ UAT_COMPANY=11111111-1111-1111-1111-111111111111 UAT_EMAIL=cfc@taifamining.tz \
 UAT_NAME='<Chief Financial Controller>' UAT_ROLE=R16 UAT_SITE='Head Office' node scripts/provision-uat-user.js
 ```
 
+LI-7 — the SUPER ADMIN (R12, unscoped, MFA mandatory). INTERACTIVE: the password
+is typed hidden at the console and stored hash-only — never in repo/config/env,
+never printed. Enrol the printed otpauth in your authenticator (shown once):
+```
+UAT_COMPANY=11111111-1111-1111-1111-111111111111 node scripts/provision-super-admin.js mohammed@railgrid.tz
+```
+
 ## 5. Cloudflare — DNS + TLS + Access + cache  (→ I-1)  [your account]
 Follow `deploy/cloudflare-edge.md`:
 - Tunnel `hcmos-uat` → `http://localhost:3000`; `cloudflared tunnel route dns

@@ -92,9 +92,13 @@ const DEFAULT_CONFIG = {
 
   // ── Leave (LR-*) ──────────────────────────────────────────────────────────
   'leave.year.basis':         'calendar',  // LR-3 calendar-year
-  // LR-4 carry lapses after ONE year (CHANGED from 2). Value pinned by
-  // test/leave.test.js ('LR-4 nightly job lapses … window read from registry').
-  'leave.carry.lapse_years':  '1',
+  // v1.5 LR-4/LR-8/LR-9 — the GOING-FORWARD carry rule (REPLACES the flat
+  // one-year lapse): cap carried annual leave at cap_days at each employment
+  // anniversary; forfeit unused carry at anniversary + grace_months. The opening
+  // bucket is exempt (OB-5). POLICY VALUES pinned by test/leave.test.js — do not
+  // change without Kira.
+  'leave.carry.cap_days':     '10',        // LR-8 cap at anniversary
+  'leave.carry.grace_months': '3',         // LR-9 use-it-or-lose-it window
   'leave.max_continuous_days':'14',        // LR-5 max 14 continuous (HoH override, pinned by test/f3.test.js)
   'leave.entitlement.default':'21',        // LR-1 entitlement map (default grade)
   // LR-2 CONFIRMED (v1.4): entitlement WEEKS convert to real days at 7 CALENDAR
@@ -146,10 +150,19 @@ const DEFAULT_CONFIG = {
   // EX-1 CONFIRMED: match Exact rows on legacy_id (old master-file ID), NOT
   // emp_no/TMCL. New joiners with only a TMCL number surface as unmatched.
   'exact.match.key':        'legacy_id',
-  // EX-4 CONFIRMED: col 28 is "TOTAL PAY" (renamed from Total Allowance).
-  'exact.col.total_pay':       '28',
+  // v1.5 (North Mara reconciliation, supersedes EX-4): col 28 is labelled "TOTAL
+  // ALLOWANCE" in the file but IS GROSS PAY (basic + all allowances). Mapped as
+  // GROSS — never as an allowance line (summing it with the individual allowance
+  // columns double-counts). Identity: net = gross + roundup − deductions −
+  // rounddown; pinned against the North Mara period in test/exact.test.js.
+  'exact.col.gross':           '28',
   'exact.col.total_deduction': '42',
-  // EX-3 CONFIRMED: NET PAY is column AS (0-indexed 44) = Total Pay − Total Deduction.
+  // [TBC] round-up / round-down column POSITIONS (the identity needs them; the
+  // appendix has not confirmed which physical columns carry them). Unset → they
+  // contribute 0 to the per-row net check; set them to activate the full identity.
+  'exact.col.roundup':         PENDING,
+  'exact.col.rounddown':       PENDING,
+  // EX-3 CONFIRMED: NET PAY is column AS (0-indexed 44) = gross + ru − ded − rd.
   'exact.netpay.source':    'col:44',
   // EX-2 CONFIRMED daily-rate base (PC-1): BASIC + Housing(15%) + Responsibility
   // + Project + Medical + Housing(fixed) + Fixed Overtime + Transport(10%).

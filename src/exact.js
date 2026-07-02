@@ -70,7 +70,7 @@ async function validateLayout(client, companyId, grid) {
 function controlCols(ct) {
   if (!ct || typeof ct !== 'object') return { tp: null, td: null, net: null };
   const opt = (v) => (v == null || v === '' ? null : num(v));
-  return { tp: opt(ct.total_pay), td: opt(ct.total_deduction), net: opt(ct.net) };
+  return { tp: opt(ct.gross), td: opt(ct.total_deduction), net: opt(ct.net) }; // v1.5: gross
 }
 
 // ── AC-EXACT-06: stage a load (idempotent by file hash) ─────────────────────
@@ -135,17 +135,25 @@ async function match(session, batchId) {
 // DECLARED at upload. Any declared total that doesn't reconcile is a hard block.
 async function controlCheck(session, batchId, exec) {
   const co = session.company_id;
-  const tpCol = await cfg.getInt(co, 'exact.col.total_pay', 28, exec);
+  // v1.5: col 28 is GROSS (file label TOTAL ALLOWANCE). The DB columns keep their
+  // 012 names (control_total_pay STORES the declared gross) — the API speaks gross.
+  const gcCol = await cfg.getInt(co, 'exact.col.gross', 28, exec);
   const tdCol = await cfg.getInt(co, 'exact.col.total_deduction', 42, exec);
+  const ruCol = await optCol(co, 'exact.col.roundup', exec);
+  const rdCol = await optCol(co, 'exact.col.rounddown', exec);
   const b = (await exec.query(
     'SELECT control_total_pay, control_total_deduction, control_net FROM exact_batch WHERE id=$1', [batchId])).rows[0];
   const rows = (await exec.query('SELECT cells FROM exact_row WHERE batch_id=$1', [batchId])).rows;
-  let sumTp = 0, sumTd = 0;
-  for (const r of rows) { sumTp += num(r.cells[tpCol]); sumTd += num(r.cells[tdCol]); }
-  const computed = { total_pay: round2(sumTp), total_deduction: round2(sumTd), net: round2(sumTp - sumTd) };
-  const declared = b ? { total_pay: b.control_total_pay, total_deduction: b.control_total_deduction, net: b.control_net } : {};
+  let sumGc = 0, sumTd = 0, sumRu = 0, sumRd = 0;
+  for (const r of rows) {
+    sumGc += num(r.cells[gcCol]); sumTd += num(r.cells[tdCol]);
+    if (ruCol != null) sumRu += num(r.cells[ruCol]);
+    if (rdCol != null) sumRd += num(r.cells[rdCol]);
+  }
+  const computed = { gross: round2(sumGc), total_deduction: round2(sumTd), net: round2(sumGc + sumRu - sumTd - sumRd) };
+  const declared = b ? { gross: b.control_total_pay, total_deduction: b.control_total_deduction, net: b.control_net } : {};
   const mismatches = [];
-  for (const k of ['total_pay', 'total_deduction', 'net']) {
+  for (const k of ['gross', 'total_deduction', 'net']) {
     if (declared[k] == null) continue;                     // nothing declared → nothing to reconcile
     if (round2(num(declared[k])) !== computed[k]) mismatches.push({ field: k, declared: round2(num(declared[k])), computed: computed[k] });
   }
@@ -287,13 +295,25 @@ async function dailyRateBase(session, cells) {
   return round2(include.reduce((sum, n) => sum + num(cells[pos.get(n)]), 0));
 }
 
-// ── EX-3: NET PAY = Total Pay − Total Deduction; verify against col AS ───────
+// Optional column position from config: null when unset/[TBC] (contributes 0).
+// `exec` is passed through when the caller already holds a transaction client.
+async function optCol(co, key, exec = null) {
+  const v = await cfg.getConfig(co, key, null, exec);
+  return v == null || cfg.isPending(v) ? null : parseInt(v, 10);
+}
+
+// ── EX-3 / v1.5 identity: NET = GROSS (the mislabelled TOTAL ALLOWANCE col)
+// + round-up − total deductions − round-down; verified against col AS. The
+// round columns are [TBC] positions — unset they contribute 0. Pinned against
+// the North Mara period totals in test/exact.test.js.
 async function netCheck(session, cells) {
   const co = session.company_id;
-  const tp = await cfg.getInt(co, 'exact.col.total_pay', 28, null);
+  const gc = await cfg.getInt(co, 'exact.col.gross', 28, null);
   const td = await cfg.getInt(co, 'exact.col.total_deduction', 42, null);
+  const ru = await optCol(co, 'exact.col.roundup');
+  const rd = await optCol(co, 'exact.col.rounddown');
   const asCol = parseInt(String(await cfg.getConfig(co, 'exact.netpay.source', 'col:44', null)).split(':')[1], 10);
-  const computed = round2(num(cells[tp]) - num(cells[td]));
+  const computed = round2(num(cells[gc]) + (ru == null ? 0 : num(cells[ru])) - num(cells[td]) - (rd == null ? 0 : num(cells[rd])));
   const col_as = round2(num(cells[asCol]));
   return { computed, col_as, ok: computed === col_as };
 }
