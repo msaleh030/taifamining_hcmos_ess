@@ -1,0 +1,38 @@
+/* ============================================================================
+ * DESIGN TOKENS — PLACEHOLDER, NOT THE LOCKED DESIGN SYSTEM.
+ *
+ * The single source of truth is Design's canonical styles.css (the
+ * F7-reconciled token sheet backing the HCMOS Design Spec). It is committed
+ * VERBATIM in place of this file once two things happen, in order:
+ *   1. the file is delivered into this repo/session, and
+ *   2. Code confirms the F7 reconciliation (the divergence table's promotions)
+ *      is actually IN the file — if it only lives in the spec's prose, it is
+ *      landed here first and flagged to Design.
+ *
+ * Until then these neutral values keep the app buildable; NO screen is at
+ * visual par on them, by definition (parity bar: functional AC + redline match
+ * + every enumerated state). tailwind.config.ts maps utilities onto these
+ * custom properties, so swapping this file restyles the whole app.
+ * ==========================================================================*/
+:root {
+  --color-brand: #12324f;
+  --color-brand-contrast: #ffffff;
+  --color-surface: #f4f6f9;
+  --color-surface-raised: #ffffff;
+  --color-ink: #1a2332;
+  --color-ink-muted: #5b6675;
+  --color-line: #d7dee7;
+  --color-ok: #1c7c39;
+  --color-warn: #8a5a00;
+  --color-danger: #b00020;
+  --color-rag-green: #1c7c39;
+  --color-rag-amber: #b07a00;
+  --color-rag-red: #b00020;
+  --color-rag-grey: #6b7683;
+  --color-uat-banner: #8a5a00;
+
+  --radius-card: 8px;
+  --radius-control: 6px;
+  --font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --space-gutter: 1rem;
+}

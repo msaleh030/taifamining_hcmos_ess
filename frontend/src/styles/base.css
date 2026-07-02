@@ -1,0 +1,9 @@
+@import './tokens.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  @apply m-0 bg-surface text-ink font-sans;
+}
