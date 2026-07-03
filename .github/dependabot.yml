@@ -1,0 +1,22 @@
+version: 2
+updates:
+  # Keep GitHub Actions pinned versions current (security patches for CI actions).
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+
+  # npm dependencies for the backend (currently dependency-free, but future-proofs).
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+
+  # npm dependencies for the frontend workspace.
+  - package-ecosystem: "npm"
+    directory: "/frontend"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
