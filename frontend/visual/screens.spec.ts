@@ -6,9 +6,12 @@
 // functional suite pins, so what Design accepts is what the gates actually
 // serve (e.g. the R03 pay refusals really are 403s, absent really is absent).
 import { test, expect, type Page } from '@playwright/test';
-// eslint-disable-next-line @typescript-eslint/no-var-requires
+import { createRequire } from 'node:module';
+
+// The fixtures + TOTP helper are CommonJS from the certified backend; the
+// frontend package is ESM ("type": "module"), so bridge with createRequire.
+const require = createRequire(import.meta.url);
 const F = require('../../test/fixtures');
-// eslint-disable-next-line @typescript-eslint/no-var-requires
 const C = require('../../src/crypto');
 
 const THEMES = ['light', 'dark'] as const;
