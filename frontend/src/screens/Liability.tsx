@@ -1,13 +1,16 @@
-// F3 — leave liability (port of liability.js; pay-adjacent, confidential).
-// Reachable only by the pay-visibility roles; a 403 renders the explained
-// no-access state. Figures come from the ONE name-keyed base ÷ 30, active
-// staff only; an employee with no captured remuneration shows a NOT-AVAILABLE
-// row naming the missing input — never a zero.
+// C16 — Payroll / leave liability (LIAB-01/02/03, EX-2, PC-1). The money
+// register: .ltable (name · days · daily rate · liability, right-set mono),
+// dimmed excluded leaver rows, .lna chips NAMING the missing input (never a
+// silent zero), and the .ltotal footer with the big mono total + the PC-1
+// formula chip (daily = leave-pay base ÷ 30, EX-2 base exclusions). Guarded
+// to pay-visibility roles — a refusal renders the designed no-permission
+// state with the why chip.
 import { useState, type FormEvent } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { api, isApiError } from '../lib/api';
-import { Button, Input, NoAccess, ErrorPanel, Loading, Panel } from '../components/ui';
+import { Skeleton, ErrorBanner, NoPermission, EmptyState } from '../components/state';
+import { IcSearch, IcBanknote } from '../components/icons';
 
 export default function Liability() {
   const { t } = useTranslation();
@@ -20,61 +23,75 @@ export default function Liability() {
     retry: false,
   });
 
-  function submit(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    setBatchId(String(new FormData(e.currentTarget).get('batch') ?? '').trim());
-  }
-
   return (
-    <div>
-      <form onSubmit={submit} className="flex gap-2 mb-3">
-        <Input name="batch" placeholder="Exact batch id" required />
-        <Button type="submit">{t('liability.title')}</Button>
+    <div className="grid">
+      <form className="sitefilter" onSubmit={(e: FormEvent<HTMLFormElement>) => {
+        e.preventDefault();
+        setBatchId(String(new FormData(e.currentTarget).get('batch') ?? '').trim());
+      }}>
+        <label className="search" style={{ margin: 0, width: 320 }}>
+          <IcSearch />
+          <input name="batch" placeholder={t('leave.selectPeriod')} required />
+        </label>
+        <button className="btn primary" type="submit">{t('leave.registerTitle')}</button>
       </form>
 
-      {!batchId ? null : res.isPending ? <Loading /> : res.isError ? (
+      {!batchId ? (
+        <div className="card"><EmptyState title={t('leave.emptyLiabTitle')} body={t('leave.emptyLiabBody')} icon={<IcBanknote />} /></div>
+      ) : res.isPending ? (
+        <div className="card card-p"><Skeleton rows={6} /></div>
+      ) : res.isError ? (
         isApiError(res.error) && res.error.status === 403
-          ? <NoAccess title={t('liability.title')} message={t('liability.restricted')} />
-          : <ErrorPanel message={t('liability.error')} />
+          ? <NoPermission title={t('leave.noPermTitle')} body={t('leave.noPermBody')} why={t('leave.noPermWhy')} />
+          : <ErrorBanner text={t('leave.errLiabBody')} onRetry={() => res.refetch()} retryLabel={t('leave.retry')} />
       ) : (
-        <Panel title={t('liability.title')} state="ready">
-          <p>{t('liability.total')}: <strong>{res.data.total}</strong> ({t('liability.activeOnly')})</p>
-          <table className="w-full border-collapse">
-            <thead>
-              <tr className="text-left border-b border-line">
-                <th className="p-2">{t('liability.employee')}</th>
-                <th className="p-2">{t('liability.days')}</th>
-                <th className="p-2">{t('liability.dailyRate')}</th>
-                <th className="p-2">{t('liability.amount')}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {res.data.available.length === 0 && (
-                <tr><td className="p-2" colSpan={4}>{t('liability.noLiability')}</td></tr>
-              )}
-              {res.data.available.map((a) => (
-                <tr key={a.employee_id} className="border-b border-line">
-                  <td className="p-2">{a.employee_id}</td>
-                  <td className="p-2">{a.days}</td>
-                  <td className="p-2">{a.daily_rate}</td>
-                  <td className="p-2">{a.liability}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          <h4 className="mt-3 font-semibold">{t('liability.notAvailable')}</h4>
-          <ul className="list-disc pl-5">
-            {(res.data.not_available ?? []).length === 0 && <li className="text-ink-muted">{t('profile.none')}</li>}
-            {(res.data.not_available ?? []).map((n) => (
-              <li key={n.employee_id}>{n.employee_id}: <em>{t('leave.notAvailable')}</em> — {n.missing}</li>
+        <div className="grid" data-state="populated">
+          <div className="ltable">
+            <div className="lhead">
+              <span>{t('leave.colStaff')}</span>
+              <span className="hide" style={{ textAlign: 'right' }}>{t('leave.colDays')}</span>
+              <span className="hide" style={{ textAlign: 'right' }}>{t('leave.colDaily')}</span>
+              <span style={{ textAlign: 'right' }}>{t('leave.colLiab')}</span>
+            </div>
+            {res.data.available.map((a) => (
+              <div className="lrow" key={a.employee_id}>
+                <span className="who"><span className="nm num">{a.employee_id}</span></span>
+                <span className="num hide">{a.days}</span>
+                <span className="num hide">{a.daily_rate}</span>
+                <span className="num liab">{a.liability}</span>
+              </div>
             ))}
-          </ul>
-          <h4 className="mt-3 font-semibold">{t('liability.excluded')}</h4>
-          <ul className="list-disc pl-5">
-            {(res.data.excluded ?? []).length === 0 && <li className="text-ink-muted">{t('profile.none')}</li>}
-            {(res.data.excluded ?? []).map((x) => <li key={x.employee_id}>{x.employee_id} ({x.status})</li>)}
-          </ul>
-        </Panel>
+            {(res.data.not_available ?? []).map((n) => (
+              <div className="lrow" key={n.employee_id} data-state="not-available">
+                <span className="who"><span className="nm num">{n.employee_id}</span></span>
+                <span className="hide" />
+                <span className="hide" />
+                <span style={{ textAlign: 'right' }}><span className="lna">{t('leave.notAvail')} · {n.missing}</span></span>
+              </div>
+            ))}
+            {(res.data.excluded ?? []).map((x) => (
+              <div className="lrow excl" key={x.employee_id}>
+                <span className="who"><span className="nm num">{x.employee_id}</span><span className="rl">{x.status}</span></span>
+                <span className="hide" />
+                <span className="hide" />
+                <span className="liab">{t('leave.exclLeaver')}</span>
+              </div>
+            ))}
+            {res.data.available.length === 0 && (res.data.not_available ?? []).length === 0 && (
+              <EmptyState title={t('leave.emptyLiabTitle')} body={t('leave.emptyLiabBody')} />
+            )}
+          </div>
+          <div className="ltotal">
+            <div>
+              <div className="tk">{t('leave.totalTitle')}</div>
+              <div className="tv">{String(res.data.total)}</div>
+            </div>
+            <div className="tmeta">
+              <span className="formula">{t('leave.dailyFormula')}</span><br />
+              {t('leave.activeOnly')} · {t('leave.exBase')}
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

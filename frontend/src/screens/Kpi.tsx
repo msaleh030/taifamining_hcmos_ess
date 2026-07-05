@@ -1,88 +1,129 @@
-// F4 — KPI cards (port of kpi.js). Each card shows its RAG status and
-// value/target, OR a NOT-AVAILABLE card naming the missing input (never a zero
-// or a guessed %). FOUR distinct render states, never a blank fall-through,
-// each carrying a unique data-state so they can never be confused:
-//   • module-disabled — analytics.enabled OFF (TENANT-WIDE, overrides role):
-//     a whole-module panel EXPLAINING it is off + an enable-pointer.
-//   • no-permission   — the requester is not allowed the module (endpoint 403).
-//   • empty           — flag on, allowed, but no cards to show.
-//   • ready           — flag on, cards present.
-// NOTE (Kira's spot-check): My KPIs is the lightest-covered spec entry — its
-// bento redline is confirmed with Design before the visual-parity pass on this
-// screen; the behaviour below is the certified functional AC either way.
+// C3 — KPI Scorecard (KPI-01..04, LIAB-03, LVR-02) and E8 — My KPIs.
+// RAG summary bar (.ragbar) whose counts stay internally consistent with the
+// cards shown; .kgrid of canonical .kcard tiles (RAG left-border, status
+// pill, big mono value, target footer). Four DISTINCT non-populated states,
+// never conflated: empty, no-permission, not-available (a card names its
+// missing input — never a blank or zero) and flag-off (module disabled,
+// greyed panel — tenant-wide, overrides role).
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { api, presentCard, isApiError } from '../lib/api';
 import type { KpiCard, KpiPayload } from '../lib/types';
-import { Panel, ErrorPanel } from '../components/ui';
+import { Skeleton, EmptyState, ErrorBanner, NoPermission, Tag } from '../components/state';
+import { initials } from '../components/shell';
+import { IcChart } from '../components/icons';
+
+const RAG_VAR: Record<string, string> = { green: 'var(--green)', amber: 'var(--yellow)', red: 'var(--red)' };
+const RAG_TONE: Record<string, 'green' | 'yellow' | 'red' | 'grey'> = { green: 'green', amber: 'yellow', red: 'red' };
 
 function Card({ card }: { card: KpiCard }) {
   const { t } = useTranslation();
   const p = presentCard(card);
   if (p.kind === 'not-available') {
     return (
-      <div data-state="not-available" className="bg-surface-raised border border-line rounded-card p-3">
-        <h4 className="font-semibold">{card.name}</h4>
-        <p><em>{t('kpi.notAvailable')}</em> — {p.reason}</p>
+      <div className="card kcard card-p" data-state="not-available" style={{ borderLeft: '4px solid var(--faint)' }}>
+        <div className="kh">
+          <span className="kic"><IcChart /></span>
+          <div><div className="knm">{card.name}</div><div className="kfo">{t('kpi.naBecause')}</div></div>
+          <span className="kdot" style={{ background: 'var(--faint)' }} />
+        </div>
+        <div className="kvrow">
+          <span className="kv" style={{ fontSize: 16, color: 'var(--muted)' }}>{t('kpi.naCard')}</span>
+          <Tag tone="grey">{t('kpi.stNa')}</Tag>
+        </div>
+        <div className="ktgt"><span className="ktl">{t('kpi.naRule')}</span><span className="ktv">{p.reason}</span></div>
       </div>
     );
   }
-  const rag = p.rag || 'grey';
-  const ragColor = { green: 'text-rag-green', amber: 'text-rag-amber', red: 'text-rag-red' }[rag] ?? 'text-rag-grey';
+  const rag = p.rag ?? 'grey';
   return (
-    <div data-rag={rag} className="bg-surface-raised border border-line rounded-card p-3">
-      <h4 className="font-semibold">{card.name}</h4>
-      <p className="text-xl">{p.value}{p.target != null ? ` / ${p.target}` : ''}</p>
-      <p className={`font-semibold ${ragColor}`}>{rag.toUpperCase()}</p>
+    <div className="card kcard card-p" data-rag={rag} style={{ borderLeft: `4px solid ${RAG_VAR[rag] ?? 'var(--faint)'}` }}>
+      <div className="kh">
+        <span className="kic"><IcChart /></span>
+        <div><div className="knm">{card.name}</div></div>
+        <span className="kdot" style={{ background: RAG_VAR[rag] ?? 'var(--faint)' }} />
+      </div>
+      <div className="kvrow">
+        <span className="kv">{String(p.value)}</span>
+        <Tag tone={RAG_TONE[rag] ?? 'grey'}>{rag === 'green' ? t('kpi.stOn') : rag === 'amber' ? t('kpi.stWatch') : rag === 'red' ? t('kpi.stOff') : t('kpi.stMon')}</Tag>
+      </div>
+      {p.target != null && (
+        <div className="ktgt"><span className="ktl">{t('kpi.kTarget')}</span><span className="ktv">{String(p.target)}</span></div>
+      )}
     </div>
   );
 }
 
-// Pure: a {enabled, cards} payload → view. Flag-off (enabled:false) ALWAYS
-// wins, regardless of role/cards — the tenant-wide disabled panel.
-export function KpiModule({ payload, title }: { payload: KpiPayload; title: string }) {
+function ScorecardBody({ payload, personal }: { payload: KpiPayload; personal?: boolean }) {
   const { t } = useTranslation();
-  if (!payload || !payload.enabled) {
+  // flag-off ALWAYS wins — module disabled tenant-wide, distinct from empty.
+  if (!payload.enabled) {
     return (
-      <Panel title={title} state="module-disabled">
-        <p>{t('kpi.moduleOff', { title })}</p>
-        <p className="text-ink-muted">{t('kpi.enablePointer')}</p>
-      </Panel>
+      <div className="card card-p" data-state="flag-off" style={{ opacity: .75 }}>
+        <span className="flag"><span className="dot" />{t('kpi.foTag')}</span>
+        <h3 style={{ margin: '10px 0 4px' }}>{t('kpi.foTitle')}</h3>
+        <p className="muted" style={{ margin: 0 }}>{t('kpi.foBody')}</p>
+        <p className="muted" style={{ fontSize: 12 }}>{t('kpi.foProv')} <span className="num">{t('kpi.foProvPath')}</span></p>
+      </div>
     );
   }
   const cards = payload.cards ?? [];
-  if (cards.length === 0) {
-    return <Panel title={title} state="empty"><p className="text-ink-muted">{t('kpi.empty')}</p></Panel>;
+  if (cards.length === 0) return <EmptyState title={t('kpi.emptyTitle')} body={t('kpi.emptyBody')} icon={<IcChart />} />;
+
+  const counts = { on: 0, watch: 0, off: 0, na: 0 };
+  for (const c of cards) {
+    const p = presentCard(c);
+    if (p.kind === 'not-available') counts.na++;
+    else if (p.rag === 'green') counts.on++;
+    else if (p.rag === 'amber') counts.watch++;
+    else if (p.rag === 'red') counts.off++;
+    else counts.na++;
   }
   return (
-    <Panel title={title} state="ready">
-      <div className="grid gap-3 grid-cols-[repeat(auto-fill,minmax(14rem,1fr))]">
+    <div className="grid" data-state="populated">
+      <div className="ragbar">
+        <span className="ragpill g"><span className="ragdot g" />{t('kpi.sumOn')} <span className="n">{counts.on}</span></span>
+        <span className="ragpill a"><span className="ragdot a" />{t('kpi.sumWatch')} <span className="n">{counts.watch}</span></span>
+        <span className="ragpill r"><span className="ragdot r" />{t('kpi.sumOff')} <span className="n">{counts.off}</span></span>
+        <span className="ragpill na"><span className="ragdot na" />{t('kpi.sumNa')} <span className="n">{counts.na}</span></span>
+        <span className="scope" style={{ marginLeft: 'auto' }}>{personal ? t('kpi.myScope') : t('kpi.scopeLbl')}</span>
+      </div>
+      <div className="kgrid" style={personal ? { gridTemplateColumns: '1fr' } : undefined}>
         {cards.map((c) => <Card key={c.name} card={c} />)}
       </div>
-    </Panel>
+      <p className="note">{t('kpi.lvrNote')}</p>
+    </div>
   );
 }
 
-function KpiScreen({ queryKey, fetch, title, errorKey }: {
-  queryKey: string; fetch: () => Promise<KpiPayload>; title: string; errorKey: string;
-}) {
+function KpiScreen({ queryKey, fetch, personal }: { queryKey: string; fetch: () => Promise<KpiPayload>; personal?: boolean }) {
   const { t } = useTranslation();
   const q = useQuery({ queryKey: [queryKey], queryFn: fetch, retry: false });
-  if (q.isPending) return <Panel title={title} state="loading"><p className="text-ink-muted">…</p></Panel>;
+  if (q.isPending) return <div className="card card-p"><Skeleton rows={5} /></div>;
   if (q.isError) {
     return isApiError(q.error) && q.error.status === 403
-      ? <Panel title={title} state="no-permission"><p>{t('kpi.noPermission', { title })}</p></Panel>
-      : <ErrorPanel message={t(errorKey)} />;
+      ? <NoPermission title={t('kpi.noPermTitle')} body={t('kpi.noPermBody')} why={t('kpi.noPermWhy')} />
+      : <ErrorBanner text={t('kpi.errBody')} onRetry={() => q.refetch()} retryLabel={t('kpi.retry')} />;
   }
-  return <KpiModule payload={q.data} title={title} />;
+  return <ScorecardBody payload={q.data} personal={personal} />;
 }
 
 export function Scorecard() {
-  const { t } = useTranslation();
-  return <KpiScreen queryKey="scorecard" fetch={api.scorecard} title={t('kpi.scorecard')} errorKey="kpi.error.scorecard" />;
+  return <KpiScreen queryKey="scorecard" fetch={api.scorecard} />;
 }
 
-export function MyKpis() {
+// E8 — personal role-scoped set over the .myhead identity strip.
+export function MyKpis({ ess }: { ess?: boolean } = {}) {
   const { t } = useTranslation();
-  return <KpiScreen queryKey="my-kpis" fetch={api.myKpis} title={t('kpi.mine')} errorKey="kpi.error.mine" />;
+  const landing = useQuery({ queryKey: ['landing'], queryFn: api.landing, retry: false });
+  const name = landing.data?.name ?? '';
+  return (
+    <div className={ess ? 'body' : undefined} style={ess ? undefined : {}}>
+      <div className="shiftbar" style={{ marginBottom: 14 }}>
+        <span className="av">{initials(name || '·')}</span>
+        <div><div className="nm">{name}</div><div className="mt">{landing.data?.role ?? ''} · {t('kpi.myScope')}</div></div>
+      </div>
+      <KpiScreen queryKey="my-kpis" fetch={api.myKpis} personal />
+    </div>
+  );
 }

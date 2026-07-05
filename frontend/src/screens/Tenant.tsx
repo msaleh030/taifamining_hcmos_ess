@@ -1,128 +1,151 @@
-// F8 — tenant provisioning wizard (port of tenant.js, C21). Per-step flow:
-//   1. details — the tenant name (companyId is minted server-side; codes are
-//      registry-minted, so the operator never picks an id).
-//   2. review  — confirm what will be seeded FROM THE REGISTRY (config + sites).
-//   3. result  — provisioned (new company_id, seeded counts) OR the atomic-
-//      rollback state (a mid-provision fault → nothing half-created).
-// Deferred (Design state #4): pre-provision validation of code/name collision
-// and currency/country combos — conscious deferral; the atomic-rollback net IS
-// built and is a DISTINCT result state. The endpoint 403s any non-platform-
-// admin role.
+// C21 — Tenant provisioning wizard (TEN-01/02/03). Step rail Identity …
+// Review; every configuration is SEEDED FROM THE REGISTRY server-side (roles,
+// matrix, sites/codes, leave & doc types, KPI catalogue, statutory) — no
+// manual DB step, so the intermediate steps are review surfaces described by
+// the approved wording, and the operator supplies only the tenant identity.
+// Atomic result states are DISTINCT: provisioned (fresh RLS-keyed company_id
+// + seeded counts + isolation note) vs rolled back (never a half-tenant).
+// Identity-collision pre-validation stays a deferred secondary state.
 import { useState } from 'react';
-import { useTranslation, Trans } from 'react-i18next';
+import { useTranslation } from 'react-i18next';
 import { api, isApiError } from '../lib/api';
 import type { TenantOut } from '../lib/types';
-import { Button, GhostButton, Input, Panel } from '../components/ui';
+import { NoPermission, Seal } from '../components/state';
+import { IcAlert, IcBuilding, IcCheck, IcFile, IcCalendar, IcChart, IcShield, IcUsers } from '../components/icons';
 
 type Outcome = { ok: true; tenant: TenantOut } | { ok: false; error: string };
 
-function Stepper({ step }: { step: 1 | 2 | 3 }) {
-  const { t } = useTranslation();
-  const labels = [t('tenant.step.details'), t('tenant.step.review'), t('tenant.step.result')];
-  return (
-    <ol className="flex gap-4 list-none p-0 mb-3">
-      {labels.map((label, i) => (
-        <li key={label} className={i + 1 === step ? 'font-bold text-brand' : 'text-ink-muted'}>
-          {i + 1}. {label}
-        </li>
-      ))}
-    </ol>
-  );
-}
-
-// Pure result view — provisioned vs rolled-back are DISTINCT states (spec #4 net).
-export function ProvisionResult({ outcome }: { outcome: Outcome }) {
-  const { t } = useTranslation();
-  if (outcome.ok) {
-    const tn = outcome.tenant;
-    return (
-      <div data-state="provisioned" className="border border-line rounded-card p-3 bg-surface-raised">
-        <h4 className="font-semibold text-ok">{t('tenant.provisioned')}</h4>
-        <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 my-2">
-          <dt className="font-semibold">{t('tenant.companyId')}</dt><dd>{tn.company_id}</dd>
-          <dt className="font-semibold">{t('tenant.nameLabel')}</dt><dd>{tn.name}</dd>
-          <dt className="font-semibold">{t('tenant.configSeeded')}</dt><dd>{t('tenant.keys', { n: tn.config_keys })}</dd>
-          <dt className="font-semibold">{t('tenant.sites')}</dt><dd>{tn.sites}</dd>
-        </dl>
-        <p className="text-ink-muted">{t('tenant.isolated')}</p>
-      </div>
-    );
-  }
-  // Atomic-rollback state: the whole tenant rolled back; nothing half-created.
-  return (
-    <div data-state="rolled-back" className="border border-danger rounded-card p-3 bg-surface-raised">
-      <h4 className="font-semibold text-danger">{t('tenant.rolledBack')}</h4>
-      <p>{t('tenant.rolledBackText')}</p>
-      <p className="text-ink-muted">{outcome.error || t('tenant.retry')}</p>
-    </div>
-  );
-}
+const STEPS = ['s_identity', 's_roles', 's_sites', 's_leave', 's_docs', 's_kpi', 's_statutory', 's_review'] as const;
 
 export default function Tenant() {
   const { t } = useTranslation();
-  const [step, setStep] = useState<1 | 2 | 3>(1);
+  const [step, setStep] = useState(0);
   const [name, setName] = useState('');
-  const [outcome, setOutcome] = useState<Outcome | null>(null);
   const [busy, setBusy] = useState(false);
+  const [outcome, setOutcome] = useState<Outcome | null>(null);
+  const [noPerm, setNoPerm] = useState(false);
+
+  if (noPerm) return <NoPermission title={t('tenant.noPermTitle')} body={t('tenant.noPermBody')} why={t('tenant.noPermWhy')} />;
 
   async function provision() {
     setBusy(true);
-    let out: Outcome;
-    try { out = { ok: true, tenant: await api.provisionTenant(name) }; }
-    catch (err) {
-      out = {
-        ok: false,
-        error: isApiError(err) && err.status === 403
-          ? t('tenant.notPermitted')
-          : (err instanceof Error && err.message) || t('tenant.failed'),
-      };
+    try {
+      const tenant = await api.provisionTenant(name);
+      setOutcome({ ok: true, tenant });
+    } catch (err) {
+      if (isApiError(err) && err.status === 403) { setNoPerm(true); setBusy(false); return; }
+      setOutcome({ ok: false, error: (err instanceof Error && err.message) || t('tenant.rollbackBody') });
     }
     setBusy(false);
-    setOutcome(out);
-    setStep(3);
+    setStep(STEPS.length); // result
   }
 
+  const SEED_TILES: { key: string; icon: JSX.Element }[] = [
+    { key: 'tRoles', icon: <IcUsers /> }, { key: 'tMatrix', icon: <IcShield /> },
+    { key: 'tSites', icon: <IcBuilding /> }, { key: 'tLeave', icon: <IcCalendar /> },
+    { key: 'tDocs', icon: <IcFile /> }, { key: 'tKpi', icon: <IcChart /> },
+  ];
+
   return (
-    <Panel title={t('tenant.title')} state={`step-${step}`}>
-      <Stepper step={step} />
-      {step === 1 && (
-        <form
-          className="flex gap-2 items-end"
-          onSubmit={(e) => {
-            e.preventDefault();
-            const v = String(new FormData(e.currentTarget).get('name') ?? '').trim();
-            if (!v) return;
-            setName(v);
-            setStep(2);
-          }}
-        >
-          <label className="grid gap-1">
-            {t('tenant.name')}
-            <Input name="name" defaultValue={name} required />
-          </label>
-          <Button type="submit">{t('tenant.next')}</Button>
+    <div className="grid" style={{ maxWidth: 760 }} data-state={busy ? 'loading' : outcome ? (outcome.ok ? 'success' : 'rolled-back') : `step-${step + 1}`}>
+      <div className="wrail">
+        {STEPS.map((s, i) => (
+          <span key={s} className={`wstep${i < step ? ' done' : i === step ? ' active' : ''}`}>
+            <span className="wn">{i < step ? <IcCheck /> : i + 1}</span>{t(`tenant.${s}`)}
+          </span>
+        ))}
+      </div>
+
+      {outcome ? (
+        <div className="card card-p">
+          {outcome.ok ? (
+            <>
+              <Seal title={t('tenant.provisionedTitle')} sub={t('tenant.provisionedSub')} />
+              <div className="idmint" style={{ marginTop: 12 }}>
+                <IcCheck style={{ color: 'var(--green)', width: 18, height: 18 }} />
+                <div>
+                  <div style={{ fontSize: 11, color: 'var(--muted)', fontWeight: 600 }}>{t('tenant.idMintLbl')}</div>
+                  <div className="num" style={{ fontWeight: 700 }}>{outcome.tenant.company_id}</div>
+                </div>
+              </div>
+              <div className="seedgrid" style={{ marginTop: 12 }}>
+                <div className="seedtile"><span className="si"><IcShield /></span>
+                  <span><span className="sl">{t('tenant.seeded')}</span><span className="sc" style={{ display: 'block' }}>{outcome.tenant.config_keys}</span></span>
+                  <IcCheck className="sok" /></div>
+                <div className="seedtile"><span className="si"><IcBuilding /></span>
+                  <span><span className="sl">{t('tenant.tSites')}</span><span className="sc" style={{ display: 'block' }}>{outcome.tenant.sites}</span></span>
+                  <IcCheck className="sok" /></div>
+              </div>
+              <p className="note" style={{ marginTop: 10 }}>{t('tenant.idNote')}</p>
+              <button className="btn" style={{ marginTop: 8 }} onClick={() => { setOutcome(null); setStep(0); setName(''); }}>{t('tenant.repeatNote')}</button>
+            </>
+          ) : (
+            <>
+              <Seal kind="err" title={t('tenant.rollbackTitle')} sub={t('tenant.rollbackBody')} />
+              <p className="muted" style={{ textAlign: 'center' }}>{outcome.error}</p>
+              <div style={{ textAlign: 'center' }}>
+                <button className="btn" onClick={() => { setOutcome(null); setStep(STEPS.length - 1); }}>{t('tenant.retry')}</button>
+              </div>
+            </>
+          )}
+        </div>
+      ) : step === 0 ? (
+        <form className="card card-p" onSubmit={(e) => { e.preventDefault(); if (name.trim()) setStep(1); }}>
+          <div className="shead">{t('tenant.idTitle')}</div>
+          <div className="fg" style={{ marginTop: 10 }}>
+            <div className="field full">
+              <label>{t('tenant.idTenant')} <span className="req">*</span></label>
+              <input value={name} onChange={(e) => setName(e.target.value)} required />
+            </div>
+          </div>
+          <div className="idmint" style={{ marginTop: 8 }}>
+            <IcShield style={{ color: 'var(--green)', width: 18, height: 18 }} />
+            <div>
+              <div style={{ fontSize: 11, color: 'var(--muted)', fontWeight: 600 }}>{t('tenant.idMintLbl')}</div>
+              <div className="num">{t('tenant.idMintVal')}</div>
+            </div>
+          </div>
+          <div style={{ marginTop: 12, display: 'flex', gap: 8 }}>
+            <button className="btn primary" type="submit">{t('tenant.next')}</button>
+          </div>
         </form>
-      )}
-      {step === 2 && (
-        <div>
-          <p>
-            <Trans i18nKey="tenant.reviewText" values={{ name }} components={{ 1: <strong /> }} />
-          </p>
-          <p className="text-ink-muted">{t('tenant.rollbackNote')}</p>
-          <div className="flex gap-2 mt-3">
-            <GhostButton onClick={() => setStep(1)}>{t('tenant.back')}</GhostButton>
-            <Button onClick={provision} disabled={busy}>{t('tenant.go')}</Button>
+      ) : step < STEPS.length - 1 ? (
+        <div className="card card-p">
+          <div className="shead">{t(`tenant.${STEPS[step]}`)}</div>
+          <span className="regchip" style={{ margin: '8px 0' }}>{t('tenant.rolesSeed')}</span>
+          <p className="muted" style={{ fontSize: 12.5 }}>{t('tenant.noManual')}</p>
+          <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+            <button className="btn" onClick={() => setStep(step - 1)}>{t('tenant.back')}</button>
+            <button className="btn primary" onClick={() => setStep(step + 1)}>{t('tenant.next')}</button>
+          </div>
+        </div>
+      ) : (
+        <div className="card card-p">
+          <div className="shead">{t('tenant.reviewTitle')}</div>
+          <p className="muted" style={{ fontSize: 12.5 }}>{t('tenant.reviewNote')}</p>
+          <div className="idmint" style={{ margin: '10px 0' }}>
+            <IcBuilding style={{ width: 18, height: 18, color: 'var(--green)' }} />
+            <div>
+              <div style={{ fontSize: 11, color: 'var(--muted)', fontWeight: 600 }}>{t('tenant.idTenant')}</div>
+              <div style={{ fontWeight: 700 }}>{name}</div>
+            </div>
+          </div>
+          <div className="seedgrid">
+            {SEED_TILES.map((s) => (
+              <div className="seedtile" key={s.key}>
+                <span className="si">{s.icon}</span>
+                <span className="sl">{t(`tenant.${s.key}`)}</span>
+                <IcCheck className="sok" />
+              </div>
+            ))}
+          </div>
+          {busy && <div className="banner info" style={{ marginTop: 10 }}><IcAlert />{t('tenant.loadingBody')}</div>}
+          <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+            <button className="btn" onClick={() => setStep(step - 1)} disabled={busy}>{t('tenant.back')}</button>
+            <button className="btn primary" onClick={provision} disabled={busy}>{t('tenant.provisionBtn')}</button>
           </div>
         </div>
       )}
-      {step === 3 && outcome && (
-        <div>
-          <ProvisionResult outcome={outcome} />
-          <GhostButton className="mt-3" onClick={() => { setStep(1); setName(''); setOutcome(null); }}>
-            {t('tenant.again')}
-          </GhostButton>
-        </div>
-      )}
-    </Panel>
+    </div>
   );
 }

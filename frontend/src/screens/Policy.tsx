@@ -1,61 +1,74 @@
-// F7 — policy acknowledgement (port of policy.js, POL-02/03; self-service).
-// Every employee reads the current policy version and acknowledges it; a new
-// version re-opens the ack. Publishing (POL-01) and the outstanding report
-// (POL-04) are admin/compliance endpoints, not part of this employee screen.
-import { useState } from 'react';
+// E7 — Policy read & acknowledge (POL-02/03), self-service. The current
+// version renders as a policy card; acknowledging is version-bound and a new
+// version re-opens the ack (the re-ack banner). Publishing (POL-01) and the
+// outstanding report (POL-04) are admin/compliance endpoints, guarded
+// server-side and out of this employee-facing surface.
+import { useState, type FormEvent } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { api, isApiError } from '../lib/api';
-import { Button, Input, Msg, Panel, ErrorPanel, Loading } from '../components/ui';
+import { Skeleton, ErrorBanner, EmptyState } from '../components/state';
+import { IcCheck, IcFile, IcSearch } from '../components/icons';
 
 export default function Policy() {
   const { t } = useTranslation();
   const [code, setCode] = useState('COND');
-  const [message, setMessage] = useState<{ kind: 'ok' | 'blocked'; text: string } | null>(null);
-  const [acked, setAcked] = useState(false);
+  const [acked, setAcked] = useState<string | null>(null);
 
-  const policy = useQuery({
-    queryKey: ['policy', code],
-    queryFn: () => api.policyRead(code),
-    retry: false,
-  });
-
+  const policy = useQuery({ queryKey: ['policy', code], queryFn: () => api.policyRead(code), retry: false });
   const ack = useMutation({
     mutationFn: () => api.policyAck(code),
-    onSuccess: (r) => { setMessage({ kind: 'ok', text: t('policy.acked', { version: r.version }) }); setAcked(true); },
-    onError: (err) => setMessage({ kind: 'blocked', text: (err instanceof Error && err.message) || t('policy.ackFailed') }),
+    onSuccess: (r) => setAcked(String(r.version)),
   });
 
   return (
-    <Panel title={t('policy.title')} state="ready">
-      <form
-        className="flex gap-2 mb-3"
-        onSubmit={(e) => {
-          e.preventDefault();
-          setMessage(null);
-          setAcked(false);
-          setCode(String(new FormData(e.currentTarget).get('code') ?? '').trim());
-        }}
-      >
-        <Input name="code" defaultValue={code} placeholder={t('policy.code')} />
-        <Button type="submit">{t('policy.open')}</Button>
+    <div className="grid" style={{ maxWidth: 720 }}>
+      <form className="sitefilter" onSubmit={(e: FormEvent<HTMLFormElement>) => {
+        e.preventDefault();
+        setAcked(null);
+        setCode(String(new FormData(e.currentTarget).get('code') ?? '').trim());
+      }}>
+        <label className="search" style={{ margin: 0, width: 260 }}>
+          <IcSearch />
+          <input name="code" defaultValue={code} placeholder={t('governance.polTitle')} />
+        </label>
+        <button className="btn" type="submit">{t('governance.polRead')}</button>
       </form>
 
-      {policy.isPending ? <Loading /> : policy.isError ? (
-        <ErrorPanel message={isApiError(policy.error) && policy.error.status === 404
-          ? t('policy.notFound', { code }) : t('policy.error')} />
+      {policy.isPending ? (
+        <div className="card card-p"><Skeleton rows={5} /></div>
+      ) : policy.isError ? (
+        isApiError(policy.error) && policy.error.status === 404
+          ? <div className="card"><EmptyState title={t('governance.emptyPolicyTitle')} body={t('governance.emptyPolicyBody')} icon={<IcFile />} /></div>
+          : <ErrorBanner text={t('governance.errBody')} onRetry={() => policy.refetch()} retryLabel={t('governance.retry')} />
       ) : (
-        <article data-state="ready">
-          <h4 className="font-semibold">
-            {policy.data.title} <span className="text-ink-muted text-sm">v{policy.data.version}</span>
-          </h4>
-          <div className="whitespace-pre-wrap my-3">{policy.data.body ?? ''}</div>
-          <Button onClick={() => ack.mutate()} disabled={acked || ack.isPending}>
-            {t('policy.ack', { version: policy.data.version })}
-          </Button>
-          <Msg kind={message?.kind}>{message?.text}</Msg>
-        </article>
+        <div className="card" data-state={acked ? 'success' : 'populated'}>
+          <div className="card-h">
+            <h3>{policy.data.title}</h3>
+            <span className="meta num">{t('governance.polVersion')} v{policy.data.version}</span>
+          </div>
+          <div className="card-p" style={{ whiteSpace: 'pre-wrap', fontSize: 13.5, lineHeight: 1.6 }}>
+            {policy.data.body ?? ''}
+          </div>
+          <div className="card-p" style={{ borderTop: '1px solid var(--border-2)' }}>
+            {acked ? (
+              <div className="banner ok" style={{ margin: 0 }}>
+                <IcCheck /><div><b>{t('governance.ackDone')}</b> — {t('governance.ackedLbl')} v{acked}. {t('governance.trackedNote')}</div>
+              </div>
+            ) : (
+              <>
+                <label className="note" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <input type="checkbox" checked readOnly /> {t('governance.ackChk')}
+                </label>
+                <button className="btn primary" style={{ marginTop: 10 }} disabled={ack.isPending} onClick={() => ack.mutate()}>
+                  {t('governance.ackBtn')}
+                </button>
+                {ack.isError && <ErrorBanner text={(ack.error as Error)?.message || t('governance.errBody')} />}
+              </>
+            )}
+          </div>
+        </div>
       )}
-    </Panel>
+    </div>
   );
 }

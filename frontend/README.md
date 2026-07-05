@@ -19,25 +19,27 @@ a same-origin client of the certified HCMOS API.
 - View layer only. Any screen that would need a backend change **stops** and
   goes to Kira.
 
-## Status: source-complete, build-pending — NOT at visual par
+## Status: designed build authored to the spec — install/build pending npm
 
-Authored in a session whose network policy blocks npm (registry 403), so
-`npm install` / `vite build` / `tsc` have **not** run here yet, and the design
-spec bundle was not reachable from the session. Two unblocks, both Kira-side:
+The design bundle is in-tree (`design/HCMOS-Design-Spec.html` + the 11
+approved flow prototypes under `design/prototypes/`; baselines under
+`design/baselines/`). Screens are written against the spec's redlines in the
+canonical class vocabulary; strings are the prototypes' approved bilingual
+dictionaries (AC-UNI-07). `npm install` / `vite build` remain blocked by this
+session's network policy (registry 403) — verified off-box (lockfile commit):
+install, `tsc --noEmit` and `vite build` pass on node 24 / npm 11.
 
-1. **npm access** — allowlist `registry.npmjs.org` in the Claude Code
-   environment network policy (or build on the UAT box / CI, which reach npm).
-2. **The spec bundle** — deliver Design's canonical `styles.css` (+ the spec
-   doc / prototypes) into the repo or session.
+## Token single source (Kira's step 1 — DONE)
 
-## Token single-source rule (Kira's step 1)
-
-`src/styles/tokens.css` is a **placeholder**. The canonical `styles.css` is
-committed verbatim in its place only after confirming the F7 reconciliation
-(the divergence table's promotions) is actually **in** the file — if it lives
-only in the spec's prose, it is landed in styles.css first and flagged to
-Design. `tailwind.config.ts` maps all utilities onto those custom properties;
-no visual literal lives in components.
+`src/styles/hcmos.css` Part 1 is the canonical styles.css **verbatim** from
+the spec bundle; Part 2 **lands the F7 reconciliation** (the divergence
+table's promotions lived in the flow kits, not the sheet): Glass +
+Reduced-transparency token blocks, `[data-surface]` parametrisation, the
+state primitives (.banner/.note/.center/.seal/.skelrow) and the .field/.fg
+form kit, content radii normalised to `--r`/`--r-sm`. `src/styles/flows.css`
+is the unified flow-component kit (canonical wins on conflict; mobile shell
+scoped under `.ess`; the flow geofence radar namespaced `.fx-geo`).
+`tailwind.config.ts` is layout glue only (preflight off).
 
 ## Structure
 

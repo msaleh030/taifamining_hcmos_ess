@@ -1,137 +1,122 @@
-// App shell + routing. The nav is driven by /me/landing exactly as the
-// certified scaffold's app.js: a user only ever sees the modules their role
-// permits (A2), and the server enforces the same per endpoint — the nav is a
-// convenience, never the gate. Screen routes mirror the scaffold's views 1:1.
-import { Navigate, Route, Routes, NavLink, useNavigate, useLocation } from 'react-router-dom';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+// Routing + theme/surface plumbing. [data-theme] and [data-surface] ride the
+// <html> root (F6); the surface is derived from the viewport (mobile ≤480,
+// tablet ≤820, desktop above; kiosk via ?surface=kiosk) so every screen
+// renders across the 4×4 matrix without per-screen code. The A2 landing is
+// server-authoritative: R13 (field) has no console landing and routes to the
+// ESS track (C2 rule); everyone else gets the console shell.
+import { useEffect } from 'react';
+import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { api, session, isApiError } from './lib/api';
-import { setLanguage } from './lib/i18n';
 import Login from './screens/Login';
+import Overview from './screens/Overview';
 import Directory from './screens/Directory';
-import Profile from './screens/Profile';
+import { Scorecard, MyKpis } from './screens/Kpi';
 import Leave from './screens/Leave';
 import Liability from './screens/Liability';
-import { Scorecard, MyKpis } from './screens/Kpi';
-import Attendance from './screens/Attendance';
 import Exact from './screens/Exact';
 import Alerts from './screens/Alerts';
-import Support from './screens/Support';
-import Policy from './screens/Policy';
 import Controls from './screens/Controls';
+import Policy from './screens/Policy';
+import Support from './screens/Support';
 import Tenant from './screens/Tenant';
+import Attendance from './screens/Attendance';
+import EssHome from './screens/EssHome';
+import Shell from './components/shell';
+import { Skeleton } from './components/state';
 
-// Fixed nav entries from the scaffold (each endpoint enforces its own guard;
-// a role without access gets that screen's explained no-access state).
-const VIEWS: [string, string][] = [
-  ['/directory', 'directory'],
-  ['/liability', 'liability'],
-  ['/scorecard', 'scorecard'],
-  ['/my-kpis', 'my kpis'],
-  ['/attendance', 'clock in'],
-  ['/exact', 'payroll upload'],
-  ['/policy', 'policy'],
-  ['/support', 'support'],
-  ['/alerts', 'doc alerts'],
-  ['/controls', 'controls'],
-  ['/tenant', 'new tenant'],
-];
+function applySurface() {
+  const forced = new URLSearchParams(location.search).get('surface');
+  const w = window.innerWidth;
+  const surface = forced ?? (w <= 480 ? 'mobile' : w <= 820 ? 'tablet' : 'desktop');
+  document.documentElement.setAttribute('data-surface', surface);
+}
 
-function Shell() {
-  const { t, i18n } = useTranslation();
-  const navigate = useNavigate();
-  const queryClient = useQueryClient();
+function useThemeSurface() {
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', localStorage.getItem('hcmos.theme') || 'light');
+    applySurface();
+    window.addEventListener('resize', applySurface);
+    return () => window.removeEventListener('resize', applySurface);
+  }, []);
+}
+
+function Console() {
+  const { t } = useTranslation();
+  const location = useLocation();
   const landing = useQuery({ queryKey: ['landing'], queryFn: api.landing, retry: false });
 
-  if (landing.isPending) return <p className="p-gutter text-ink-muted">Loading…</p>;
+  if (landing.isPending) return <div style={{ padding: 28 }}><Skeleton rows={6} /></div>;
   if (landing.isError) {
-    // Expired/invalid session → back to login (same convention as the scaffold).
     session.clear();
     const expired = isApiError(landing.error) && landing.error.status === 401;
-    return <Navigate to="/login" state={{ message: expired ? t('login.expired') : t('login.dashError') }} replace />;
+    return <Navigate to="/login" state={{ message: expired ? t('auth.errCreds') : t('overview.errT') }} replace />;
   }
   const l = landing.data;
 
-  const signOut = () => {
-    api.logout();
-    queryClient.clear();
-    navigate('/login');
+  // R13 field operators have no console landing — the ESS track is home.
+  if (l.role === 'R13' && !location.pathname.startsWith('/ess')) return <Navigate to="/ess" replace />;
+
+  // Per-route page titles (the topbar redline: title + subtitle).
+  const TITLES: Record<string, [string, string?]> = {
+    '/': [t('overview.title'), t('overview.org')],
+    '/directory': [t('employees.directory'), t('employees.directorySub')],
+    '/scorecard': [t('kpi.console'), t('kpi.consoleSub')],
+    '/leave': [t('leave.apply'), t('leave.applySub')],
+    '/liability': [t('leave.liability'), t('leave.liabilitySub')],
+    '/exact': [t('exact.exact'), t('exact.exactSub')],
+    '/alerts': [t('governance.alerts'), t('governance.alertsSub')],
+    '/controls': [t('governance.controls'), t('governance.controlsSub')],
+    '/policy': [t('governance.policy'), t('governance.policySub')],
+    '/support': [t('governance.support'), t('governance.supportSub')],
+    '/tenant': [t('tenant.wizard'), t('tenant.wizardSub')],
+    '/attendance': [t('attendance.clockin'), t('attendance.clockinSub')],
+    '/my-kpis': [t('kpi.ess'), t('kpi.essSub')],
   };
+  const base = '/' + (location.pathname.split('/')[1] || '');
+  const [title, subtitle] = TITLES[base] ?? TITLES['/'];
 
   return (
-    <div>
-      <div className="bg-uat text-brand-contrast text-center text-xs font-semibold tracking-wider uppercase py-1">
-        {t('uat.banner')}
-      </div>
-      <header className="flex items-center gap-4 px-gutter py-3 bg-brand text-brand-contrast">
-        <strong>{t('app.title')}</strong>
-        <span className="ml-auto opacity-85 text-sm">{l.role} · {l.name}</span>
-        <button
-          className="text-sm underline"
-          onClick={() => setLanguage(i18n.language === 'en' ? 'sw' : 'en')}
-        >
-          {i18n.language === 'en' ? 'SW' : 'EN'}
-        </button>
-        <button className="text-sm underline" onClick={signOut}>{t('app.signOut')}</button>
-      </header>
-      <nav className="px-gutter py-3">
-        <ul className="list-none flex flex-wrap gap-2 m-0 p-0">
-          {VIEWS.map(([to, label]) => (
-            <li key={to}>
-              <NavLink
-                to={to}
-                className={({ isActive }) =>
-                  `block px-3 py-1.5 bg-surface-raised border border-line rounded-control capitalize no-underline text-ink ${isActive ? 'border-brand font-semibold' : ''}`}
-              >
-                {label}
-              </NavLink>
-            </li>
-          ))}
-          {/* A2 landing modules (server-authoritative list). 'leave' opens the
-              self-service leave screen, as in the scaffold. */}
-          {l.modules.map((mod) => (
-            <li key={mod}>
-              {mod === 'leave' ? (
-                <NavLink to="/leave" className="block px-3 py-1.5 bg-surface-raised border border-line rounded-control capitalize no-underline text-ink">{mod}</NavLink>
-              ) : (
-                <span className="block px-3 py-1.5 bg-surface border border-line rounded-control capitalize text-ink-muted">{mod}</span>
-              )}
-            </li>
-          ))}
-        </ul>
-      </nav>
-      <main className="p-gutter">
-        <Routes>
-          <Route index element={<p className="text-ink-muted">{t('app.selectModule')}</p>} />
-          <Route path="/directory" element={<Directory />} />
-          <Route path="/directory/:id" element={<Profile />} />
-          <Route path="/leave" element={<Leave />} />
-          <Route path="/liability" element={<Liability />} />
-          <Route path="/scorecard" element={<Scorecard />} />
-          <Route path="/my-kpis" element={<MyKpis />} />
-          <Route path="/attendance" element={<Attendance />} />
-          <Route path="/exact" element={<Exact />} />
-          <Route path="/policy" element={<Policy />} />
-          <Route path="/support" element={<Support />} />
-          <Route path="/alerts" element={<Alerts />} />
-          <Route path="/controls" element={<Controls />} />
-          <Route path="/tenant" element={<Tenant />} />
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-      </main>
-    </div>
+    <Shell landing={l} title={title} subtitle={subtitle}>
+      <Routes>
+        <Route index element={<Overview landing={l} />} />
+        <Route path="/directory" element={<Directory />} />
+        <Route path="/directory/:id" element={<Directory />} />
+        <Route path="/scorecard" element={<Scorecard />} />
+        <Route path="/my-kpis" element={<MyKpis />} />
+        <Route path="/leave" element={<Leave />} />
+        <Route path="/liability" element={<Liability />} />
+        <Route path="/exact" element={<Exact />} />
+        <Route path="/alerts" element={<Alerts />} />
+        <Route path="/controls" element={<Controls />} />
+        <Route path="/policy" element={<Policy />} />
+        <Route path="/support" element={<Support />} />
+        <Route path="/tenant" element={<Tenant />} />
+        <Route path="/attendance" element={<Attendance />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </Shell>
   );
 }
 
 export default function App() {
+  useThemeSurface();
   const location = useLocation();
   if (location.pathname === '/login') {
+    return <Routes><Route path="/login" element={<Login />} /></Routes>;
+  }
+  if (!session.isAuthed) return <Navigate to="/login" replace />;
+  if (location.pathname.startsWith('/ess')) {
     return (
       <Routes>
-        <Route path="/login" element={<Login />} />
+        <Route path="/ess" element={<EssHome />} />
+        <Route path="/ess/clockin" element={<div className="ess"><Attendance ess /></div>} />
+        <Route path="/ess/leave" element={<div className="ess"><Leave ess /></div>} />
+        <Route path="/ess/kpis" element={<div className="ess"><MyKpis ess /></div>} />
+        <Route path="*" element={<Navigate to="/ess" replace />} />
       </Routes>
     );
   }
-  if (!session.isAuthed) return <Navigate to="/login" replace />;
-  return <Shell />;
+  return <Console />;
 }
