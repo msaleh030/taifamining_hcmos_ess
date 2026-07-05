@@ -17,6 +17,40 @@ const C = require('../../src/crypto');
 const THEMES = ['light', 'dark'] as const;
 const SURFACES = { desktop: { width: 1280, height: 800 }, mobile: { width: 390, height: 760 } } as const;
 
+// C20 controls — DETERMINISTIC capture (Design reject fix). The audit-chain
+// tile counts EVERY audit row and logins append to the chain, so capturing
+// light and dark in separate logged-in sweeps rendered two different counts
+// for one screen. This test therefore runs FIRST (workers:1, declaration
+// order): exactly ONE login against the fresh fixed seed, capture light,
+// flip [data-theme] client-side and reload (session persists, reads append
+// nothing), capture dark — same chain length in both shots by construction,
+// and stable across runs (fixed seed + fixed position + single login). The
+// cross-theme identity is ASSERTED on the rendered text, not assumed.
+test('C20 controls — deterministic chain fixture (light + dark)', async ({ page }) => {
+  test.setTimeout(240_000);
+  await page.setViewportSize(SURFACES.desktop);
+  await page.addInitScript(() => localStorage.setItem('hcmos.theme', 'light'));
+  await login(page, F.USERS.DIRECTOR_A);
+  const TERMINAL = '[data-state="all-clear"], [data-state="populated"], [data-state="empty"], [data-state="error"], [data-state="no-permission"]';
+
+  async function chainCount(): Promise<string> {
+    const tile = page.locator('.card', { hasText: 'Audit-chain integrity' });
+    return (await tile.locator('.num').innerText()).trim();
+  }
+
+  await page.goto('/controls');
+  await page.waitForSelector(TERMINAL, { timeout: 90_000 });
+  const lightCount = await chainCount();
+  await shoot(page, 'c20-controls', 'light', 'desktop');
+
+  await page.evaluate(() => localStorage.setItem('hcmos.theme', 'dark'));
+  await page.reload();
+  await page.waitForSelector(TERMINAL, { timeout: 90_000 });
+  const darkCount = await chainCount();
+  expect(darkCount, 'chain count must be identical across themes').toBe(lightCount);
+  await shoot(page, 'c20-controls', 'dark', 'desktop');
+});
+
 async function login(page: Page, user: { email: string; password: string }) {
   await page.goto('/login');
   await page.fill('input[name="email"]', user.email);
@@ -68,13 +102,8 @@ for (const theme of THEMES) {
         await shoot(page, 'c3-scorecard', theme, surface);
         await page.goto('/liability');
         await shoot(page, 'c16-liability-empty', theme, surface);
-        await page.goto('/controls');
-        // The run is live (audit-chain verification over the seed) — wait for ANY
-        // terminal state, generously; the screenshot then shows whichever it is.
-        await page.waitForSelector(
-          '[data-state="all-clear"], [data-state="populated"], [data-state="empty"], [data-state="error"], [data-state="no-permission"]',
-          { timeout: 90_000 });
-        await shoot(page, 'c20-controls', theme, surface);
+        // c20-controls is captured by the dedicated deterministic test above
+        // (the audit-chain count must not depend on how many logins preceded it).
         await page.goto('/alerts');
         await shoot(page, 'c20b-alerts', theme, surface);
         await page.goto('/policy');
