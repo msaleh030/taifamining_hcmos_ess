@@ -82,7 +82,9 @@ export default function Login() {
           <label className="lf-field">
             <span>{t('auth.mfa')}</span>
             <span className="lf-input"><IcShieldDots />
-              <input name="mfa" inputMode="numeric" pattern="[0-9]*" maxLength={6} required /></span>
+              {/* optional: the server enforces it only when the tenant's
+                  auth.mfa.required config is on (AUTH-01 default) */}
+              <input name="mfa" inputMode="numeric" pattern="[0-9]*" maxLength={6} /></span>
           </label>
           <button className="btn primary lf-go" type="submit" disabled={busy || offline}>
             {busy ? t('auth.signing') : t('auth.signin')}
