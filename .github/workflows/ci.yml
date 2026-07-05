@@ -49,3 +49,76 @@ jobs:
       # pretest = setup-db.sh + migrate + seed; test = node --test (118 tests).
       - name: Run full test suite
         run: npm test
+
+  # The DESIGNED frontend: compile + typecheck the Vite build, then run the
+  # visual-parity harness against the real seeded backend. Baseline contract:
+  # while design/app-baselines/ is EMPTY the run generates candidate baselines
+  # (uploaded as an artifact for Design's one-time acceptance); once accepted
+  # baselines are committed, the run ENFORCES pixel parity — visual fidelity
+  # is a first-class AC, drift fails CI.
+  designed-frontend:
+    name: Designed frontend build + visual parity
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Start local PostgreSQL
+        run: |
+          set -euo pipefail
+          PG_VER="$(pg_lsclusters -h | awk 'NR==1{print $1}')"
+          PG_VER="${PG_VER:-16}"
+          sudo systemctl start "postgresql@${PG_VER}-main" 2>/dev/null \
+            || sudo pg_ctlcluster "$PG_VER" main start || true
+          for i in $(seq 1 30); do pg_isready -h 127.0.0.1 -p 5432 && break; sleep 1; done
+          pg_isready -h 127.0.0.1 -p 5432
+
+      - name: Install + typecheck + build (Vite)
+        working-directory: frontend
+        run: |
+          npm ci --no-audit --no-fund
+          npm run build
+
+      - name: Upload dist artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: hcmos-frontend-dist
+          path: frontend/dist
+
+      - name: Seed backend + start server
+        run: |
+          npm install --no-audit --no-fund
+          bash scripts/setup-db.sh && node scripts/migrate.js && node scripts/seed.js
+          node src/server.js &
+          for i in $(seq 1 30); do curl -sf http://127.0.0.1:3000/health && break; sleep 1; done
+          curl -sf http://127.0.0.1:3000/health
+
+      - name: Install Playwright chromium
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+
+      - name: Visual parity (enforce, or generate candidates on first run)
+        working-directory: frontend
+        run: |
+          if ! find ../design/app-baselines -name '*.png' | grep -q .; then
+            echo "No accepted baselines yet — generating CANDIDATES for Design."
+            npm run visual:update
+          else
+            npm run visual
+          fi
+
+      - name: Upload screenshots (candidates or diff report)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: visual-parity-screens
+          path: |
+            design/app-baselines
+            frontend/test-results
+          if-no-files-found: warn

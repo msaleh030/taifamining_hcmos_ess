@@ -30,6 +30,11 @@ const cfg = require('./config');
 const { HttpError } = require('./errors');
 
 const WEB_DIR = path.join(__dirname, '..', 'web');
+// The DESIGNED frontend (frontend/dist, built by Vite in CI/deploy). When the
+// build exists it serves as the root app and the vanilla scaffold retires to
+// /legacy (kept as the functional preview until every screen is baseline-
+// accepted); without a build, behaviour is unchanged (scaffold at root).
+const DIST_DIR = path.join(__dirname, '..', 'frontend', 'dist');
 
 function readJson(req) {
   return new Promise((resolve, reject) => {
@@ -298,13 +303,12 @@ const MIME = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8',
   '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.ico': 'image/x-icon',
   '.json': 'application/json', '.map': 'application/json',
+  '.png': 'image/png', '.woff2': 'font/woff2', '.webmanifest': 'application/manifest+json',
 };
 
-// Serve a static asset from web/ (production frontend). Returns true if handled.
-function serveStatic(pathname, res) {
-  const rel = pathname === '/' ? 'index.html' : pathname.replace(/^\/+/, '');
-  const full = path.normalize(path.join(WEB_DIR, rel));
-  if (!full.startsWith(WEB_DIR)) return false;         // no path traversal
+function serveFile(dir, rel, res) {
+  const full = path.normalize(path.join(dir, rel));
+  if (!full.startsWith(dir)) return false;              // no path traversal
   const ext = path.extname(full);
   if (!MIME[ext]) return false;                         // whitelisted types only
   let buf;
@@ -312,6 +316,24 @@ function serveStatic(pathname, res) {
   res.writeHead(200, { 'content-type': MIME[ext] });
   res.end(buf);
   return true;
+}
+
+// Static serving. With a designed build present: dist/ at the root with an
+// SPA fallback to index.html (React Router owns page paths — API routes were
+// already tried first), scaffold under /legacy. Without one: scaffold at the
+// root, exactly as before.
+function serveStatic(pathname, res) {
+  const hasDist = fs.existsSync(path.join(DIST_DIR, 'index.html'));
+  if (pathname.startsWith('/legacy')) {
+    const rel = pathname.replace(/^\/legacy\/?/, '') || 'index.html';
+    return serveFile(WEB_DIR, rel, res);
+  }
+  const root = hasDist ? DIST_DIR : WEB_DIR;
+  const rel = pathname === '/' ? 'index.html' : pathname.replace(/^\/+/, '');
+  if (serveFile(root, rel, res)) return true;
+  // SPA fallback: only for extension-less page paths, only when dist serves.
+  if (hasDist && !path.extname(rel)) return serveFile(DIST_DIR, 'index.html', res);
+  return false;
 }
 
 function createServer() {
