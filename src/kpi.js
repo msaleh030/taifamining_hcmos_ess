@@ -23,7 +23,7 @@ const round2 = (x) => Math.round(x * 100) / 100;
 // Owner groups (A2/A3). Role codes that "own" a KPI on the org scorecard.
 const HR   = ['R03', 'R04', 'R11', 'R12'];
 const EXEC = ['R11', 'R12'];
-const HSE  = ['R05', 'R06'];
+const HSE  = ['R06']; // R05 absorbed by R06 (SHEQ Manager), registry v1.6
 const PAY  = ['R11', 'R12', 'R15', 'R16']; // v1.5: R09 → Finance Manager/CFC
 const SUP  = ['R02', 'R04', 'R11'];
 

@@ -25,7 +25,7 @@ after(H.stop);
 
 // ── DISC-01/04 + UNI-06: atomic fan-out through HTTP; fault injected at endpoint ─
 test('DISC-01/04 the fan-out is atomic through the endpoint; a mid-fan-out fault commits nothing', async () => {
-  const issuer = await tok(F.USERS.DISS_A); // R05, permitted issuer
+  const issuer = await tok(F.USERS.DISS_A); // R06 (SHEQ Manager), permitted issuer
   const before = await counts(F.EMP.CAROL);
 
   // Fault injected AT THE ENDPOINT LAYER (request body → handler, test-only).
@@ -73,7 +73,7 @@ test('DISC-03 a suspension issued through the endpoint blocks the subject app-wi
 
 // ── SOD-01/02: separation of duties enforced at the endpoint ────────────────
 test('SOD-01/02 the endpoint refuses self-action, non-distinct checker, and a forbidden issuer', async () => {
-  const issuer = await tok(F.USERS.DISS_A); // R05, permitted issuer (employee DISS)
+  const issuer = await tok(F.USERS.DISS_A); // R06 (SHEQ Manager), permitted issuer (employee DISS)
 
   // Forbidden issuer: R01 is not in disciplinary.issuer.roles → 403 at the HTTP guard.
   const forbidden = await tok(F.USERS.EMP_A);

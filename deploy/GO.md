@@ -26,30 +26,42 @@ as an env var — never in chat). Steps 4–5 are in **your Cloudflare account**
   scaffolding, and starts the app under systemd on `127.0.0.1:3000`.
 - Confirm: `ss -tlnp | grep 5432` shows loopback only; `systemctl status hcmos` active.
 
-## 4. UAT users + MFA  (→ I-5)
-On the box:
+## 4. UAT users + MFA  (→ I-5) — the REAL 11-person roster (v1.6)
+Emails are `firstname.lastname@taifamining.tz`. On the box, for each row:
 ```
 set -a; . /etc/hcmos/hcmos.env; set +a; cd /opt/hcmos
-UAT_COMPANY=11111111-1111-1111-1111-111111111111 UAT_EMAIL=admin@taifamining.tz \
-UAT_NAME='Mohammed Saleh' UAT_ROLE=R11 UAT_SITE='Head Office' node scripts/provision-uat-user.js
+UAT_COMPANY=11111111-1111-1111-1111-111111111111 UAT_EMAIL=<email> \
+UAT_NAME='<Full Name>' UAT_ROLE=<Rxx> UAT_SITE='<site>' node scripts/provision-uat-user.js
 ```
-R11 (HR Director) is central — sees every site's directory + permit alerts (I-5).
-Enrol the printed `otpauth://` in your authenticator; rotate the printed password.
+Enrol each printed `otpauth://` in the holder's authenticator; rotate the
+printed password on first sign-in.
 
-Provision the TWO finance users for the data load (v1.5 LI-6: the ingest
-maker-checker is a role-split SoD — Finance Manager submits, CFC approves):
-```
-UAT_COMPANY=11111111-1111-1111-1111-111111111111 UAT_EMAIL=finmgr@taifamining.tz \
-UAT_NAME='<Finance Manager>' UAT_ROLE=R15 UAT_SITE='Head Office' node scripts/provision-uat-user.js
-UAT_COMPANY=11111111-1111-1111-1111-111111111111 UAT_EMAIL=cfc@taifamining.tz \
-UAT_NAME='<Chief Financial Controller>' UAT_ROLE=R16 UAT_SITE='Head Office' node scripts/provision-uat-user.js
-```
+| # | Person | Role(s) | Account email(s) |
+|---|---|---|---|
+| 1-4 | HR Officers ×4 (names from Taifa HR) | R03 (site-scoped) | `<first.last>@taifamining.tz` |
+| 5-6 | HR Managers ×2 (names from Taifa HR) | R04 | `<first.last>@taifamining.tz` |
+| 7 | Omid Karambeck | **R11 Head of HR** + **R16 CFC** (checker) | `omid.karambeck@taifamining.tz` (R11) · `omid.karambeck+cfc@taifamining.tz` (R16) |
+| 8 | Maurice `<surname>` | **R06 SHEQ Manager** (absorbs HSE Officer — no R05 account, v1.6) | `maurice.<surname>@taifamining.tz` |
+| 9 | Cecilia Mtweve | **R07 Payroll Officer** + **R15 Finance Manager** (maker) | `cecilia.mtweve@taifamining.tz` (R07) · `cecilia.mtweve+finance@taifamining.tz` (R15) |
+| 10 | Rajesh `<surname>` | R12 System Administrator | `rajesh.<surname>@taifamining.tz` |
+| 11 | Richard `<surname>` | R14 CEO / Executive (read-only, org-wide) | `richard.<surname>@taifamining.tz` |
 
-LI-7 — the SUPER ADMIN (R12, unscoped, MFA mandatory). INTERACTIVE: the password
-is typed hidden at the console and stored hash-only — never in repo/config/env,
-never printed. Enrol the printed otpauth in your authenticator (shown once):
+R11 (Head of HR) is central — sees every site's directory + permit alerts (I-5).
+
+**SoD is preserved (LI-6):** the ingest maker is Cecilia's R15 account, the
+checker is Omid's R16 account — two people, two accounts, so the same-user-403
+rule never self-blocks. Do NOT vest maker+checker in one person. Dual-role
+holders get TWO accounts (email is globally unique); the `+alias` addresses
+deliver to the same mailbox — confirm the alias convention with Kira if the
+mail platform doesn't support plus-addressing.
+
+SUPER ADMINS (LI-7 — R12, UNSCOPED, MFA mandatory; INTERACTIVE hidden password,
+stored hash-only — never in repo/config/env, never printed; enrol each printed
+otpauth, shown once). `admin@taifamining.tz` is a SUPER ADMIN — **not** an R11
+user — in addition to Kira's railgrid account:
 ```
 UAT_COMPANY=11111111-1111-1111-1111-111111111111 node scripts/provision-super-admin.js mohammed@railgrid.tz
+UAT_COMPANY=11111111-1111-1111-1111-111111111111 node scripts/provision-super-admin.js admin@taifamining.tz
 ```
 
 ## 5. Cloudflare — DNS + TLS + Access + cache  (→ I-1)  [your account]
@@ -73,16 +85,16 @@ check), then load through the ingestion discipline via the loader:
 cd /opt/hcmos; set -a; . /etc/hcmos/hcmos.env; set +a
 # dry-run first — prints clean/exception split + control check, loads NOTHING:
 node scripts/load-ingest.js opening-balance balances.csv control.json \
-     finmgr@taifamining.tz cfc@taifamining.tz
-# review balances.csv.exceptions.json, then commit (maker finmgr@ R15, checker cfc@ R16):
+     cecilia.mtweve+finance@taifamining.tz omid.karambeck+cfc@taifamining.tz
+# review balances.csv.exceptions.json, then commit (maker = Cecilia R15, checker = Omid R16):
 node scripts/load-ingest.js opening-balance balances.csv control.json \
-     finmgr@taifamining.tz cfc@taifamining.tz --commit
+     cecilia.mtweve+finance@taifamining.tz omid.karambeck+cfc@taifamining.tz --commit
 # permits mirror (control.json = {"count": N}):
 node scripts/load-ingest.js permits permits.csv permits-control.json \
-     finmgr@taifamining.tz cfc@taifamining.tz --commit
+     cecilia.mtweve+finance@taifamining.tz omid.karambeck+cfc@taifamining.tz --commit
 ```
 Balances land in the protected **opening bucket** (lapse-exempt). Verify with
-`bash deploy/smoke-test.sh`, then log in as the R11 account and confirm the
+`bash deploy/smoke-test.sh`, then log in as the Head of HR (R11) account and confirm the
 directory shows the loaded employees. **Stays TEST data** — carry policy +
 duplicate-file open with Baraka (`deploy/RATIFY-AT-UAT.md`).
 

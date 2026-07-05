@@ -43,7 +43,7 @@ const EMPLOYEES = {
   [EMP.DAVE]:  { company: TENANT_A, site: SITE.A2, emp_no: 'E-A-0005', full_name: 'Dave SouthSite',    role_code: 'R01', dept: 'Mining',     status: 'active', phone: '0700000005', email: 'dave@a.example' },
   [EMP.HOEMP]: { company: TENANT_A, site: SITE.HO, emp_no: 'E-A-0006', full_name: 'Hettie HeadOffice', role_code: 'R03', dept: 'Admin',      status: 'active', phone: '0700000006', email: 'hettie@a.example' },
   [EMP.DSUBJ]: { company: TENANT_A, site: SITE.A1, emp_no: 'E-A-0051', full_name: 'Dan Subject',       role_code: 'R01', dept: 'Mining',     status: 'active', phone: '0700000051', email: 'dan@a.example' },
-  [EMP.DISS]:  { company: TENANT_A, site: SITE.A1, emp_no: 'E-A-0052', full_name: 'Ivy Issuer',        role_code: 'R05', dept: 'HSE',        status: 'active', phone: '0700000052', email: 'ivy@a.example' },
+  [EMP.DISS]:  { company: TENANT_A, site: SITE.A1, emp_no: 'E-A-0052', full_name: 'Ivy Issuer',        role_code: 'R06', dept: 'HSE',        status: 'active', phone: '0700000052', email: 'ivy@a.example' },
   [EMP.DCHK]:  { company: TENANT_A, site: SITE.A1, emp_no: 'E-A-0053', full_name: 'Cate Checker',      role_code: 'R04', dept: 'Admin',      status: 'active', phone: '0700000053', email: 'cate@a.example' },
   [EMP.DSUBJ2]:{ company: TENANT_A, site: SITE.A1, emp_no: 'E-A-0055', full_name: 'Devon Subject',     role_code: 'R01', dept: 'Mining',     status: 'active', phone: '0700000055', email: 'devon@a.example' },
   [EMP.BOB_B]: { company: TENANT_B, site: SITE.B1, emp_no: 'E-B-0001', full_name: 'Bob Bravo',         role_code: 'R01', dept: 'Mining',     status: 'active', phone: '0800000001', email: 'bob@b.example' },
@@ -85,7 +85,7 @@ const USERS = {
   PAYROLL_A:  { id: 'd0000000-0000-0000-0000-000000000007', company: TENANT_A, employee: EMP.ALICE, email: 'pay@a.example',      password: 'PayPass!2026',   role: 'R07', status: 'active' }, // central, pay visible
   DIRECTOR_A: { id: 'd0000000-0000-0000-0000-000000000011', company: TENANT_A, employee: EMP.ALICE, email: 'director@a.example', password: 'DirPass!2026',   role: 'R11', status: 'active' }, // central
   HSE_A:      { id: 'd0000000-0000-0000-0000-000000000006', company: TENANT_A, employee: EMP.ALICE, email: 'hse@a.example',      password: 'HsePass!2026',   role: 'R06', status: 'active' }, // medical+disciplinary
-  HSE5_A:     { id: 'd0000000-0000-0000-0000-000000000005', company: TENANT_A, employee: EMP.ALICE, email: 'hse5@a.example',     password: 'Hse5Pass!2026',  role: 'R05', status: 'active' }, // medical (Section 17.1)
+  HSE5_A:     { id: 'd0000000-0000-0000-0000-000000000005', company: TENANT_A, employee: EMP.ALICE, email: 'hse5@a.example',     password: 'Hse5Pass!2026',  role: 'R06', status: 'active' }, // medical (Section 17.1; R05 absorbed by R06, v1.6)
   CEO_A:      { id: 'd0000000-0000-0000-0000-000000000014', company: TENANT_A, employee: EMP.ALICE, email: 'ceo@a.example',      password: 'CeoPass!2026',   role: 'R14', status: 'active' }, // v1.5 CEO/Executive (read-only oversight)
   EMP_A:      { id: 'd0000000-0000-0000-0000-000000000001', company: TENANT_A, employee: EMP.ALICE, email: 'emp@a.example',      password: 'EmpPass!2026',   role: 'R01', status: 'active' },
   CFC_A:      { id: 'd0000000-0000-0000-0000-000000000008', company: TENANT_A, employee: EMP.ALICE, email: 'cfc@a.example',      password: 'CfcPass!2026',   role: 'R16', status: 'active' }, // v1.5 CFC — ingest checker; no directory
@@ -97,7 +97,7 @@ const USERS = {
   SITE2_A:    { id: 'd0000000-0000-0000-0000-0000000000d2', company: TENANT_A, employee: EMP.DAVE,  email: 'dave@a.example',     password: 'DavePass!2026',  role: 'R01', status: 'active' }, // SITE A2 (geofence)
   HO_A:       { id: 'd0000000-0000-0000-0000-0000000000d0', company: TENANT_A, employee: EMP.HOEMP, email: 'hettie@a.example',   password: 'HettiePass!26',  role: 'R03', status: 'active' }, // SITE HO (no zones)
   DSUBJ_A:    { id: 'd0000000-0000-0000-0000-000000000d51', company: TENANT_A, employee: EMP.DSUBJ, email: 'dan@a.example',      password: 'DanPass!2026',   role: 'R01', status: 'active' }, // disciplinary subject
-  DISS_A:     { id: 'd0000000-0000-0000-0000-000000000d52', company: TENANT_A, employee: EMP.DISS,  email: 'ivy@a.example',      password: 'IvyPass!2026',   role: 'R05', status: 'active' }, // permitted issuer
+  DISS_A:     { id: 'd0000000-0000-0000-0000-000000000d52', company: TENANT_A, employee: EMP.DISS,  email: 'ivy@a.example',      password: 'IvyPass!2026',   role: 'R06', status: 'active' }, // permitted issuer (R05 absorbed by R06, v1.6)
   DCHK_A:     { id: 'd0000000-0000-0000-0000-000000000d53', company: TENANT_A, employee: EMP.DCHK,  email: 'cate@a.example',     password: 'CatePass!2026',  role: 'R04', status: 'active' }, // permitted checker
   DSUBJ2_A:   { id: 'd0000000-0000-0000-0000-000000000d55', company: TENANT_A, employee: EMP.DSUBJ2, email: 'devon@a.example',   password: 'DevonPass!2026', role: 'R01', status: 'active' }, // F2 suspension subject login
   TERM_A:     { id: 'd0000000-0000-0000-0000-0000000000e0', company: TENANT_A, employee: EMP.TERM,  email: 'term@a.example',     password: 'TermPass!2026',  role: 'R01', status: 'terminated' },

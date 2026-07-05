@@ -85,7 +85,7 @@ test('an expiring document raises an alert to the DA-2 role and clears on renewa
 // ── 2b. Each document type routes to its APPLIED DA-2 registry role ──────────
 test('expiry alerts route each document type to its registry DA-2 role', async () => {
   // valid_until 2026-07-10 is within every DA-1 lead window at this asOf.
-  const expected = { contract: 'R05', permit: 'R06', licence: 'R06', medical: 'R03' };
+  const expected = { contract: 'R06', permit: 'R06', licence: 'R06', medical: 'R03' }; // v1.6: R05 absorbed by R06
   const ids = {};
   for (const kind of Object.keys(expected)) {
     ids[kind] = (await owner(
@@ -133,7 +133,7 @@ test('a new policy version resets acknowledgement and the outstanding list is co
   const CODE = 'COND-SLICE9';
   const activeCount = Number((await owner(
     `SELECT count(*)::int n FROM employee WHERE company_id=$1 AND status='active'`, [A])).rows[0].n);
-  const diss = { company_id: A, user_id: F.USERS.DISS_A.id, role_code: 'R05' };  // employee DISS (active)
+  const diss = { company_id: A, user_id: F.USERS.DISS_A.id, role_code: 'R06' };  // employee DISS (active; R05 absorbed, v1.6)
   const dchk = { company_id: A, user_id: F.USERS.DCHK_A.id, role_code: 'R04' };  // employee DCHK (active)
   try {
     const v1 = await policy.publishPolicy(admin, { code: CODE, title: 'Code of Conduct' });

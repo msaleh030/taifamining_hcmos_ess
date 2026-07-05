@@ -92,7 +92,7 @@ test('v1.5 LI-3: R08/R09 are removed; R15/R16 carry finance+payroll and pay visi
   for (const code of ['R15', 'R16']) {
     assert.deepEqual(roles.landingFor(code).modules, ['dashboard', 'finance', 'payroll', 'reports']);
   }
-  // Pay/bank visibility is EXACTLY Payroll Officer + HR Director + FM + CFC —
+  // Pay/bank visibility is EXACTLY Payroll Officer + Head of HR + FM + CFC —
   // not CEO (R14), not HR Officer (R03).
   assert.deepEqual([...roles.FIELD_RULES.pay_grade].sort(), ['R07', 'R11', 'R15', 'R16']);
   assert.deepEqual([...roles.FIELD_RULES.bank_account].sort(), ['R07', 'R11', 'R15', 'R16']);

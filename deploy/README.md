@@ -19,7 +19,7 @@ Cloudflare, DNS, or the secret store, and does not contain the real test-data fi
 - Loaded sites (names for `UAT_SITE`): `Head Office`, `Nyanzaga`, `North Mara`, `Mwadui`.
 - Origin: Hostinger-EU box; Postgres local; Cloudflare Tunnel → `localhost:3000`.
 
-Example — provision Kira (central HR Director, sees every site):
+Example — provision the Head of HR (central R11, sees every site):
 ```
 UAT_COMPANY=11111111-1111-1111-1111-111111111111 UAT_EMAIL=kira@taifamining.tz \
 UAT_NAME='Kira <surname>' UAT_ROLE=R11 UAT_SITE='Head Office' \
@@ -72,7 +72,7 @@ own password + TOTP enrolment:
 UAT_COMPANY=<tenant-uuid> UAT_EMAIL=kira@taifamining.tz UAT_NAME='Kira …' \
 UAT_ROLE=R11 UAT_SITE='Head Office' node scripts/provision-uat-user.js
 ```
-Give **Kira an HR Director (R11)** account — R11 is *central* (non-site-scoped), so the
+Give **the Head of HR an R11** account — R11 is *central* (non-site-scoped), so the
 directory shows employees at **every** loaded site (Head Office, Nyanzaga, …). For
 site-scoped testers (R03/R04) provision one per site — a site-bound role sees only its
 own site. The script prints the `otpauth://` URI for the tester to enrol; deliver the

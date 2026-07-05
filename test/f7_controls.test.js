@@ -35,7 +35,7 @@ after(H.stop);
 test('controls view is guarded to the AUD/SOD set (R11/R12); other roles refused', async () => {
   assert.equal((await run(await tok(F.USERS.EMP_A))).status, 403, 'employee (R01) refused');
   assert.equal((await run(await tok(F.USERS.PAYROLL_A))).status, 403, 'payroll (R07) refused — privileged but not AUD/SOD');
-  assert.equal((await run(await tok(F.USERS.DIRECTOR_A))).status, 200, 'HR Director (R11) allowed');
+  assert.equal((await run(await tok(F.USERS.DIRECTOR_A))).status, 200, 'Head of HR (R11) allowed');
   assert.equal((await run(await tok(F.USERS.ADMIN_A))).status, 200, 'System Admin (R12) allowed');
 });
 

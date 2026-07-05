@@ -56,7 +56,7 @@ test('17.1 confidential fields are ABSENT (not masked/null) for non-permitted ro
   assert.ok(!('basic_pay' in noPayView), "absent — not == null, not '****'");
   assert.ok(!('bank_account' in noPayView));
 
-  // medical: R05 sees, R02 absent
+  // medical: R06 (SHEQ Manager) sees, R02 absent
   const r05 = await H.loginConsole(F.USERS.HSE5_A);
   const r02 = await H.loginConsole(F.USERS.SUP_A);
   const medView = (await H.req('GET', `/employees/${id}`, { token: r05.body.token })).body;

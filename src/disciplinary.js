@@ -39,7 +39,7 @@ async function issueAction(issuer, input = {}, opts = {}) {
   if (!isUuid(approverUserId)) throw new HttpError(400, 'approver required');
 
   const company = issuer.company_id;
-  const issuerRoles  = await cfg.getRoleSet(company, 'disciplinary.issuer.roles', 'R02,R05,R06');
+  const issuerRoles  = await cfg.getRoleSet(company, 'disciplinary.issuer.roles', 'R02,R06');
   const checkerRoles = await cfg.getRoleSet(company, 'disciplinary.checker.roles', 'R04,R11');
   const hrRole       = await cfg.getConfig(company, 'disciplinary.hr.role', 'R04');
 

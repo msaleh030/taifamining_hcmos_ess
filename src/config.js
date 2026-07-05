@@ -44,8 +44,8 @@ const DEFAULT_CONFIG = {
   // v1.5 LI-3: R09 removed; Finance Manager (R15) + CFC (R16) see pay/bank.
   'a3.pay.roles':          'R07,R11,R15,R16',
   // v1.5 LI-5 (OPEN): R03 added (HR Officer absorbs clinic/medical), R10 removed.
-  'a3.medical.roles':      'R03,R05,R06',
-  'a3.disciplinary.roles': 'R05,R06,R07,R11',
+  'a3.medical.roles':      'R03,R06',      // v1.6: R05 absorbed by R06 (SHEQ Manager)
+  'a3.disciplinary.roles': 'R06,R07,R11',  // v1.6: R05 absorbed by R06
 
   // Roles with NO directory access at all (server returns 403 on /employees*).
   // v1.5: R08/R09 retired; the finance class (R15/R16) stays directory-denied
@@ -56,7 +56,7 @@ const DEFAULT_CONFIG = {
   // Issuer and checker role-sets are DISJOINT, so a permitted issuer and a
   // permitted checker are always different roles (SoD by construction); the
   // service additionally enforces different persons and subject ≠ actor.
-  'disciplinary.issuer.roles':  'R02,R05,R06',   // supervisor + HSE issue
+  'disciplinary.issuer.roles':  'R02,R06',       // supervisor + SHEQ issue (R05 absorbed, v1.6)
   'disciplinary.checker.roles': 'R04,R11',       // HR Manager / HR Director confirm
   'disciplinary.hr.role':       'R04',           // HR named on the console notification
 
@@ -185,7 +185,7 @@ const DEFAULT_CONFIG = {
   'doc.lead_time.medical':    '30',
   // DA-2 notified role per document type — APPLIED registry values (pending
   // UAT ratification, but these ARE the values, not placeholders).
-  'doc.notify.role.contract': 'R05',       // HR Officer
+  'doc.notify.role.contract': 'R06',       // v1.6: R05's duties -> SHEQ Manager (was R05; reroute is Code's inference, ratify at UAT)
   'doc.notify.role.permit':   'R06',       // Project HR
   // v1.5 LI-2: R10 removed. Licence (SHEQ-owned) → R06 HSE/Medical Manager;
   // medical → R03 HR Officer (absorbs clinic/medical admin). Reassigned per the
@@ -199,11 +199,11 @@ const DEFAULT_CONFIG = {
   //    real values that apply now, NOT [TBC]-gated. Each guard is pinned by a test.
   //
   // Document-expiry alerts → document-compliance owners: the DA-2 notified roles
-  // (R03/R05/R06 after v1.5) + the HR line and admin oversight. DELIBERATELY not
+  // (R03/R06 after v1.6) + the HR line and admin oversight. DELIBERATELY not
   // reports-scoped: R03 (HR Officer, a DA-2 recipient since v1.5) has no reports
   // module, so a reports guard would wrongly exclude a DA-2 recipient. UAT:
   // faithful-rule-correct as-is; ratify. Pinned by test/f7.test.js.
-  'alerts.view.roles':        'R03,R04,R05,R06,R11,R12',
+  'alerts.view.roles':        'R03,R04,R06,R11,R12', // v1.6: R05 absorbed by R06
   // Opening-Balance & Document Ingestion — the HIGHEST-privilege load path (it
   // writes the owed numbers). v1.5 LI-6: the maker/checker split is a REAL SoD
   // control on DISJOINT roles (the disciplinary issuer/checker pattern):
@@ -243,7 +243,6 @@ const DEFAULT_CONFIG = {
   // ── Pending governance refinements (registered so they are gated, not silently
   //    defaulted; nothing reads these until a value is set) ───────────────────
   'pending.a3.r11_medical':   PENDING,     // A3: R11 CEO medical
-  'pending.a3.r05_scope':     PENDING,     // A3: R05 HR scope (central vs site)
   'jml.probation':            PENDING,     // JML-3 [TBC]
   'es.reenrolment.owner':     PENDING,     // ES-1 device re-enrolment owner [TBC]
   'es.channels':              PENDING,     // ES-4 [TBC]
@@ -252,8 +251,8 @@ const DEFAULT_CONFIG = {
 };
 
 // Site-scope is data/config (the site_scope table), not hard-coded. These are
-// the seeded defaults. [TBC] site_scope.R05 — HSE is site-based in mining, so
-// scoped=true by decision; flip in the table if governance says central.
+// the seeded defaults. R05 removed at the app layer (v1.6 — absorbed by R06);
+// its row stays only so historical R05 rows keep a defined scope.
 const SITE_SCOPE = {
   R01: true,  R02: true,  R03: true,  R04: true,  R05: true,  R06: true,
   R07: false, R11: false, R12: false, R13: false,

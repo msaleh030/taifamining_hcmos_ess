@@ -11,7 +11,7 @@ const { F } = H;
 
 const A = F.TENANT_A;
 // Acting sessions (server trusts these; the request body never sets identity).
-const issuer   = { company_id: A, user_id: F.USERS.DISS_A.id, role_code: 'R05' }; // Ivy, permitted issuer
+const issuer   = { company_id: A, user_id: F.USERS.DISS_A.id, role_code: 'R06' }; // Ivy, permitted issuer (R05 absorbed, v1.6)
 const approver = F.USERS.DCHK_A.id;                                              // Cate, permitted checker
 const SUBJECT  = F.EMP.DSUBJ;
 
@@ -39,7 +39,7 @@ test('AC-DISC-01/02 confirmed action fans out (register, notifications, letter, 
   const reg = (await owner(`SELECT * FROM disciplinary WHERE id=$1`, [res.id])).rows[0];
   assert.equal(reg.action_type, 'written');
   assert.equal(reg.issued_by, 'ivy@a.example');
-  assert.equal(reg.issuer_role, 'R05');
+  assert.equal(reg.issuer_role, 'R06');
   assert.equal(reg.approver, 'cate@a.example');
   assert.equal(reg.approver_role, 'R04');
   assert.equal(reg.manager_name, 'Alice Admin');

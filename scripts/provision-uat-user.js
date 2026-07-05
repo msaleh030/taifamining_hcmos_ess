@@ -55,7 +55,7 @@ async function main() {
     console.log('\n=== UAT user provisioned ===');
     console.log('email    :', email);
     console.log('password :', process.env.UAT_PASSWORD ? '(as supplied)' : password, '   <-- give to the tester over a secure channel, then rotate');
-    console.log('role     :', role, role === 'R11' ? '(HR Director — central, sees all sites)' : '(site-scoped to ' + siteName + ')');
+    console.log('role     :', role, role === 'R11' ? '(Head of HR — central, sees all sites)' : '(site-scoped to ' + siteName + ')');
     console.log('site     :', siteName);
     console.log('TOTP     :', secret, '(base32 — enrol in an authenticator app)');
     console.log('otpauth  :', otpauth);

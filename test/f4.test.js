@@ -34,10 +34,10 @@ test('scorecard is feature-flagged at the endpoint; role-scoped; not-available; 
     assert.ok(ids11.includes('WF-01'), 'R11 owns Workforce');
     assert.ok(!ids11.includes('SAF-01'), 'R11 does not own Safety');
 
-    const r05 = await tok(F.USERS.HSE5_A); // R05
+    const r05 = await tok(F.USERS.HSE5_A); // R06 (SHEQ Manager; R05 absorbed, v1.6)
     const sc05 = await H.req('GET', '/kpi/scorecard', { token: r05 });
     const ids05 = sc05.body.cards.map((c) => c.id);
-    assert.ok(ids05.includes('SAF-01') && !ids05.includes('WF-01'), 'R05 owns Safety, not Workforce');
+    assert.ok(ids05.includes('SAF-01') && !ids05.includes('WF-01'), 'R06 owns Safety, not Workforce');
 
     // not-available card: input named, no value (never zero)
     const eng = sc11.body.cards.find((c) => c.id === 'ENG-01');

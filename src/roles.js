@@ -28,14 +28,18 @@ const LANDING = {
   // hence health_safety/medical/permits. Flagged for design reconciliation at UAT.
   R03: { name: 'HR Officer',              modules: ['dashboard', 'profile', 'leave', 'recruitment', 'training', 'health_safety', 'medical', 'permits'] },
   R04: { name: 'HR Manager',              modules: ['dashboard', 'profile', 'leave', 'recruitment', 'training', 'performance', 'reports'] },
-  R05: { name: 'HSE Officer',             modules: ['dashboard', 'health_safety', 'permits', 'disciplinary', 'reports'] },
-  R06: { name: 'HSE / Medical Manager',   modules: ['dashboard', 'health_safety', 'permits', 'medical', 'disciplinary', 'reports'] },
+  // R05 (HSE Officer) REMOVED at the app layer — registry v1.6 (Kira, ratified):
+  // the duties are performed by the SHEQ Manager (R06); no separate HSE Officer
+  // account exists at Taifa. Mirrors the LI-2 clinic merge: live rows migrated
+  // R05→R06 (migration 018), role stays DB-valid for history.
+  R06: { name: 'SHEQ Manager',            modules: ['dashboard', 'health_safety', 'permits', 'medical', 'disciplinary', 'reports'] },
   R07: { name: 'Payroll Officer',         modules: ['dashboard', 'payroll', 'disciplinary', 'reports'] },
   // R08 (Finance Officer) + R09 (Payroll Manager) REMOVED — registry v1.5 LI-3:
   // merged into R15 Finance Manager; R16 CFC added as the senior approver.
   // R10 (Clinic / Medical Staff) REMOVED — registry v1.5 LI-2: Taifa has no
   // separate clinic staff; HR Officer (R03) absorbs clinic/medical administration.
-  R11: { name: 'HR Director',             modules: ['dashboard', 'profile', 'payroll', 'performance', 'disciplinary', 'reports'] },
+  // v1.6: renamed 'HR Director' → 'Head of HR' (Kira; the post is Omid's).
+  R11: { name: 'Head of HR',              modules: ['dashboard', 'profile', 'payroll', 'performance', 'disciplinary', 'reports'] },
   R12: { name: 'System Administrator',    modules: ['dashboard', 'admin', 'reports'] },
   R13: { name: 'Field Operator',          modules: ['field_ops', 'timesheet'] },
   // v1.5: CEO / Executive — READ-ONLY organisation-wide oversight (all sites, not
@@ -64,9 +68,9 @@ const FIELD_RULES = {
   // v1.5 LI-5 (OPEN — held for Kira's ratify): R03 added because HR Officer now
   // does clinic/medical administration. This WIDENS medical visibility to all HR
   // Officers — a confidentiality-boundary change, pinned by test/roles_v15.test.js.
-  medical_notes:['R03', 'R05', 'R06'],   // medical/permits (R10 removed, v1.5)
-  permits:      ['R03', 'R05', 'R06'],   // medical/permits (R10 removed, v1.5)
-  disciplinary: ['R05', 'R06', 'R07', 'R11'],
+  medical_notes:['R03', 'R06'],          // medical/permits (R10 removed v1.5; R05 absorbed by R06 v1.6)
+  permits:      ['R03', 'R06'],          // medical/permits (R10 removed v1.5; R05 absorbed by R06 v1.6)
+  disciplinary: ['R06', 'R07', 'R11'],   // R05 absorbed by R06 (v1.6)
 };
 
 // Always-visible, non-confidential profile fields.

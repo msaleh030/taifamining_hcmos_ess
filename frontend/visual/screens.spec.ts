@@ -52,7 +52,7 @@ for (const theme of THEMES) {
         await shoot(page, 'c1-login-error', theme, surface);
       });
 
-      // Console track as R11 HR Director (central: directory, controls, alerts).
+      // Console track as R11 Head of HR (central: directory, controls, alerts).
       test('console — R11 populated screens', async ({ page }) => {
         test.skip(surface === 'mobile', 'console is the desktop track; ESS covers mobile');
         test.setTimeout(180_000); // ten screenshots + a live controls run share this budget

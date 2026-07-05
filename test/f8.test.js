@@ -46,7 +46,7 @@ after(H.stop);
 test('provisioning is restricted to the platform admin; other roles are refused', async () => {
   const body = { name: 'Should Not Exist' };
   assert.equal((await H.req('POST', '/tenants', { token: await tok(F.USERS.EMP_A), body })).status, 403, 'employee (R01) refused');
-  assert.equal((await H.req('POST', '/tenants', { token: await tok(F.USERS.DIRECTOR_A), body })).status, 403, 'HR Director (R11) refused — privileged but not platform admin');
+  assert.equal((await H.req('POST', '/tenants', { token: await tok(F.USERS.DIRECTOR_A), body })).status, 403, 'Head of HR (R11) refused — privileged but not platform admin');
   // No stray tenant was created by the refused calls.
   assert.equal(Number((await owner(`SELECT count(*)::int n FROM tenant WHERE name=$1`, ['Should Not Exist'])).rows[0].n), 0);
 });

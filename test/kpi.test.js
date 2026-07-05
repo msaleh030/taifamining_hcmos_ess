@@ -12,7 +12,7 @@ const { F } = H;
 const A = F.TENANT_A;
 const B = F.TENANT_B;
 const r11 = { company_id: A, user_id: F.USERS.DIRECTOR_A.id, role_code: 'R11' };
-const r05 = { company_id: A, user_id: F.USERS.HSE5_A.id, role_code: 'R05' };
+const r05 = { company_id: A, user_id: F.USERS.HSE5_A.id, role_code: 'R06' }; // SHEQ Manager (R05 absorbed, v1.6)
 const r01 = { company_id: A, user_id: F.USERS.EMP_A.id, role_code: 'R01' };
 const bSess = { company_id: B, user_id: F.USERS.BOB_B.id, role_code: 'R11' };
 
@@ -48,12 +48,12 @@ test('role-scope: each role sees only the KPIs it owns; scorecard is feature-fla
 
     assert.equal(sc11.enabled, true);
     assert.ok(ids(sc11).includes('WF-01'), 'R11 owns Workforce');
-    assert.ok(!ids(sc05).includes('WF-01'), 'R05 (HSE) does not own Workforce');
-    assert.ok(ids(sc05).includes('SAF-01'), 'R05 owns Safety');
+    assert.ok(!ids(sc05).includes('WF-01'), 'R06 (SHEQ) does not own Workforce');
+    assert.ok(ids(sc05).includes('SAF-01'), 'R06 owns Safety');
     assert.ok(!ids(sc11).includes('SAF-01'), 'R11 does not own Safety');
     // every card returned is genuinely owned by that role
     assert.ok(sc11.cards.every((c) => c.owners.includes('R11')));
-    assert.ok(sc05.cards.every((c) => c.owners.includes('R05')));
+    assert.ok(sc05.cards.every((c) => c.owners.includes('R06')));
     assert.equal(sc01.cards.length, 0, 'R01 owns no org KPIs');
   } finally {
     await setCfg(A, 'analytics.enabled', 'false');
