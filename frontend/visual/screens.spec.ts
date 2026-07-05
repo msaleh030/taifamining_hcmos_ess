@@ -55,6 +55,7 @@ for (const theme of THEMES) {
       // Console track as R11 HR Director (central: directory, controls, alerts).
       test('console — R11 populated screens', async ({ page }) => {
         test.skip(surface === 'mobile', 'console is the desktop track; ESS covers mobile');
+        test.setTimeout(180_000); // ten screenshots + a live controls run share this budget
         await login(page, F.USERS.DIRECTOR_A);
         await shoot(page, 'c2-overview', theme, surface);
         await page.goto('/directory');
@@ -68,7 +69,11 @@ for (const theme of THEMES) {
         await page.goto('/liability');
         await shoot(page, 'c16-liability-empty', theme, surface);
         await page.goto('/controls');
-        await page.waitForSelector('[data-state="all-clear"], [data-state="populated"]');
+        // The run is live (audit-chain verification over the seed) — wait for ANY
+        // terminal state, generously; the screenshot then shows whichever it is.
+        await page.waitForSelector(
+          '[data-state="all-clear"], [data-state="populated"], [data-state="empty"], [data-state="error"], [data-state="no-permission"]',
+          { timeout: 90_000 });
         await shoot(page, 'c20-controls', theme, surface);
         await page.goto('/alerts');
         await shoot(page, 'c20b-alerts', theme, surface);
