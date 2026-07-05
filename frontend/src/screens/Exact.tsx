@@ -13,7 +13,7 @@ import { useTranslation } from 'react-i18next';
 import { api, isApiError } from '../lib/api';
 import type { ExactPublishOut, ExactReconcileOut, ControlTotalsOut } from '../lib/types';
 import { ErrorBanner, NoPermission, Seal } from '../components/state';
-import { IcAlert, IcCheck, IcUpload, IcUsers } from '../components/icons';
+import { IcAlert, IcCheck, IcUpload } from '../components/icons';
 
 type Stage = 'upload' | 'staged' | 'reconciled' | 'totals' | 'published';
 
