@@ -1,40 +1,41 @@
 import type { Config } from 'tailwindcss';
 
-// SINGLE SOURCE OF TRUTH: Design's canonical styles.css (committed verbatim as
-// src/styles/tokens.css once its F7 reconciliation is CONFIRMED — see
-// src/styles/tokens.css header). Tailwind maps semantic utilities onto those
-// custom properties; no colour, radius, or spacing literal lives here or in any
-// component. Changing a token means changing tokens.css, nothing else.
+// SINGLE SOURCE OF TRUTH: src/styles/hcmos.css — the canonical styles.css from
+// design/HCMOS-Design-Spec.html (+ the landed F7 promotions). Tailwind here is
+// layout glue only; these mappings expose the canonical custom properties so
+// no colour, radius, or font literal ever appears in a component. Screens are
+// styled by the canonical class vocabulary (.card, .kpi, .tbl, .btn, …) that
+// the spec's redlines name.
 export default {
   content: ['./index.html', './src/**/*.{ts,tsx}'],
+  corePlugins: { preflight: false }, // the canonical sheet owns resets
   theme: {
     extend: {
       colors: {
-        brand: 'var(--color-brand)',
-        'brand-contrast': 'var(--color-brand-contrast)',
-        surface: 'var(--color-surface)',
-        'surface-raised': 'var(--color-surface-raised)',
-        ink: 'var(--color-ink)',
-        'ink-muted': 'var(--color-ink-muted)',
-        line: 'var(--color-line)',
-        ok: 'var(--color-ok)',
-        warn: 'var(--color-warn)',
-        danger: 'var(--color-danger)',
-        'rag-green': 'var(--color-rag-green)',
-        'rag-amber': 'var(--color-rag-amber)',
-        'rag-red': 'var(--color-rag-red)',
-        'rag-grey': 'var(--color-rag-grey)',
-        uat: 'var(--color-uat-banner)',
+        green: 'var(--green)',
+        'green-d': 'var(--green-d)',
+        blue: 'var(--blue)',
+        yellow: 'var(--yellow)',
+        red: 'var(--red)',
+        bg: 'var(--bg)',
+        surface: 'var(--surface)',
+        'surface-2': 'var(--surface-2)',
+        ink: 'var(--text)',
+        muted: 'var(--muted)',
+        faint: 'var(--faint)',
+        line: 'var(--border)',
+        'line-2': 'var(--border-2)',
       },
       borderRadius: {
-        card: 'var(--radius-card)',
-        control: 'var(--radius-control)',
+        r: 'var(--r)',
+        'r-sm': 'var(--r-sm)',
       },
       fontFamily: {
-        sans: 'var(--font-sans)',
+        sans: 'var(--font)',
+        mono: 'var(--mono)',
       },
       spacing: {
-        gutter: 'var(--space-gutter)',
+        pad: 'var(--pad)',
       },
     },
   },

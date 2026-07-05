@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light" data-surface="desktop">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>HCMOS · Kit + Auth Flow</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
+<style>
+:root{--green:#1FA24A;--green-d:#0E4D34;--blue:#0094D4;--yellow:#FBC02D;--red:#E5484D;
+ --font:'IBM Plex Sans',system-ui,sans-serif;--mono:'IBM Plex Mono',ui-monospace,monospace;--r:14px;}
+*{box-sizing:border-box;}html,body{margin:0;height:100%;}
+body{font-family:var(--font);background:#0b0f13;color:#15191D;-webkit-font-smoothing:antialiased;display:flex;flex-direction:column;}
+.num{font-family:var(--mono);font-variant-numeric:tabular-nums;}
+
+/* ── THEMES (4): light · dark · glass(Liquid Glass) · reduced(transparency fallback) ── */
+[data-theme="light"]{--bg:#EEF1F3;--surface:#fff;--surface2:#F6F8F9;--text:#15191D;--muted:#5C6770;--faint:#8A949C;--border:#E2E7EA;--field:#F6F8F9;--card-bd:#E2E7EA;--blur:0px;--card-bg:#fff;--shadow:0 8px 30px rgba(16,24,32,.10);}
+[data-theme="dark"]{--bg:#0C1115;--surface:#141B20;--surface2:#1A2228;--text:#E7EDF1;--muted:#94A2AC;--faint:#697680;--border:#26313A;--field:#1A2228;--card-bd:#26313A;--blur:0px;--card-bg:#141B20;--shadow:0 12px 40px rgba(0,0,0,.5);}
+/* Liquid Glass — translucent, blurred, layered */
+[data-theme="glass"]{--bg:linear-gradient(135deg,#0E4D34,#08311E 60%,#0a2a4a);--surface:rgba(255,255,255,.14);--surface2:rgba(255,255,255,.10);--text:#F2F6F4;--muted:rgba(242,246,244,.78);--faint:rgba(242,246,244,.55);--border:rgba(255,255,255,.22);--field:rgba(255,255,255,.12);--card-bd:rgba(255,255,255,.28);--blur:18px;--card-bg:rgba(255,255,255,.12);--shadow:0 18px 60px rgba(0,0,0,.35);}
+/* Reduced-transparency fallback — LAUNCH-CRITICAL: no blur, solid, high contrast */
+[data-theme="reduced"]{--bg:#06271A;--surface:#0C3B27;--surface2:#0A3220;--text:#FFFFFF;--muted:#CFE6DA;--faint:#9FC3B0;--border:#1C6A47;--field:#0A3220;--card-bd:#2C8A5E;--blur:0px;--card-bg:#0C3B27;--shadow:none;}
+[data-theme="reduced"] *{text-shadow:none!important;}
+
+.stage{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;padding:28px;overflow:auto;background:var(--bg);}
+
+/* ── SURFACES (4): desktop · tablet · mobile · kiosk ── */
+.frame{position:relative;background:var(--bg);border-radius:24px;overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.45);display:flex;flex-direction:column;}
+[data-surface="desktop"] .frame{width:1080px;height:640px;}
+[data-surface="tablet"] .frame{width:720px;height:560px;}
+[data-surface="mobile"] .frame{width:390px;height:720px;border-radius:38px;}
+[data-surface="kiosk"] .frame{width:600px;height:800px;border-radius:18px;--r:16px;}
+[data-surface="kiosk"]{font-size:18px;}                       /* kiosk: larger base, big targets */
+[data-surface="mobile"]{font-size:14.5px;}
+.frame::after{content:attr(data-surf);position:absolute;top:10px;right:14px;font:600 10px/1 var(--mono);letter-spacing:.1em;color:var(--faint);text-transform:uppercase;z-index:5;opacity:.7;}
+
+/* split login: brand + form (desktop/tablet/kiosk); form-only stacks on mobile */
+.auth{display:flex;height:100%;}
+[data-surface="mobile"] .auth,[data-surface="kiosk"] .auth{flex-direction:column;}
+.brand{flex:1.05;padding:34px 36px;color:#fff;position:relative;overflow:hidden;background:linear-gradient(135deg,#0E4D34,#08311E);display:flex;flex-direction:column;}
+[data-surface="mobile"] .brand,[data-surface="kiosk"] .brand{flex:0 0 auto;padding:26px 26px 22px;}
+.tri{display:flex;gap:5px;margin-bottom:20px;}.tri span{width:34px;height:6px;border-radius:4px;}
+.brand h1{font-size:26px;line-height:1.15;letter-spacing:-.02em;margin:8px 0 8px;}
+[data-surface="kiosk"] .brand h1{font-size:30px;}
+.brand p{color:rgba(255,255,255,.82);font-size:13.5px;line-height:1.55;margin:0;max-width:340px;}
+.eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:.2em;color:#9FE3BD;font-weight:600;}
+.brand .stat{margin-top:auto;display:flex;gap:26px;}.brand .stat b{display:block;font-size:20px;}.brand .stat span{font-size:11px;color:#7FA691;}
+
+.formwrap{flex:1;background:var(--bg);display:flex;align-items:center;justify-content:center;padding:30px;}
+.card{width:100%;max-width:360px;background:var(--card-bg);border:1px solid var(--card-bd);border-radius:var(--r);padding:24px;
+ backdrop-filter:blur(var(--blur));-webkit-backdrop-filter:blur(var(--blur));box-shadow:var(--shadow);color:var(--text);}
+[data-surface="kiosk"] .card{max-width:460px;padding:30px;}
+.card h2{margin:0 0 4px;font-size:19px;letter-spacing:-.01em;}
+.card .sub{color:var(--muted);font-size:13px;margin-bottom:18px;}
+.field{margin-bottom:13px;}
+.field>span{display:block;font-size:11.5px;font-weight:600;color:var(--muted);margin-bottom:6px;letter-spacing:.02em;}
+.inp{display:flex;align-items:center;gap:9px;border:1px solid var(--border);border-radius:10px;padding:11px 13px;background:var(--field);color:var(--text);}
+[data-surface="kiosk"] .inp{padding:15px 16px;}
+.inp input{border:none;background:none;outline:none;color:var(--text);font:inherit;font-size:14.5px;width:100%;}
+.inp svg{width:16px;height:16px;color:var(--faint);flex-shrink:0;}
+.btn{width:100%;justify-content:center;display:inline-flex;align-items:center;gap:8px;border:none;border-radius:11px;
+ background:var(--green);color:#fff;font-weight:700;font-size:14.5px;padding:13px;cursor:pointer;margin-top:6px;}
+[data-surface="kiosk"] .btn{padding:18px;font-size:16px;}
+.btn[disabled]{opacity:.5;cursor:default;}
+.btn.ghost{background:transparent;border:1px solid var(--border);color:var(--text);}
+.help{display:flex;justify-content:space-between;margin-top:13px;font-size:12px;}
+.help a{color:var(--green);text-decoration:none;font-weight:600;cursor:pointer;}
+/* banners (states) */
+.banner{display:flex;gap:9px;align-items:flex-start;border-radius:10px;padding:11px 12px;font-size:12.5px;line-height:1.45;margin-bottom:14px;}
+.banner.err{background:rgba(229,72,77,.14);color:#E5484D;border:1px solid rgba(229,72,77,.4);}
+.banner.off{background:rgba(251,192,45,.16);color:#9A6B00;border:1px solid rgba(251,192,45,.5);}
+[data-theme="dark"] .banner.off,[data-theme="glass"] .banner.off,[data-theme="reduced"] .banner.off{color:#FBC02D;}
+.banner.ok{background:rgba(31,162,74,.16);color:var(--green);border:1px solid rgba(31,162,74,.45);}
+/* loading */
+.spin{width:16px;height:16px;border:2.5px solid rgba(255,255,255,.4);border-top-color:#fff;border-radius:50%;animation:sp .7s linear infinite;}
+@keyframes sp{to{transform:rotate(360deg);}}
+.skel{height:42px;border-radius:10px;background:linear-gradient(90deg,var(--surface2),var(--field),var(--surface2));background-size:200% 100%;animation:sh 1.2s linear infinite;margin-bottom:13px;}
+@keyframes sh{to{background-position:-200% 0;}}
+/* empty / no-permission / large lockups */
+.lockup{text-align:center;padding:14px 4px;}
+.lockup .ic{width:54px;height:54px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;margin-bottom:12px;}
+.lockup h3{margin:0 0 6px;font-size:16px;}
+.lockup p{margin:0;color:var(--muted);font-size:13px;line-height:1.5;}
+/* PIN pad */
+.dots{display:flex;gap:12px;justify-content:center;margin:16px 0 18px;}
+.dots i{width:14px;height:14px;border-radius:50%;border:2px solid var(--faint);}
+.dots i.on{background:var(--green);border-color:var(--green);}
+.pad{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;}
+.key{padding:15px;border-radius:12px;border:1px solid var(--border);background:var(--field);color:var(--text);font-size:19px;font-weight:600;font-family:var(--mono);cursor:pointer;}
+[data-surface="kiosk"] .key{padding:22px;font-size:24px;}
+.devchip{display:inline-flex;align-items:center;gap:7px;font-size:11.5px;color:var(--muted);background:var(--surface2);border:1px solid var(--border);border-radius:20px;padding:5px 11px;margin-bottom:4px;}
+/* large-data list (tenant / enrolled picker) */
+.pick{display:flex;flex-direction:column;gap:8px;max-height:260px;overflow:auto;}
+.pick button{display:flex;gap:10px;align-items:center;text-align:left;border:1px solid var(--border);background:var(--field);color:var(--text);border-radius:10px;padding:10px 12px;cursor:pointer;font:inherit;}
+.av{width:30px;height:30px;border-radius:8px;background:var(--green);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px;flex-shrink:0;}
+.tbc{display:inline-block;font:700 9.5px/1 var(--mono);letter-spacing:.06em;background:rgba(251,192,45,.2);color:#9A6B00;border-radius:5px;padding:3px 6px;vertical-align:middle;}
+[data-theme="dark"] .tbc,[data-theme="glass"] .tbc,[data-theme="reduced"] .tbc{color:#FBC02D;}
+
+/* landing preview */
+.land{height:100%;display:flex;flex-direction:column;background:var(--bg);color:var(--text);}
+.land .top{display:flex;align-items:center;gap:10px;padding:14px 18px;border-bottom:1px solid var(--border);background:var(--surface);}
+.land .body{flex:1;overflow:auto;padding:16px 18px;}
+.modgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;}
+.mod{border:1px solid var(--card-bd);background:var(--card-bg);border-radius:12px;padding:13px;backdrop-filter:blur(var(--blur));}
+.mod b{font-size:13px;}.mod span{display:block;font-size:11px;color:var(--faint);margin-top:2px;}
+.rolepick{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;}
+.rolepick button{font:600 11px var(--mono);border:1px solid var(--border);background:var(--field);color:var(--text);border-radius:7px;padding:5px 9px;cursor:pointer;}
+.rolepick button.on{background:var(--green);color:#fff;border-color:var(--green);}
+
+/* CONTROL BAR */
+.bar{display:flex;flex-wrap:wrap;gap:14px;align-items:center;padding:10px 16px;background:#11161b;color:#cfd8de;border-bottom:1px solid #1e262d;font-size:12px;}
+.bar .grp{display:flex;align-items:center;gap:6px;}
+.bar .lbl{color:#7c8893;font-weight:600;text-transform:uppercase;letter-spacing:.06em;font-size:10px;}
+.bar button{border:1px solid #2a333b;background:#1a2127;color:#aeb9c1;border-radius:7px;padding:5px 9px;cursor:pointer;font:inherit;font-size:11.5px;}
+.bar button.on{background:var(--green);color:#fff;border-color:var(--green);}
+.bar .ac{margin-left:auto;color:#6f7c85;font-size:11px;}
+.bar .ac b{color:#9FE3BD;}
+</style>
+</head>
+<body>
+<template id="__bundler_thumbnail" data-bg-color="#0E4D34">
+  <svg viewBox="0 0 1200 800" xmlns="http://www.w3.org/2000/svg"><rect width="1200" height="800" fill="#0E4D34"/>
+  <rect x="470" y="300" width="80" height="9" rx="3" fill="#1FA24A"/><rect x="560" y="300" width="80" height="9" rx="3" fill="#FBC02D"/><rect x="650" y="300" width="80" height="9" rx="3" fill="#0094D4"/>
+  <rect x="500" y="360" width="200" height="120" rx="14" fill="none" stroke="#fff" stroke-width="7"/><circle cx="600" cy="405" r="18" fill="none" stroke="#fff" stroke-width="7"/><path d="M572 452a28 28 0 0 1 56 0" fill="none" stroke="#fff" stroke-width="7"/>
+  <text x="600" y="560" text-anchor="middle" font-family="monospace" font-size="34" font-weight="700" fill="#fff" letter-spacing="6">HCMOS AUTH</text></svg>
+</template>
+
+<div class="bar">
+  <div class="grp"><span class="lbl">Screen</span><span id="screens"></span></div>
+  <div class="grp"><span class="lbl">State</span><span id="states"></span></div>
+  <div class="grp"><span class="lbl">Theme</span><span id="themes"></span></div>
+  <div class="grp"><span class="lbl">Surface</span><span id="surfaces"></span></div>
+  <div class="grp"><span class="lbl">Lang</span><span id="langs"></span></div>
+  <div class="ac" id="acline"></div>
+</div>
+<div class="stage"><div class="frame" id="frame" data-surf="desktop"></div></div>
+
+<script>
+const T = {
+  en:{ consoleTitle:'Sign in', consoleSub:'Use your work email, password and MFA code.',
+    email:'Work email', pass:'Password', mfa:'MFA code (6 digits)', signin:'Sign in', signing:'Verifying…',
+    forgot:'Forgot password', sso:'Use SSO', help:'24/7 support 0800 TAIFA HR',
+    pinTitle:'Field sign in', pinSub:'Enter your 6-digit PIN on this enrolled device.', device:'This device · enrolled',
+    checking:'Checking…', resetPw:'Reset password', resetPwSub:'We will email a reset link to your work address.',
+    resetPin:'Reset field PIN', resetPinSub:'A permitted owner resets the PIN; all your sessions are signed out.',
+    sendLink:'Send reset link', done:'Done', empty:'Fill in your details to continue.',
+    errCreds:'Sign in failed. Check your details and try again.', errPin:'Wrong PIN. Try again.',
+    offTitle:'You are offline', offConsole:'Console sign in needs a connection. Reconnect and retry.',
+    offPin:'Offline — you can still sign in on this enrolled device; it syncs when back online.',
+    termTitle:'Account not active', termBody:'This account is no longer active. Contact HR.',
+    unregTitle:'Device not registered', unregBody:'This device is not enrolled for sign in.',
+    okConsole:'Signed in. Taking you to your workspace…', okPin:'Signed in. Opening self service…',
+    okReset:'Reset link sent. All active sessions were signed out.', okPinReset:'PIN reset. All sessions signed out.',
+    pickTenant:'Choose company', pickTenantSub:'This account is enrolled for more than one company.',
+    pickEmp:'Switch enrolled employee', pickEmpSub:'Shared kiosk — pick who is signing in.',
+    landing:'Your workspace', leastPriv:'You see only what your role permits.', lockout:'attempts before lock' },
+  sw:{ consoleTitle:'Ingia', consoleSub:'Tumia barua pepe ya kazi, nenosiri na msimbo wa MFA.',
+    email:'Barua pepe ya kazi', pass:'Nenosiri', mfa:'Msimbo wa MFA (tarakimu 6)', signin:'Ingia', signing:'Inathibitisha…',
+    forgot:'Umesahau nenosiri', sso:'Tumia SSO', help:'Msaada 24/7 0800 TAIFA HR',
+    pinTitle:'Ingia uwandani', pinSub:'Weka PIN yako ya tarakimu 6 kwenye kifaa hiki kilichosajiliwa.', device:'Kifaa hiki · kimesajiliwa',
+    checking:'Inakagua…', resetPw:'Weka upya nenosiri', resetPwSub:'Tutatuma kiungo cha kuweka upya kwenye barua pepe yako.',
+    resetPin:'Weka upya PIN', resetPinSub:'Mmiliki aliyeruhusiwa anaweka upya PIN; vipindi vyako vyote vitafungwa.',
+    sendLink:'Tuma kiungo', done:'Tayari', empty:'Jaza taarifa zako kuendelea.',
+    errCreds:'Kuingia kumeshindikana. Angalia taarifa zako ujaribu tena.', errPin:'PIN si sahihi. Jaribu tena.',
+    offTitle:'Hauko mtandaoni', offConsole:'Kuingia kunahitaji muunganisho. Unganisha tena ujaribu.',
+    offPin:'Nje ya mtandao — bado unaweza kuingia kwenye kifaa hiki; itasawazisha ukirudi mtandaoni.',
+    termTitle:'Akaunti haifanyi kazi', termBody:'Akaunti hii haifanyi kazi tena. Wasiliana na HR.',
+    unregTitle:'Kifaa hakijasajiliwa', unregBody:'Kifaa hiki hakijasajiliwa kwa kuingia.',
+    okConsole:'Umeingia. Tunakupeleka kwenye eneo lako la kazi…', okPin:'Umeingia. Inafungua huduma binafsi…',
+    okReset:'Kiungo kimetumwa. Vipindi vyote vilifungwa.', okPinReset:'PIN imewekwa upya. Vipindi vyote vilifungwa.',
+    pickTenant:'Chagua kampuni', pickTenantSub:'Akaunti hii imesajiliwa kwa kampuni zaidi ya moja.',
+    pickEmp:'Badili mfanyakazi', pickEmpSub:'Kioski cha pamoja — chagua anayeingia.',
+    landing:'Eneo lako la kazi', leastPriv:'Unaona tu kile jukumu lako linaruhusu.', lockout:'majaribio kabla ya kufunga' }
+};
+// Addendum A2 — least-privilege landing + permitted modules per role
+const ROLES = [
+ ['R01','Supervisor','Overview',['Overview','KPIs','Leave','Performance','Approvals','Reports']],
+ ['R02','Superintendent','Overview',['Overview','KPIs','Employees','Leave','Performance','Approvals','Reports']],
+ ['R03','Project Manager','Overview',['Overview','Employees','Leave','Grievances','Approvals','Reports']],
+ ['R04','Head of Dept','Overview',['Overview','Employees','Performance','Training','Approvals','Reports']],
+ ['R05','HR Officer','Overview',['Overview','Employees','Leave','Performance','Training','Grievances','Reports']],
+ ['R06','Project HR','Overview',['Overview','Employees(site)','Leave','Grievances','Reports']],
+ ['R07','Head of HR','Overview',['Employees','Leave','Performance','Approvals','Reports','Integration','Migration','Security','Org']],
+ ['R08','Payroll Officer','Overview',['Overview','Payroll','Integration','Reports']],
+ ['R09','Finance Manager','Overview',['Overview','Payroll','Integration','Approvals','Reports']],
+ ['R10','SHEQ Manager','Overview',['Overview','HSEQ','Training','Reports']],
+ ['R11','COO / CEO','Overview',['Overview','Approvals','Reports','Org']],
+ ['R12','IT / System Admin','Security',['Security','Integration','Migration','Reports','Org']],
+ ['R13','Employee (ESS)','ESS',['Profile','Clock','Leave','Payslip','Docs','Policies','Training','My ID','Support']]
+];
+const SCREENS=[['console','Console MFA'],['pin','Field PIN'],['pwreset','Password reset'],['pinreset','PIN reset'],['landing','Role landing']];
+const STATES=['empty','loading','populated','large-data','error','no-permission','offline','success'];
+const THEMES=[['light','Light'],['dark','Dark'],['glass','Liquid Glass'],['reduced','Reduced-transp.']];
+const SURFACES=[['desktop','Desktop'],['tablet','Tablet'],['mobile','Mobile'],['kiosk','Kiosk']];
+const AC={console:'AC-AUTH-01/03/04/06',pin:'AC-AUTH-02/03/04',pwreset:'AC-AUTH-05',pinreset:'AC-AUTH-05',landing:'AC-AUTH-06'};
+
+let cur={screen:'console',state:'empty',theme:'light',surface:'desktop',lang:'en',role:'R07'};
+const ic={mail:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 5h16a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z"/><path d="m3 7 9 6 9-6"/></svg>',
+ lock:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="5" y="11" width="14" height="9" rx="1"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>',
+ key:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="8" cy="15" r="4"/><path d="m10.5 12.5 6-6M16 5l3 3"/></svg>',
+ off:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M1 1l22 22M16.7 16.7A6 6 0 0 1 12 19M5 12a8 8 0 0 1 11-6"/></svg>',
+ alert:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></svg>',
+ check:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6 9 17l-5-5"/></svg>'};
+function t(k){return T[cur.lang][k];}
+function brand(){return `<div class="brand"><div class="tri"><span style="background:#1FA24A"></span><span style="background:#FBC02D"></span><span style="background:#0094D4"></span></div>
+  <div class="eyebrow">HCMOS</div><h1>Human Capital<br>Operating System</h1>
+  <p>One authoritative workforce platform for Taifa Mining and Civil, across every site.</p>
+  <div class="stat"><div><b class="num">1,246</b><span>employees</span></div><div><b class="num">8</b><span>sites</span></div><div><b class="num">13</b><span>roles</span></div></div></div>`;}
+
+function consoleCard(){
+  const s=cur.state, L=cur.lang;
+  if(s==='no-permission') return lockCard('alert','#E5484D',t('termTitle'),t('termBody'));
+  if(s==='large-data') return `<div class="card"><h2>${t('pickTenant')}</h2><div class="sub">${t('pickTenantSub')}</div><div class="pick">${
+    ['Taifa Mining & Civil','Taifa Logistics Ltd','Taifa Civils JV','Nyanzaga Gold Project','Geita Civil Works'].map((c,i)=>`<button><span class="av">${c.split(' ').slice(0,2).map(w=>w[0]).join('')}</span><div><div style="font-weight:600;font-size:13px">${c}</div><div style="font-size:11px;color:var(--faint)" class="num">company_id TMC-${10+i}</div></div></button>`).join('')}</div></div>`;
+  const filled=(s==='populated'||s==='loading'||s==='success');
+  let top='';
+  if(s==='error') top=`<div class="banner err">${ic.alert}<div>${t('errCreds')}<br><span class="num" style="opacity:.85">2/5 ${t('lockout')} <span class="tbc">TBC</span></span></div></div>`;
+  if(s==='offline') top=`<div class="banner off">${ic.off}<div><b>${t('offTitle')}.</b> ${t('offConsole')}</div></div>`;
+  if(s==='success') top=`<div class="banner ok">${ic.check}<div>${t('okConsole')}</div></div>`;
+  if(s==='loading') return `<div class="card"><h2>${t('consoleTitle')}</h2><div class="sub">${t('consoleSub')}</div><div class="skel"></div><div class="skel"></div><div class="skel" style="width:60%"></div><button class="btn" disabled><span class="spin"></span>${t('signing')}</button></div>`;
+  const dis=(s==='empty'||s==='offline');
+  return `<div class="card"><h2>${t('consoleTitle')}</h2><div class="sub">${s==='empty'?t('empty'):t('consoleSub')}</div>${top}
+   <label class="field"><span>${t('email')}</span><div class="inp">${ic.mail}<input value="${filled?'omid.karembeck@taifamining.tz':''}" placeholder="name@taifamining.tz"></div></label>
+   <label class="field"><span>${t('pass')}</span><div class="inp">${ic.lock}<input type="password" value="${filled?'••••••••••':''}" placeholder="••••••••"></div></label>
+   <label class="field"><span>${t('mfa')}</span><div class="inp">${ic.key}<input class="num" value="${filled?'408 213':''}" placeholder="000 000"></div></label>
+   <button class="btn" ${dis?'disabled':''}>${t('signin')}</button>
+   <div class="help"><a>${t('forgot')}</a><a>${t('sso')}</a></div></div>`;
+}
+function pinCard(){
+  const s=cur.state;
+  if(s==='no-permission') return lockCard('alert','#E5484D',t('unregTitle'),t('unregBody'));
+  if(s==='large-data') return `<div class="card"><h2>${t('pickEmp')}</h2><div class="sub">${t('pickEmpSub')}</div><div class="pick">${
+    [['Joseph Mlimani','TMC-MWD-21-4821'],['Fatuma Ally','TMC-NYZ-23-5533'],['Esther Mushi','TMC-GTA-20-3741'],['Peter Komba','TMC-MWD-19-2210']].map(([n,no])=>`<button><span class="av">${n.split(' ').map(w=>w[0]).join('')}</span><div><div style="font-weight:600;font-size:13px">${n}</div><div class="num" style="font-size:11px;color:var(--faint)">${no}</div></div></button>`).join('')}</div></div>`;
+  let top='';
+  if(s==='error') top=`<div class="banner err">${ic.alert}<div>${t('errPin')} <span class="num" style="opacity:.85">2/5 ${t('lockout')} <span class="tbc">TBC</span></span></div></div>`;
+  if(s==='offline') top=`<div class="banner off">${ic.off}<div>${t('offPin')}</div></div>`;
+  if(s==='success') return lockCard('check','#1FA24A','',t('okPin'),true);
+  const filled=(s==='populated'||s==='loading')?4:(s==='success'?6:0);
+  if(s==='loading') return `<div class="card" style="text-align:center"><div class="devchip">${ic.lock} ${t('device')}</div><h2 style="margin-top:8px">${t('pinTitle')}</h2><div class="dots">${[0,1,2,3,4,5].map(i=>`<i class="${i<6?'on':''}"></i>`).join('')}</div><div class="sub" style="text-align:center">${t('checking')}</div></div>`;
+  return `<div class="card"><div style="text-align:center"><div class="devchip">${ic.lock} ${t('device')}</div><h2 style="margin:8px 0 0">${t('pinTitle')}</h2><div class="sub">${s==='empty'?t('pinSub'):''}</div></div>${top}
+   <div class="dots">${[0,1,2,3,4,5].map(i=>`<i class="${i<filled?'on':''}"></i>`).join('')}</div>
+   <div class="pad">${[1,2,3,4,5,6,7,8,9].map(n=>`<button class="key">${n}</button>`).join('')}<button class="key" style="visibility:hidden"></button><button class="key">0</button><button class="key">⌫</button></div></div>`;
+}
+function resetCard(pin){
+  const s=cur.state;
+  if(s==='success') return lockCard('check','#1FA24A','',pin?t('okPinReset'):t('okReset'),true);
+  if(s==='loading') return `<div class="card"><h2>${pin?t('resetPin'):t('resetPw')}</h2><div class="skel"></div><button class="btn" disabled><span class="spin"></span>${t('signing')}</button></div>`;
+  let top=''; if(s==='error') top=`<div class="banner err">${ic.alert}<div>${t('errCreds')}</div></div>`;
+  if(s==='offline') top=`<div class="banner off">${ic.off}<div><b>${t('offTitle')}.</b> ${t('offConsole')}</div></div>`;
+  if(s==='no-permission') return lockCard('lock','#9A6B00',t('unregTitle'), pin?'Only a permitted owner may reset a field PIN.':'You are not permitted to reset this account.');
+  return `<div class="card"><h2>${pin?t('resetPin'):t('resetPw')}</h2><div class="sub">${pin?t('resetPinSub'):t('resetPwSub')}</div>${top}
+   <label class="field"><span>${pin?'Employee number':t('email')}</span><div class="inp">${pin?ic.key:ic.mail}<input value="${(s==='populated')?(pin?'TMC-MWD-21-4821':'omid.karembeck@taifamining.tz'):''}" placeholder="${pin?'TMC-…':'name@taifamining.tz'}"></div></label>
+   <button class="btn" ${s==='empty'||s==='offline'?'disabled':''}>${pin?t('done'):t('sendLink')}</button>
+   <div class="help" style="justify-content:center"><span style="color:var(--muted)">Invalidates all active sessions</span></div></div>`;
+}
+function lockCard(icon,color,title,body,green){return `<div class="card"><div class="lockup"><span class="ic" style="background:${color}22;color:${color}">${ic[icon]}</span>${title?`<h3>${title}</h3>`:''}<p>${body}</p></div></div>`;}
+
+function landing(){
+  const s=cur.state;
+  const picker=`<div class="rolepick">${ROLES.map(r=>`<button class="${cur.role===r[0]?'on':''}" data-role="${r[0]}">${r[0]}</button>`).join('')}</div>`;
+  if(s==='no-permission') return `<div class="land"><div class="top"><span class="av">${cur.role}</span><b>${t('landing')}</b></div><div class="body">${lockCard('lock','#9A6B00','No access','This role has no link to that area.')}${picker}</div></div>`;
+  const role=ROLES.find(r=>r[0]===cur.role)||ROLES[6];
+  const mods = s==='large-data'?role[3].concat(['Audit','Controls','Assets','Notifications','Documents','Settings']):role[3];
+  const empty = s==='empty';
+  return `<div class="land"><div class="top"><span class="av">${role[0]}</span><div><b>${role[1]}</b><div style="font-size:11px;color:var(--faint)">${t('landing')} · lands on ${role[2]}</div></div></div>
+   <div class="body">${empty?lockCard('check','#1FA24A','Nothing here yet','Your modules will appear once your role is provisioned.'):''}
+   ${s==='loading'?'<div class="skel"></div><div class="skel"></div><div class="skel" style="width:70%"></div>':
+     (empty?'':`<div style="font-size:12px;color:var(--muted);margin-bottom:10px">${t('leastPriv')}</div><div class="modgrid">${mods.map(m=>`<div class="mod"><b>${m}</b><span>permitted</span></div>`).join('')}</div>`)}
+   ${picker}</div></div>`;
+}
+
+function renderFrame(){
+  const f=document.getElementById('frame'); f.setAttribute('data-surf',cur.surface);
+  let inner='';
+  if(cur.screen==='landing'){ inner=landing(); }
+  else if(cur.screen==='console'){ inner=`<div class="auth">${brand()}<div class="formwrap">${consoleCard()}</div></div>`; }
+  else if(cur.screen==='pin'){ inner=`<div class="auth">${brand()}<div class="formwrap">${pinCard()}</div></div>`; }
+  else if(cur.screen==='pwreset'){ inner=`<div class="auth">${brand()}<div class="formwrap">${resetCard(false)}</div></div>`; }
+  else if(cur.screen==='pinreset'){ inner=`<div class="auth">${brand()}<div class="formwrap">${resetCard(true)}</div></div>`; }
+  f.innerHTML=inner;
+  f.querySelectorAll('[data-role]').forEach(b=>b.onclick=()=>{cur.role=b.getAttribute('data-role');renderFrame();});
+}
+function seg(id,items,key){const el=document.getElementById(id);el.innerHTML=items.map(it=>{const v=Array.isArray(it)?it[0]:it,l=Array.isArray(it)?it[1]:it;return `<button data-v="${v}">${l}</button>`;}).join('');
+  el.querySelectorAll('button').forEach(b=>{b.onclick=()=>{cur[key]=b.getAttribute('data-v');sync();};});}
+function sync(){
+  document.documentElement.setAttribute('data-theme',cur.theme);
+  document.documentElement.setAttribute('data-surface',cur.surface);
+  ['screens|screen','states|state','themes|theme','surfaces|surface','langs|lang'].forEach(p=>{const[id,key]=p.split('|');
+    document.querySelectorAll('#'+id+' button').forEach(b=>b.classList.toggle('on',b.getAttribute('data-v')===cur[key]));});
+  document.getElementById('acline').innerHTML=`Covers <b>${AC[cur.screen]||''}</b> · lockout value <span class="tbc">TBC</span> · ${cur.theme}/${cur.surface}`;
+  renderFrame();
+}
+seg('screens',SCREENS,'screen'); seg('states',STATES.map(s=>[s,s.replace('-',' ')]),'state');
+seg('themes',THEMES,'theme'); seg('surfaces',SURFACES,'surface'); seg('langs',[['en','EN'],['sw','SW']],'lang');
+sync();
+</script>
+</body>
+</html>
