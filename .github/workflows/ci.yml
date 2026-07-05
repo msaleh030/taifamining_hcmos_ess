@@ -79,10 +79,13 @@ jobs:
           for i in $(seq 1 30); do pg_isready -h 127.0.0.1 -p 5432 && break; sleep 1; done
           pg_isready -h 127.0.0.1 -p 5432
 
+      # npm install (not ci): @playwright/test was added to package.json in a
+      # session without registry access, so the committed lockfile lags by that
+      # one devDependency until regenerated on a networked machine.
       - name: Install + typecheck + build (Vite)
         working-directory: frontend
         run: |
-          npm ci --no-audit --no-fund
+          npm install --no-audit --no-fund
           npm run build
 
       - name: Upload dist artifact
