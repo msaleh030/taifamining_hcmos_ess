@@ -87,7 +87,7 @@ const routes = [
   // financial data — only the role/module context.
   //
   // C16/C17 GUARD RULE: the 'reports' module is broader than pay-visibility
-  // (R02/R04/R05/R06/R12/R14 hold 'reports' but are NOT in a3.pay.roles). Any
+  // (R02/R04/R06/R12/R14 hold 'reports' but are NOT in a3.pay.roles). Any
   // report that emits the Payroll or Leave-liability REGISTER must therefore carry
   // allow:'a3.pay.roles' (like /liability/batch/:id) — module:'reports' ALONE is
   // NOT a sufficient gate for a financial register. Enforced/regression-pinned in
@@ -336,10 +336,25 @@ function serveStatic(pathname, res) {
   return false;
 }
 
+// A browser NAVIGATION (Accept: text/html) to an extension-less page path gets
+// the designed app shell even where the path shadows an API route (/controls,
+// /alerts, …). This is a SERVING distinction, not a guard bypass: API clients
+// never send text/html (fetch/curl/tests default Accept: */*), the shell then
+// calls the API with its bearer token, and the route guards decide as always.
+// /health and /legacy stay verbatim.
+function wantsAppShell(req, pathname) {
+  if (req.method !== 'GET') return false;
+  if (!/\btext\/html\b/.test(req.headers.accept || '')) return false;
+  if (path.extname(pathname)) return false;
+  if (/^\/(health|legacy)(\/|$)/.test(pathname)) return false;
+  return fs.existsSync(path.join(DIST_DIR, 'index.html'));
+}
+
 function createServer() {
   return http.createServer(async (req, res) => {
     try {
       const url = new URL(req.url, 'http://x');
+      if (wantsAppShell(req, url.pathname) && serveFile(DIST_DIR, 'index.html', res)) return;
       for (const route of routes) {
         if (req.method !== route.method) continue;
         const m = route.pattern.exec(url.pathname);
