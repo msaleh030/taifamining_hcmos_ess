@@ -25,7 +25,7 @@ function showLogin(message) {
       <form id="login-form">
         <input id="email" type="email" placeholder="email" autocomplete="username" required />
         <input id="password" type="password" placeholder="password" autocomplete="current-password" required />
-        <input id="mfa" inputmode="numeric" placeholder="6-digit code" required />
+        <input id="mfa" inputmode="numeric" placeholder="6-digit code (if enabled)" />
         <button type="submit">Sign in</button>
       </form>
     </section>`;

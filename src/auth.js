@@ -13,8 +13,11 @@ const isUuid = (s) => typeof s === 'string' && UUID_RE.test(s);
 const future = (ts) => ts && new Date(ts).getTime() > Date.now();
 
 // ── AUTH-01/03/04/06: console sign-in (email + password + MFA) ─────────────
+// MFA (TOTP) is required unless the tenant explicitly disables it with config
+// `auth.mfa.required=0` — a UAT/CRP convenience only. The default keeps
+// AUTH-01's three-factor rule, so tenants are unchanged unless deliberately set.
 async function consoleLogin({ email, password, mfa }) {
-  if (!email || !password || !mfa) throw genericAuthError();
+  if (!email || !password) throw genericAuthError();
 
   const r = await db.query('SELECT * FROM auth_lookup_console($1)', [email]);
   const u = r.rows[0];
@@ -22,10 +25,13 @@ async function consoleLogin({ email, password, mfa }) {
   if (u.company_status !== 'active') throw genericAuthError();
   if (future(u.locked_until)) throw genericAuthError();   // AC-AUTH-03: still locked
 
-  // Verify ALL THREE factors; status must be active (terminated/suspended refused).
+  const mfaRequired = (await cfg.getInt(u.company_id, 'auth.mfa.required', 1)) !== 0;
+  if (mfaRequired && !mfa) throw genericAuthError();      // AUTH-04: never name the factor
+
+  // Verify the factors; status must be active (terminated/suspended refused).
   const ok = u.status === 'active'
     && C.verifySecret(password, u.password_hash)
-    && C.verifyTotp(mfa, u.mfa_secret);
+    && (!mfaRequired || C.verifyTotp(mfa, u.mfa_secret));
 
   if (!ok) {
     const threshold = await cfg.getInt(u.company_id, 'auth.lockout.threshold', 5);
