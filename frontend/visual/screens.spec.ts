@@ -29,7 +29,7 @@ async function login(page: Page, user: { email: string; password: string }) {
 async function shoot(page: Page, name: string, theme: string, surface: string) {
   await page.waitForLoadState('networkidle');
   await page.waitForTimeout(150); // settle transitions (F5: 120–150ms feedback)
-  await expect(page).toHaveScreenshot(`${theme}-${surface}/${name}`, { fullPage: false });
+  await expect(page).toHaveScreenshot(`${theme}-${surface}/${name}.png`, { fullPage: false });
 }
 
 for (const theme of THEMES) {
