@@ -30,15 +30,17 @@ test('alerts: endpoint guarded to document-compliance owners; expiring doc route
   assert.equal((await H.req('POST', '/alerts/run', { token: emp, body: { asOf: '2026-06-29' } })).status, 403);
   assert.equal((await H.req('GET', '/alerts', { token: emp })).status, 403);
 
+  // Business permit (three-way DA-2, Kira 2026-07-06): the R06 leg, visible to
+  // any alerts.view.roles member — the expat/medical legs are pinned in slice9.
   const docId = (await owner(
-    `INSERT INTO employee_document(company_id,employee_id,kind,name,valid_until)
-     VALUES ($1,$2,'permit','F7 permit',$3) RETURNING id`, [A, F.EMP.CAROL, '2026-07-29'])).rows[0].id;
+    `INSERT INTO employee_document(company_id,employee_id,kind,name,valid_until,permit_type)
+     VALUES ($1,$2,'permit','F7 permit',$3,'business') RETURNING id`, [A, F.EMP.CAROL, '2026-07-29'])).rows[0].id;
   try {
     const run = await H.req('POST', '/alerts/run', { token: admin, body: { asOf: '2026-06-29' } });
     assert.equal(run.status, 200);
     const raised = run.body.raised.find((x) => x.document_id === docId);
     assert.ok(raised, 'the expiring permit raised an alert');
-    assert.equal(raised.notify_role, 'R06', 'routed to the DA-2 permit role (registry)');
+    assert.equal(raised.notify_role, 'R06', 'business permit routed to the SHEQ Manager (registry)');
 
     const list = await H.req('GET', '/alerts', { token: admin });
     assert.equal(list.status, 200);

@@ -3,8 +3,19 @@
 // when a document is within its DA-1 lead time, to the DA-2 notified role; repeats
 // (bumps notify_count) until renewed; clears on renewal. Lead times AND notified
 // roles are read from the registry — nothing hard-coded.
+//
+// DA-2 THREE-WAY split (Kira, ratified 2026-07-06):
+//   • expat/immigration permit expiries → Head of HR (R11) ONLY — sensitive;
+//     visibility AND notification are scoped to R11 alone, never the SHEQ Manager.
+//   • business permit / licence expiries → SHEQ Manager (R06) — unchanged leg.
+//   • medical-document expiries → the HR Officer (R03) FOR THE EMPLOYEE'S SITE —
+//     the site-scoped R03 matching the employee's site, NOT all HR Officers.
+// A permit whose expat-vs-business classification is missing is NEVER guessed:
+// it FAILS CLOSED to the sensitive leg (R11-only) and carries `unclassified`
+// until someone who knows sets employee_document.permit_type.
 const db = require('./db');
 const cfg = require('./config');
+const sitescope = require('./sitescope');
 
 const ALERTABLE = ['contract', 'permit', 'licence', 'medical'];
 
@@ -15,33 +26,54 @@ function addDaysStr(iso, n) {
   return d.toISOString().slice(0, 10);
 }
 
-async function notifyRole(c, companyId, employeeId, role, doc) {
+// Resolve the DA-2 route for one document: { role, site, unclassified }.
+// `site` is non-null only for the site-matched medical leg.
+function routeFor(roles, d) {
+  if (d.kind === 'permit') {
+    if (d.permit_type === 'business') return { role: roles.permitBusiness, site: null, unclassified: false };
+    if (d.permit_type === 'expat') return { role: roles.permitExpat, site: null, unclassified: false };
+    // Unclassified permit — fail CLOSED to the sensitive leg, flagged.
+    return { role: roles.permitExpat, site: null, unclassified: true };
+  }
+  if (d.kind === 'medical') return { role: roles.medical, site: d.site_id, unclassified: false };
+  return { role: roles[d.kind], site: null, unclassified: false };
+}
+
+async function notifyRoute(c, companyId, employeeId, route, doc) {
   await c.query(
     `INSERT INTO notification (company_id, employee_id, audience, recipient, kind, body)
      VALUES ($1,$2,'console',$3,'doc.expiry',$4)`,
-    [companyId, employeeId, role || 'unassigned',
-     { document_id: doc.id, kind: doc.kind, due_date: doc.valid_until }]);
+    [companyId, employeeId, route.role || 'unassigned',
+     { document_id: doc.id, kind: doc.kind, due_date: doc.valid_until,
+       ...(route.site ? { site_id: route.site } : {}),
+       ...(route.unclassified ? { unclassified: true } : {}) }]);
 }
 
 // Run the standing expiry sweep as of `asOf` (injected for determinism).
 async function runExpiryAlerts(session, asOf) {
   const co = session.company_id;
   return db.withTenant(co, async (c) => {
-    const lead = {}, role = {};
-    for (const k of ALERTABLE) {
-      lead[k] = await cfg.getInt(co, `doc.lead_time.${k}`, 30, c);
-      role[k] = await cfg.getConfig(co, `doc.notify.role.${k}`, null, c);
-    }
+    const lead = {};
+    for (const k of ALERTABLE) lead[k] = await cfg.getInt(co, `doc.lead_time.${k}`, 30, c);
+    const roles = {
+      contract: await cfg.getConfig(co, 'doc.notify.role.contract', null, c),
+      permitExpat: await cfg.getConfig(co, 'doc.notify.role.permit.expat', null, c),
+      permitBusiness: await cfg.getConfig(co, 'doc.notify.role.permit.business', null, c),
+      licence: await cfg.getConfig(co, 'doc.notify.role.licence', null, c),
+      medical: await cfg.getConfig(co, 'doc.notify.role.medical', null, c),
+    };
 
     // ALERTABLE is a fixed code constant (no injection surface); inline it — the
-    // vendored client can't bind a JS array as a Postgres array param.
+    // vendored client can't bind a JS array as a Postgres array param. The join
+    // carries the employee's site for the site-matched medical leg.
     const inList = ALERTABLE.map((k) => `'${k}'`).join(',');
     const docs = (await c.query(
-      `SELECT id, employee_id, kind, valid_until::text AS valid_until
-         FROM employee_document WHERE kind IN (${inList}) AND valid_until IS NOT NULL`)).rows;
+      `SELECT d.id, d.employee_id, d.kind, d.permit_type, d.valid_until::text AS valid_until, e.site_id
+         FROM employee_document d JOIN employee e ON e.id = d.employee_id
+        WHERE d.kind IN (${inList}) AND d.valid_until IS NOT NULL`)).rows;
 
     const raised = [], cleared = [];
-    let openCount = 0;
+    let openCount = 0, unclassifiedCount = 0;
     for (const d of docs) {
       const within = String(d.valid_until).slice(0, 10) <= addDaysStr(asOf, lead[d.kind]);
       const existing = (await c.query(
@@ -49,37 +81,59 @@ async function runExpiryAlerts(session, asOf) {
 
       if (within) {
         openCount++;
+        const route = routeFor(roles, d);
+        if (route.unclassified) unclassifiedCount++;
         if (!existing) {
           const ins = (await c.query(
-            `INSERT INTO doc_alert (company_id, document_id, kind, due_date, lead_days, notify_role, status, notify_count, last_notified_at)
-             VALUES ($1,$2,$3,$4,$5,$6,'open',1,$7) RETURNING id`,
-            [co, d.id, d.kind, d.valid_until, lead[d.kind], role[d.kind], asOf])).rows[0];
-          await notifyRole(c, co, d.employee_id, role[d.kind], d);
-          raised.push({ alert_id: ins.id, document_id: d.id, kind: d.kind, notify_role: role[d.kind] });
+            `INSERT INTO doc_alert (company_id, document_id, kind, due_date, lead_days, notify_role, notify_site, unclassified, status, notify_count, last_notified_at)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'open',1,$9) RETURNING id`,
+            [co, d.id, d.kind, d.valid_until, lead[d.kind], route.role, route.site, route.unclassified, asOf])).rows[0];
+          await notifyRoute(c, co, d.employee_id, route, d);
+          raised.push({ alert_id: ins.id, document_id: d.id, kind: d.kind, notify_role: route.role, notify_site: route.site, unclassified: route.unclassified });
         } else {
-          // repeat until renewed (re-open if previously cleared).
+          // Repeat until renewed (re-open if previously cleared). The route is
+          // re-resolved every sweep so a registry flip or a late expat/business
+          // classification re-routes the standing alert — no deploy needed.
           await c.query(
-            `UPDATE doc_alert SET status='open', notify_count=notify_count+1, last_notified_at=$2, cleared_at=NULL WHERE id=$1`,
-            [existing.id, asOf]);
-          await notifyRole(c, co, d.employee_id, role[d.kind], d);
-          if (existing.status !== 'open') raised.push({ alert_id: existing.id, document_id: d.id, kind: d.kind, notify_role: role[d.kind], reopened: true });
+            `UPDATE doc_alert SET status='open', notify_count=notify_count+1, last_notified_at=$2,
+                    cleared_at=NULL, notify_role=$3, notify_site=$4, unclassified=$5 WHERE id=$1`,
+            [existing.id, asOf, route.role, route.site, route.unclassified]);
+          await notifyRoute(c, co, d.employee_id, route, d);
+          if (existing.status !== 'open') raised.push({ alert_id: existing.id, document_id: d.id, kind: d.kind, notify_role: route.role, notify_site: route.site, unclassified: route.unclassified, reopened: true });
         }
       } else if (existing && existing.status === 'open') {
         await c.query(`UPDATE doc_alert SET status='cleared', cleared_at=$2 WHERE id=$1`, [existing.id, asOf]);
         cleared.push({ alert_id: existing.id, document_id: d.id, kind: d.kind });
       }
     }
-    return { as_of: asOf, raised, cleared, open_count: openCount };
+    return { as_of: asOf, raised, cleared, open_count: openCount, unclassified_count: unclassifiedCount };
   });
 }
 
 // The current open document-expiry alerts (the alerts dashboard, read-only).
+// Row-level DA-2 visibility (Kira, 2026-07-06) applies ON TOP of the
+// alerts.view.roles module gate the route already enforced:
+//   • expat permits — and unclassified permits, which fail closed — are
+//     visible to R11 ONLY (not even the admin sees the sensitive leg);
+//   • medical alerts are visible only to the R03 whose own site matches the
+//     employee's site (NOT all HR Officers, and no one else);
+//   • every other kind (contract, licence, business permit) is unchanged —
+//     visible to any alerts.view.roles member.
 async function listOpen(session) {
   return db.withTenant(session.company_id, async (c) => {
     const rows = (await c.query(
-      `SELECT id, document_id, kind, due_date::text AS due_date, notify_role, status, notify_count
-         FROM doc_alert WHERE status='open' ORDER BY due_date`)).rows;
-    return { open: rows };
+      `SELECT a.id, a.document_id, a.kind, a.due_date::text AS due_date, a.notify_role,
+              a.notify_site, a.unclassified, a.status, a.notify_count, d.permit_type
+         FROM doc_alert a JOIN employee_document d ON d.id = a.document_id
+        WHERE a.status='open' ORDER BY a.due_date`)).rows;
+    const role = session.role_code;
+    const mySite = role === 'R03' ? await sitescope.requesterSite(c, session) : null;
+    const open = rows.filter((r) => {
+      if (r.kind === 'permit' && (r.unclassified || r.permit_type === 'expat')) return role === 'R11';
+      if (r.kind === 'medical') return role === 'R03' && r.notify_site != null && r.notify_site === mySite;
+      return true;
+    });
+    return { open };
   });
 }
 

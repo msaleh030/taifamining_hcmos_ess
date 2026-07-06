@@ -183,15 +183,18 @@ const DEFAULT_CONFIG = {
   'doc.lead_time.permit':     '60',
   'doc.lead_time.licence':    '45',
   'doc.lead_time.medical':    '30',
-  // DA-2 notified role per document type — APPLIED registry values (pending
-  // UAT ratification, but these ARE the values, not placeholders).
-  'doc.notify.role.contract': 'R06',       // v1.6: R05's duties -> SHEQ Manager (was R05; reroute is Code's inference, ratify at UAT)
-  'doc.notify.role.permit':   'R06',       // Project HR
-  // v1.5 LI-2: R10 removed. Licence (SHEQ-owned) → R06 HSE/Medical Manager;
-  // medical → R03 HR Officer (absorbs clinic/medical admin). Reassigned per the
-  // registry intent — confirm both at the UAT design reconciliation.
-  'doc.notify.role.licence':  'R06',       // HSE / Medical Manager (was R10)
-  'doc.notify.role.medical':  'R03',       // HR Officer (was R10)
+  // DA-2 notified role per document type — THREE-WAY split RATIFIED by Kira
+  // (2026-07-06): expat/immigration permits are SENSITIVE and scoped to the
+  // Head of HR ALONE (visibility + notification); business permits/licences to
+  // the SHEQ Manager; medical to the HR Officer OF THE EMPLOYEE'S SITE (the
+  // site match is routing semantics in src/docalerts.js — the registry key
+  // holds the role). A permit with no expat/business classification is NEVER
+  // guessed: it fails CLOSED to the R11 leg, flagged `unclassified`.
+  'doc.notify.role.contract':        'R06', // v1.6: R05's duties -> SHEQ Manager (reroute is Code's inference, ratify at UAT)
+  'doc.notify.role.permit.expat':    'R11', // expat/immigration — Head of HR ONLY (Kira, 2026-07-06)
+  'doc.notify.role.permit.business': 'R06', // business permits — SHEQ Manager (unchanged leg)
+  'doc.notify.role.licence':         'R06', // business licences — SHEQ Manager (unchanged leg)
+  'doc.notify.role.medical':         'R03', // HR Officer — SITE-MATCHED to the employee (Kira, 2026-07-06)
   // Support ticket channels (ES-5).
   'support.channels':         'in_app,email',
   // ── F7 guards (Slice 9 modules exposed over HTTP). All four are APPLIED,

@@ -55,14 +55,14 @@ test('controls flags SoD breach / leaver-with-access / GPS-less punch and lists 
 // ── 2. Expiry alerts (DA-1/DA-2): raise to the correct role; clear on renewal ─
 test('an expiring document raises an alert to the DA-2 role and clears on renewal', async () => {
   const docId = (await owner(
-    `INSERT INTO employee_document(company_id,employee_id,kind,name,valid_until)
-     VALUES ($1,$2,'permit','Confined space',$3) RETURNING id`,
+    `INSERT INTO employee_document(company_id,employee_id,kind,name,valid_until,permit_type)
+     VALUES ($1,$2,'permit','Confined space',$3,'business') RETURNING id`,
     [A, F.EMP.CAROL, '2026-07-29'])).rows[0].id; // within the 60-day permit lead at asOf
   try {
     const r1 = await docalerts.runExpiryAlerts(admin, '2026-06-29');
     const raised = r1.raised.find((x) => x.document_id === docId);
     assert.ok(raised, 'alert raised for the expiring permit');
-    assert.equal(raised.notify_role, 'R06', 'routed to the DA-2 permit role from the registry');
+    assert.equal(raised.notify_role, 'R06', 'business permit routed to the SHEQ Manager (registry)');
 
     const alert = (await owner(`SELECT status, notify_count FROM doc_alert WHERE document_id=$1`, [docId])).rows[0];
     assert.equal(alert.status, 'open');
@@ -82,23 +82,83 @@ test('an expiring document raises an alert to the DA-2 role and clears on renewa
   }
 });
 
-// ── 2b. Each document type routes to its APPLIED DA-2 registry role ──────────
-test('expiry alerts route each document type to its registry DA-2 role', async () => {
+// ── 2b. Each document type routes to its DA-2 leg (three-way split, Kira
+//        2026-07-06): expat permit→R11 only; business permit/licence→R06;
+//        medical→site-matched R03; unclassified permit fails CLOSED to R11. ──
+test('expiry alerts route each document type to its registry DA-2 leg', async () => {
   // valid_until 2026-07-10 is within every DA-1 lead window at this asOf.
-  const expected = { contract: 'R06', permit: 'R06', licence: 'R06', medical: 'R03' }; // v1.6: R05 absorbed by R06
+  const cases = [
+    { name: 'contract', kind: 'contract', permitType: null, role: 'R06' },
+    { name: 'permit-expat', kind: 'permit', permitType: 'expat', role: 'R11' },      // sensitive — Head of HR ONLY
+    { name: 'permit-business', kind: 'permit', permitType: 'business', role: 'R06' },
+    { name: 'permit-unclassified', kind: 'permit', permitType: null, role: 'R11', unclassified: true }, // fail closed, never guessed
+    { name: 'licence', kind: 'licence', permitType: null, role: 'R06' },
+    { name: 'medical', kind: 'medical', permitType: null, role: 'R03', site: F.SITE.A1 }, // Carol's site
+  ];
   const ids = {};
-  for (const kind of Object.keys(expected)) {
-    ids[kind] = (await owner(
-      `INSERT INTO employee_document(company_id,employee_id,kind,name,valid_until)
-       VALUES ($1,$2,$3,$4,'2026-07-10') RETURNING id`, [A, F.EMP.CAROL, kind, `T-${kind}`])).rows[0].id;
+  for (const t of cases) {
+    ids[t.name] = (await owner(
+      `INSERT INTO employee_document(company_id,employee_id,kind,name,valid_until,permit_type)
+       VALUES ($1,$2,$3,$4,'2026-07-10',$5) RETURNING id`,
+      [A, F.EMP.CAROL, t.kind, `T-${t.name}`, t.permitType])).rows[0].id;
   }
   try {
     const r = await docalerts.runExpiryAlerts(admin, '2026-06-29');
-    for (const [kind, role] of Object.entries(expected)) {
-      const raised = r.raised.find((x) => x.document_id === ids[kind]);
-      assert.ok(raised, `${kind} raised an alert`);
-      assert.equal(raised.notify_role, role, `${kind} → ${role} (registry DA-2 role)`);
+    for (const t of cases) {
+      const raised = r.raised.find((x) => x.document_id === ids[t.name]);
+      assert.ok(raised, `${t.name} raised an alert`);
+      assert.equal(raised.notify_role, t.role, `${t.name} → ${t.role} (registry DA-2 leg)`);
+      assert.equal(raised.unclassified, !!t.unclassified, `${t.name} unclassified flag`);
+      if (t.site) assert.equal(raised.notify_site, t.site, `${t.name} carries the employee's site (site-matched R03)`);
+      const notif = (await owner(
+        `SELECT recipient, body FROM notification WHERE kind='doc.expiry' AND body->>'document_id'=$1`, [ids[t.name]])).rows;
+      assert.ok(notif.some((n) => n.recipient === t.role), `${t.name} notification recipient ${t.role}`);
+      if (t.site) assert.ok(notif.some((n) => n.body.site_id === t.site), `${t.name} notification carries site for the E2 reader`);
     }
+    assert.equal(r.unclassified_count, 1, 'exactly the unclassified permit is flagged for Kira to classify');
+  } finally {
+    for (const id of Object.values(ids)) {
+      await owner(`DELETE FROM notification WHERE kind='doc.expiry' AND body->>'document_id'=$1`, [id]);
+      await owner(`DELETE FROM employee_document WHERE id=$1`, [id]);
+    }
+  }
+});
+
+// ── 2c. Dashboard visibility follows the DA-2 legs (row-level, on top of the
+//        alerts.view.roles gate): expat + unclassified permits are R11-ONLY
+//        (the admin does NOT see them); medical only for the R03 whose site
+//        matches the employee's; business permits unchanged (all members). ──
+test('alert dashboard visibility: expat R11-only; medical site-matched R03; business unchanged', async () => {
+  const hoh = { company_id: A, user_id: F.USERS.DIRECTOR_A.id, role_code: 'R11' };
+  const hrA1 = { company_id: A, user_id: F.USERS.HR_A.id, role_code: 'R03' };      // employee at SITE.A1
+  const mk = async (emp, kind, permitType) => (await owner(
+    `INSERT INTO employee_document(company_id,employee_id,kind,name,valid_until,permit_type)
+     VALUES ($1,$2,$3,$4,'2026-07-10',$5) RETURNING id`, [A, emp, kind, `V-${kind}-${permitType || 'none'}-${emp.slice(-2)}`, permitType])).rows[0].id;
+  const ids = {
+    expat: await mk(F.EMP.CAROL, 'permit', 'expat'),
+    unclassified: await mk(F.EMP.CAROL, 'permit', null),
+    business: await mk(F.EMP.CAROL, 'permit', 'business'),
+    medicalA1: await mk(F.EMP.CAROL, 'medical', null), // Carol @ SITE.A1 — HR_A's site
+    medicalA2: await mk(F.EMP.DAVE, 'medical', null),  // Dave @ SITE.A2 — NOT HR_A's site
+  };
+  try {
+    await docalerts.runExpiryAlerts(admin, '2026-06-29');
+    const seen = async (s) => new Set((await docalerts.listOpen(s)).open.map((a) => a.document_id));
+
+    const r11 = await seen(hoh);
+    assert.ok(r11.has(ids.expat) && r11.has(ids.unclassified), 'R11 sees the sensitive permit legs');
+    assert.ok(r11.has(ids.business), 'R11 sees business permits (unchanged leg)');
+    assert.ok(!r11.has(ids.medicalA1) && !r11.has(ids.medicalA2), 'medical is site-R03 only — not the Head of HR');
+
+    const r12 = await seen(admin);
+    assert.ok(!r12.has(ids.expat) && !r12.has(ids.unclassified), 'expat/unclassified permits are R11-ONLY — hidden from the admin');
+    assert.ok(r12.has(ids.business), 'admin still sees business permits (unchanged leg)');
+    assert.ok(!r12.has(ids.medicalA1), 'admin does not see medical (site-R03 only)');
+
+    const r03 = await seen(hrA1);
+    assert.ok(r03.has(ids.medicalA1), 'the R03 at the employee\'s site sees the medical alert');
+    assert.ok(!r03.has(ids.medicalA2), 'an R03 at ANOTHER site does not — site-matched, not all HR Officers');
+    assert.ok(!r03.has(ids.expat) && !r03.has(ids.unclassified), 'R03 never sees the sensitive permit legs');
   } finally {
     for (const id of Object.values(ids)) {
       await owner(`DELETE FROM notification WHERE kind='doc.expiry' AND body->>'document_id'=$1`, [id]);
