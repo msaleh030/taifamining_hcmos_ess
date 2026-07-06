@@ -1,4 +1,0 @@
-Baseline lock trigger — Design accepted all 36 shots (c20-controls re-review
-passed: genuinely distinct light/dark, identical audit-chain counts). Pushed
-on Kira's explicit word; the lock-baselines workflow commits the set to
-design/app-baselines/ and standing CI enforces from there.

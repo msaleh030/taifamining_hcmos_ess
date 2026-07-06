@@ -59,8 +59,6 @@ jobs:
   designed-frontend:
     name: Designed frontend build + visual parity
     runs-on: ubuntu-latest
-    permissions:
-      contents: write   # publishes the c20-controls candidates in-tree (below)
     steps:
       - uses: actions/checkout@v4
 
@@ -128,26 +126,3 @@ jobs:
             frontend/test-results
           if-no-files-found: warn
 
-      # Publish the two deterministic c20-controls candidates IN-TREE so Design
-      # reviews the known-correct files (an artifact-bridge once handed Design a
-      # stale run's shots). Green run ⟹ the spec's darkCount==lightCount
-      # assertion passed on these exact captures. GITHUB_TOKEN pushes don't
-      # retrigger workflows; [skip ci] is belt-and-braces.
-      - name: Publish c20-controls candidates in-tree
-        if: success() && github.event_name == 'pull_request'
-        run: |
-          set -euo pipefail
-          L=design/app-baselines/light-desktop-c20-controls.png
-          D=design/app-baselines/dark-desktop-c20-controls.png
-          [ -f "$L" ] && [ -f "$D" ] || { echo "no candidate shots in this run"; exit 0; }
-          git config user.name 'hcmos-ci'
-          git config user.email 'hcmos-ci@users.noreply.github.com'
-          git fetch origin "${{ github.head_ref }}"
-          git checkout -B "${{ github.head_ref }}" "origin/${{ github.head_ref }}"
-          mkdir -p design/candidates
-          cp "$L" design/candidates/c20-controls-light.png
-          cp "$D" design/candidates/c20-controls-dark.png
-          git add design/candidates
-          git diff --cached --quiet && { echo "candidates unchanged"; exit 0; }
-          git commit -m 'visual: publish deterministic c20-controls candidates for Design re-review [skip ci]'
-          git push origin "${{ github.head_ref }}"
