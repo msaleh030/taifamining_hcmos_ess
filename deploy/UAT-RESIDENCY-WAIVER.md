@@ -21,3 +21,12 @@ this is a **conscious, documented exception**, not a silent compromise.
 
 **Revisit:** before any production/real-data load, replace the EU origin with an
 af-south-1 (or agreed compliant) origin, or obtain a further explicit decision.
+
+## Production residency — flagged on record (Kira, 2026-07-06)
+
+The provider's full data-centre catalogue for this account contains **no
+African region** (EU: Frankfurt/Paris/Vilnius; UK; IN; ID; MY; BR; US).
+UAT proceeds in **Frankfurt (DE)** under this waiver — EU, TEST data only.
+**Production residency needs a real decision before go-live**: an
+Africa-capable provider (registry `af-south-1` stands), or a documented
+EU-hosting lawful basis. Separate Kira decision; not blocked by UAT.

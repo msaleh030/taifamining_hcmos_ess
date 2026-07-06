@@ -1,14 +1,13 @@
 # HCMOS UAT — GO checklist (confirmed decisions)
 
-**Approved by Kira:** Hostinger **KVM 2** (2 vCPU / 8 GB, ~$7–10/mo), **Netherlands
-(Amsterdam)**, Ubuntu 24.04 LTS. UAT / test data under the residency waiver
+**Approved by Kira:** Hostinger **KVM 2** (2 vCPU / 8 GB, ~$7–10/mo), **Frankfurt (DE)**, Ubuntu 24.04 LTS. UAT / test data under the residency waiver
 (`deploy/UAT-RESIDENCY-WAIVER.md`); production must be af-south-1.
 
 Steps 1–3, 6 run on the box (or via the Hostinger API/MCP with a **rotated** token
 as an env var — never in chat). Steps 4–5 are in **your Cloudflare account**.
 
 ## 1. Order the VPS  (→ I-2)
-- KVM 2, **Amsterdam (NL)**, **Ubuntu 24.04** (verify it's in the OS-template list;
+- KVM 2, **Frankfurt (DE)**, **Ubuntu 24.04** (verify it's in the OS-template list;
   if only 22.04 is offered, that's fine — the post-install installs Postgres 16 from
   PGDG regardless).
 - Register an **SSH public key** and attach it; **key-only auth, no password SSH**.
@@ -102,7 +101,7 @@ duplicate-file open with Baraka (`deploy/RATIFY-AT-UAT.md`).
 | ID | Met by |
 |----|--------|
 | I-1 | Step 5 (reachable, TLS, Access-gated) |
-| I-2 | Step 1 (NL recorded; production-residency caveat in the waiver) |
+| I-2 | Step 1 (Frankfurt/DE recorded — Kira decision after no-NL-in-catalogue; production-residency caveat in the waiver) |
 | I-3 | Steps 2–3 (firewall; scram + localhost Postgres) |
 | I-4 | Step 3 (generated secrets; NODE_ENV=production; token not in repo) |
 | I-5 | Steps 4 + 7 (HR account sees real employees + permit alerts) |

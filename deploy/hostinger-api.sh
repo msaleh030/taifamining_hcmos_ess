@@ -16,7 +16,7 @@
 #   status      show a VM:                       status <vm_id>
 #
 # ORDERING the VPS (the only money-moving step) is done in hPanel — KVM 2,
-# Amsterdam, Ubuntu 24.04, attach the SSH key + post-install script registered
+# Frankfurt (DE), Ubuntu 24.04, attach the SSH key + post-install script registered
 # above. Approved spend: KVM 2 (~$7–10/mo). Doing it in the panel avoids guessing
 # the billing API's order schema; everything after it is API/scripted.
 #
@@ -40,7 +40,7 @@ hapi() { # method path [json-body]
 cmd="${1:-preflight}"; shift || true
 case "$cmd" in
   preflight)
-    echo "== data centers (pick the Amsterdam / nl id) =="
+    echo "== data centers (pick the Frankfurt / de id — 19 as of 2026-07) =="
     hapi GET /vps/v1/data-centers
     echo "== OS templates (pick Ubuntu 24.04) =="
     hapi GET /vps/v1/templates

@@ -1,6 +1,6 @@
 name: Deploy UAT
 
-# GO.md end-to-end against the Kira-approved Amsterdam KVM 2 (Path A: the
+# GO.md end-to-end against the Kira-approved Frankfurt (DE) KVM 2 (Path A: the
 # runner has the egress this sandboxed session does not). Trigger: the
 # .github/DEPLOY-UAT sentinel push (Code, on Kira's word) or the Actions
 # "Run workflow" button (Kira). Secrets (Settings → Secrets → Actions):
@@ -21,7 +21,7 @@ concurrency:
 
 jobs:
   deploy:
-    name: Provision + harden + deploy (Amsterdam KVM 2)
+    name: Provision + harden + deploy (Frankfurt KVM 2)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -60,4 +60,7 @@ jobs:
           HOSTINGER_API_TOKEN: ${{ secrets.HOSTINGER_API_TOKEN }}
           UAT_SSH_PRIVATE_KEY: ${{ secrets.UAT_SSH_PRIVATE_KEY }}
           CLOUDFLARE_TUNNEL_TOKEN: ${{ secrets.CLOUDFLARE_TUNNEL_TOKEN }}
+          # Kira's region decision: pin the unset VM to Frankfurt; Manchester
+          # box (1798564) stays unused pending his cancel-vs-spare call.
+          UAT_VM_ID: '1798551'
         run: bash deploy/gha/deploy-uat.sh

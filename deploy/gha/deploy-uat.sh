@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # UAT deploy orchestrator — runs ON THE GITHUB ACTIONS RUNNER (open egress).
-# Provisions/locates the Kira-approved Amsterdam KVM 2 via the Hostinger API,
+# Provisions/locates the Kira-approved Frankfurt (DE) KVM 2 via the Hostinger API,
 # asserts the region BEFORE any setup, ships the source tarball (with the
 # CI-built ENFORCED frontend dist) over SSH, and drives remote-setup.sh.
 # Secrets come from the environment (GitHub Actions secrets, masked in logs):
@@ -56,26 +56,27 @@ fi
 echo "deploy public key: $PUBKEY"
 
 # ── 1. Locate or provision the VM ────────────────────────────────────────────
-say "1. locate/provision the Amsterdam KVM 2"
+say "1. locate/provision the Frankfurt (DE) KVM 2"
 VMS_JSON="$(hapi GET /vps/v1/virtual-machines)"
 echo "$VMS_JSON" | jq -r 'try (.[] | [.id, .hostname, .plan, .state] | @tsv) catch "no VMs / unexpected shape"'
 
-# Selection: explicit UAT_VM_ID wins; else prefer a RUNNING KVM 2 (the box
-# whose authorized_keys carries the deploy public key) over unset "initial"
-# orders sitting in the account.
+# Selection: explicit UAT_VM_ID wins (set to 1798551 by Kira's Frankfurt
+# decision — the unset "initial" VM gets pinned to Frankfurt at setup; the
+# Manchester box 1798564 stays UNUSED pending Kira's cancel-vs-spare call);
+# else prefer a RUNNING KVM 2.
 VM_ID="${UAT_VM_ID:-}"
 [ -n "$VM_ID" ] || VM_ID="$(echo "$VMS_JSON" | jq -r --arg h "$HOSTNAME_WANT" \
   'try (map(select((.hostname // "" | contains($h)) or ((.plan // "") | test("KVM ?2"; "i"))))
         | (map(select(.state == "running")) + .) | .[0].id // empty) catch empty')"
 
 if [ -z "$VM_ID" ]; then
-  echo "No existing VM matched — attempting API order (KVM 2, Amsterdam, Ubuntu 24.04)."
+  echo "No existing VM matched — attempting API order (KVM 2, Frankfurt, Ubuntu 24.04)."
   CATALOG="$(hapi GET /billing/v1/catalog)"
   ITEM_ID="$(echo "$CATALOG" | jq -r 'try ([.[] | select(.name | test("KVM ?2"; "i"))][0].prices[0].id // empty) catch empty')"
   PM_ID="$(hapi GET /billing/v1/payment-methods | jq -r 'try ((map(select(.is_default == true)) | .[0].id) // .[0].id // empty) catch empty')"
   if [ -z "$ITEM_ID" ] || [ -z "$PM_ID" ]; then
     echo "FATAL: cannot self-order (catalog item or payment method not resolvable via API)."
-    echo "Order the KVM 2 (Amsterdam, Ubuntu 24.04) in the Hostinger panel, then re-run this deploy."
+    echo "Order the KVM 2 (Frankfurt, Ubuntu 24.04) in the Hostinger panel, then re-run this deploy."
     exit 1
   fi
   ORDER_OUT="$(hapi POST /billing/v1/orders "{\"payment_method_id\": $PM_ID, \"items\": [{\"item_id\": \"$ITEM_ID\", \"quantity\": 1}]}")"
@@ -90,8 +91,8 @@ if [ -z "$VM_ID" ]; then
 fi
 echo "VM id: $VM_ID"
 
-# ── 2. REGION ASSERT: must be Amsterdam before anything else ─────────────────
-say "2. region assert (Amsterdam/NL — fixed after setup)"
+# ── 2. REGION ASSERT: must be Frankfurt (DE) before anything else ────────────
+say "2. region assert (Frankfurt/DE — Kira's decision; fixed after setup)"
 VM_JSON="$(hapi GET "/vps/v1/virtual-machines/$VM_ID")"
 # Schema visibility: the API's real shapes drive this assert — dump the
 # non-secret VM detail + data-centre catalogue verbatim.
@@ -102,25 +103,25 @@ STATE="$(echo "$VM_JSON" | jq -r '.state // empty')"
 DC_ID="$(echo "$VM_JSON" | jq -r '.data_center_id // .data_center.id // empty')"
 DC_ROW="$(echo "$DCS" | jq -r --argjson id "${DC_ID:-0}" 'try (map(select(.id == $id)) | .[0] // empty) catch empty')"
 REGION_BLOB="$(printf '%s %s' "$DC_ROW" "$(echo "$VM_JSON" | jq -c '{data_center, region, location, city}' 2>/dev/null)")"
-if echo "$REGION_BLOB" | grep -qiE 'amsterdam|netherlands|"nl"|nl-'; then
-  echo "region verified: Amsterdam/NL"
+if echo "$REGION_BLOB" | grep -qiE 'frankfurt|"de"'; then
+  echo "region verified: Frankfurt/DE (EU — UAT-RESIDENCY-WAIVER)"
 elif [ "$STATE" = "initial" ]; then
-  NL_DC="$(echo "$DCS" | jq -r 'try ([.[] | select(tostring | test("amsterdam|netherlands|\"nl\"|nl-"; "i"))][0].id // empty) catch empty')"
-  [ -n "$NL_DC" ] || { echo "FATAL: no Amsterdam data centre resolvable from the catalogue — cannot pin region. Stopping."; exit 1; }
-  echo "VM awaiting setup — will pin data centre $NL_DC (Amsterdam) at setup."
-  DC_ID="$NL_DC"
-elif [ -z "$DC_ROW" ] && ! echo "$VM_JSON" | grep -qiE 'amsterdam|netherlands|"nl"|nl-'; then
+  DE_DC="$(echo "$DCS" | jq -r 'try ([.[] | select((.city // "" | test("Frankfurt"; "i")) or (.location // "") == "de")][0].id // empty) catch empty')"
+  [ -n "$DE_DC" ] || { echo "FATAL: no Frankfurt data centre resolvable from the catalogue — cannot pin region. Stopping."; exit 1; }
+  echo "VM awaiting setup — will pin data centre $DE_DC (Frankfurt) at setup."
+  DC_ID="$DE_DC"
+elif [ -z "$DC_ROW" ] && ! echo "$VM_JSON" | grep -qiE 'frankfurt|"de"'; then
   echo "FATAL: cannot VERIFY the VM's region from the API response (see dumps above) — stopping rather than assuming. Region is a Kira constraint."
   exit 1
 else
-  echo "FATAL: VM is NOT in Amsterdam and its region is already fixed. Stopping (region is a Kira constraint)."
+  echo "FATAL: VM is NOT in Frankfurt and its region is already fixed. Stopping (region is a Kira constraint)."
   exit 1
 fi
 
 # ── 3. Setup (fresh VM only): Ubuntu 24.04 + deploy key ──────────────────────
 STATE="$(echo "$VM_JSON" | jq -r '.state // empty')"
 if [ "$STATE" = "initial" ]; then
-  say "3. initial setup: Ubuntu 24.04 template + deploy key + hostname"
+  say "3. initial setup: Ubuntu 24.04 + deploy key + hostname (pins Frankfurt)"
   TPL_ID="$(hapi GET /vps/v1/templates | jq -r 'try ([.[] | select(.name | test("Ubuntu 24.04"; "i"))][0].id // empty) catch empty')"
   [ -n "$TPL_ID" ] || { echo "FATAL: Ubuntu 24.04 template not found"; exit 1; }
   hapi POST "/vps/v1/virtual-machines/$VM_ID/setup" \

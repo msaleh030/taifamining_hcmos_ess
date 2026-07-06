@@ -1,7 +1,9 @@
 UAT deploy trigger — Kira confirmed the repo secrets (HOSTINGER_API_TOKEN,
 UAT_SSH_PRIVATE_KEY) are in place; deploy the revised v1.6 roster (Omar Omar
 R15 maker, Viswa Medhuru R16 checker, no +alias accounts). Region assert:
-Amsterdam KVM 2. Super-admin passwords remain Kira's interactive on-box step.
+Frankfurt (DE) — Kira's decision A; pin VM 1798551 at setup, Manchester box
+1798564 stays unused. Super-admin passwords remain Kira's interactive on-box step.
 retrigger 00a581d
 run: key fixed (private half), fire deploy 2026-07-06T17:56:50Z
 run: prefer RUNNING KVM2 (the box with the key) + schema-visible region assert 2026-07-06T17:58:39Z
+run: FRANKFURT decision — pin VM 1798551 to DC 19, refire 2026-07-06T18:20:00Z
