@@ -25,9 +25,13 @@ who sees it.
 3. **C20b alert configuration** — per-doc-type lead-time set/repeat/clear.
    Built: sweep + routed-role list (certified); lead-time chips display the
    DA-1 registry values read-only.
-4. **E6 Payslip** — own-payslip endpoint for ESS (the publish leg pushes
+4. **E6 Payslip** — ~~own-payslip endpoint for ESS (the publish leg pushes
    payslips; there is no GET /me/payslip yet). Screen not built rather than
-   mocked.
+   mocked.~~ **BUILT on Kira's order (2026-07-06)**: `GET /me/payslip` +
+   `GET /me/payslips` (history) — own-only by construction (no employee
+   parameter), visible only after publish + ESS leg posted (C18), wording
+   pinned Total Pay / Net Pay = Total Pay − Total Deduction
+   (`test/payslip.test.js`). a3.pay.roles untouched. Screen build can proceed.
 5. **E2 extras** — documents list for self, notifications, smart-ID data.
    Home is composed from certified endpoints only.
 6. **Directory site column** (C4 names site; the list payload carries dept,

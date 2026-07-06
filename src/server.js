@@ -23,6 +23,7 @@ const controls = require('./controls');
 const provision = require('./provision');
 const reports = require('./reports');
 const ingest = require('./ingest');
+const payslip = require('./payslip');
 const db = require('./db');
 const crypto = require('node:crypto');
 const roles = require('./roles');
@@ -80,6 +81,15 @@ const routes = [
     handler: async (req, m, url, s) => ({ status: 200, body: await auth.readProfile(s, m[1]) }) },
   { method: 'POST', pattern: /^\/action\/([\w.]+)$/,
     handler: async (req, m, url, s) => ({ status: 200, body: await auth.performAction(s, m[1]) }) },
+
+  // ── E6: ESS payslip (PRT-02) — OWN pay only, published back by the Exact ESS
+  // leg (C18). Auth-only like the other self-service routes: there is no
+  // employee parameter, so the guard surface is the session itself; a3.pay.roles
+  // still gates everyone ELSE's pay everywhere else (untouched).
+  { method: 'GET', pattern: /^\/me\/payslips$/,
+    handler: async (req, m, url, s) => ({ status: 200, body: await payslip.listOwn(s) }) },
+  { method: 'GET', pattern: /^\/me\/payslip$/,
+    handler: async (req, m, url, s) => ({ status: 200, body: await payslip.getOwn(s, url.searchParams.get('batch')) }) },
 
   // F0: a module-guarded endpoint — proves the A2 guard is enforced at the HTTP
   // layer (roles with the 'reports' module get 200, others 403). Per-screen
