@@ -93,17 +93,24 @@ fi
 say "backups (nightly timer) + restore test"
 install -d -m 700 /var/backups/hcmos
 systemctl enable --now hcmos-backup.timer 2>/dev/null || echo "timer not enabled (set BACKUP_TARGET for off-box; local dump follows)"
-sudo -u postgres pg_dump -Fc hcmos > /var/backups/hcmos/manual-$(date -u +%Y%m%d).dump
+DUMP=/var/backups/hcmos/manual-$(date -u +%Y%m%d).dump
+sudo -u postgres pg_dump -Fc hcmos > "$DUMP"
 sudo -u postgres dropdb --if-exists hcmos_restore_test
 sudo -u postgres createdb hcmos_restore_test
-sudo -u postgres pg_restore -d hcmos_restore_test --no-owner --role=postgres /var/backups/hcmos/manual-$(date -u +%Y%m%d).dump >/dev/null 2>&1 || true
+# /var/backups/hcmos is root-owned 700, so the postgres user cannot open the
+# dump path itself — feed it via stdin (root's shell opens the file). Keep the
+# restore's stderr so a failed round-trip is diagnosable, not silent.
+sudo -u postgres pg_restore -d hcmos_restore_test --no-owner --role=postgres < "$DUMP" 2>/root/restore-test.err || true
 RESTORED=$(sudo -u postgres psql -d hcmos_restore_test -Atc "SELECT count(*) FROM employee" 2>/dev/null || echo 0)
 ORIG=$(sudo -u postgres psql -d hcmos -Atc "SELECT count(*) FROM employee")
 sudo -u postgres dropdb hcmos_restore_test
 if [ "$RESTORED" = "$ORIG" ] && [ "$ORIG" -gt 0 ]; then
   echo "RESTORE TEST PASS: $RESTORED/$ORIG employee rows round-tripped"
+  rm -f /root/restore-test.err
 else
-  echo "RESTORE TEST FAIL: restored=$RESTORED original=$ORIG"; exit 1
+  echo "RESTORE TEST FAIL: restored=$RESTORED original=$ORIG — pg_restore stderr tail:"
+  tail -20 /root/restore-test.err 2>/dev/null || echo "(no stderr captured)"
+  exit 1
 fi
 
 # ── smoke test ────────────────────────────────────────────────────────────────
