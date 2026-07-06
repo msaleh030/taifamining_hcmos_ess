@@ -60,8 +60,13 @@ say "1. locate/provision the Amsterdam KVM 2"
 VMS_JSON="$(hapi GET /vps/v1/virtual-machines)"
 echo "$VMS_JSON" | jq -r 'try (.[] | [.id, .hostname, .plan, .state] | @tsv) catch "no VMs / unexpected shape"'
 
-VM_ID="$(echo "$VMS_JSON" | jq -r --arg h "$HOSTNAME_WANT" \
-  'try (map(select((.hostname // "" | contains($h)) or ((.plan // "") | test("KVM ?2"; "i")))) | .[0].id // empty) catch empty')"
+# Selection: explicit UAT_VM_ID wins; else prefer a RUNNING KVM 2 (the box
+# whose authorized_keys carries the deploy public key) over unset "initial"
+# orders sitting in the account.
+VM_ID="${UAT_VM_ID:-}"
+[ -n "$VM_ID" ] || VM_ID="$(echo "$VMS_JSON" | jq -r --arg h "$HOSTNAME_WANT" \
+  'try (map(select((.hostname // "" | contains($h)) or ((.plan // "") | test("KVM ?2"; "i"))))
+        | (map(select(.state == "running")) + .) | .[0].id // empty) catch empty')"
 
 if [ -z "$VM_ID" ]; then
   echo "No existing VM matched — attempting API order (KVM 2, Amsterdam, Ubuntu 24.04)."
@@ -88,21 +93,28 @@ echo "VM id: $VM_ID"
 # ── 2. REGION ASSERT: must be Amsterdam before anything else ─────────────────
 say "2. region assert (Amsterdam/NL — fixed after setup)"
 VM_JSON="$(hapi GET "/vps/v1/virtual-machines/$VM_ID")"
-DC_ID="$(echo "$VM_JSON" | jq -r '.data_center_id // .data_center.id // empty')"
+# Schema visibility: the API's real shapes drive this assert — dump the
+# non-secret VM detail + data-centre catalogue verbatim.
+echo "VM detail: $(echo "$VM_JSON" | jq -c 'del(..|.password?, .token?, .secret?)' 2>/dev/null || echo unparseable)"
 DCS="$(hapi GET /vps/v1/data-centers)"
-DC_ROW="$(echo "$DCS" | jq -r --argjson id "${DC_ID:-0}" 'try (map(select(.id == $id)) | .[0]) catch empty')"
-echo "data centre: $(echo "$DC_ROW" | jq -c '{id, name, city, location, continent} | with_entries(select(.value != null))' 2>/dev/null || echo "$DC_ROW")"
-if ! echo "$DC_ROW" | grep -qiE 'amsterdam|netherlands|"nl"'; then
-  # A VM in state "initial" has no fixed DC yet — the setup call pins it. Find NL DC.
-  STATE="$(echo "$VM_JSON" | jq -r '.state // empty')"
-  NL_DC="$(echo "$DCS" | jq -r 'try ([.[] | select((.city // "" | test("Amsterdam"; "i")) or (.location // "" | test("nl|Netherlands|Amsterdam"; "i")))][0].id // empty) catch empty')"
-  if [ "$STATE" = "initial" ] && [ -n "$NL_DC" ]; then
-    echo "VM awaiting setup — will pin data centre $NL_DC (Amsterdam) at setup."
-    DC_ID="$NL_DC"
-  else
-    echo "FATAL: VM is NOT in Amsterdam and its region is already fixed. Stopping (region is a Kira constraint)."
-    exit 1
-  fi
+echo "data centres: $(echo "$DCS" | jq -c '.' 2>/dev/null || echo unparseable)"
+STATE="$(echo "$VM_JSON" | jq -r '.state // empty')"
+DC_ID="$(echo "$VM_JSON" | jq -r '.data_center_id // .data_center.id // empty')"
+DC_ROW="$(echo "$DCS" | jq -r --argjson id "${DC_ID:-0}" 'try (map(select(.id == $id)) | .[0] // empty) catch empty')"
+REGION_BLOB="$(printf '%s %s' "$DC_ROW" "$(echo "$VM_JSON" | jq -c '{data_center, region, location, city}' 2>/dev/null)")"
+if echo "$REGION_BLOB" | grep -qiE 'amsterdam|netherlands|"nl"|nl-'; then
+  echo "region verified: Amsterdam/NL"
+elif [ "$STATE" = "initial" ]; then
+  NL_DC="$(echo "$DCS" | jq -r 'try ([.[] | select(tostring | test("amsterdam|netherlands|\"nl\"|nl-"; "i"))][0].id // empty) catch empty')"
+  [ -n "$NL_DC" ] || { echo "FATAL: no Amsterdam data centre resolvable from the catalogue — cannot pin region. Stopping."; exit 1; }
+  echo "VM awaiting setup — will pin data centre $NL_DC (Amsterdam) at setup."
+  DC_ID="$NL_DC"
+elif [ -z "$DC_ROW" ] && ! echo "$VM_JSON" | grep -qiE 'amsterdam|netherlands|"nl"|nl-'; then
+  echo "FATAL: cannot VERIFY the VM's region from the API response (see dumps above) — stopping rather than assuming. Region is a Kira constraint."
+  exit 1
+else
+  echo "FATAL: VM is NOT in Amsterdam and its region is already fixed. Stopping (region is a Kira constraint)."
+  exit 1
 fi
 
 # ── 3. Setup (fresh VM only): Ubuntu 24.04 + deploy key ──────────────────────

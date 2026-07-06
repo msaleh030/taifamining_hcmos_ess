@@ -4,3 +4,4 @@ R15 maker, Viswa Medhuru R16 checker, no +alias accounts). Region assert:
 Amsterdam KVM 2. Super-admin passwords remain Kira's interactive on-box step.
 retrigger 00a581d
 run: key fixed (private half), fire deploy 2026-07-06T17:56:50Z
+run: prefer RUNNING KVM2 (the box with the key) + schema-visible region assert 2026-07-06T17:58:39Z
