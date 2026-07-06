@@ -29,7 +29,11 @@ const SURFACES = { desktop: { width: 1280, height: 800 }, mobile: { width: 390, 
 test('C20 controls — deterministic chain fixture (light + dark)', async ({ page }) => {
   test.setTimeout(240_000);
   await page.setViewportSize(SURFACES.desktop);
-  await page.addInitScript(() => localStorage.setItem('hcmos.theme', 'light'));
+  // NO addInitScript here: init scripts re-run on every navigation, so a
+  // 'light' init script would silently overwrite the dark flip on reload
+  // (caught: the first published pair was byte-identical). Light is the
+  // app's default; dark is set via localStorage then reload, and the DOM
+  // theme is ASSERTED before each shot.
   await login(page, F.USERS.DIRECTOR_A);
   const TERMINAL = '[data-state="all-clear"], [data-state="populated"], [data-state="empty"], [data-state="error"], [data-state="no-permission"]';
 
@@ -40,12 +44,14 @@ test('C20 controls — deterministic chain fixture (light + dark)', async ({ pag
 
   await page.goto('/controls');
   await page.waitForSelector(TERMINAL, { timeout: 90_000 });
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
   const lightCount = await chainCount();
   await shoot(page, 'c20-controls', 'light', 'desktop');
 
   await page.evaluate(() => localStorage.setItem('hcmos.theme', 'dark'));
   await page.reload();
   await page.waitForSelector(TERMINAL, { timeout: 90_000 });
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
   const darkCount = await chainCount();
   expect(darkCount, 'chain count must be identical across themes').toBe(lightCount);
   await shoot(page, 'c20-controls', 'dark', 'desktop');
