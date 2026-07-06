@@ -32,7 +32,27 @@ say "ssh deploy key"
 install -d -m 700 ~/.ssh
 printf '%s\n' "$UAT_SSH_PRIVATE_KEY" > ~/.ssh/uat_deploy
 chmod 600 ~/.ssh/uat_deploy
-PUBKEY="$(ssh-keygen -y -f ~/.ssh/uat_deploy)"
+# Lossless repair for the classic paste artifact: an OpenSSH key stored as ONE
+# line (internal newlines lost). Re-fold the base64 body between the markers.
+if [ "$(wc -l < ~/.ssh/uat_deploy)" -le 2 ] && grep -q 'BEGIN OPENSSH PRIVATE KEY' ~/.ssh/uat_deploy; then
+  sed -e 's/-----BEGIN OPENSSH PRIVATE KEY----- */-----BEGIN OPENSSH PRIVATE KEY-----\n/' \
+      -e 's/ *-----END OPENSSH PRIVATE KEY-----/\n-----END OPENSSH PRIVATE KEY-----/' ~/.ssh/uat_deploy \
+    | awk '/^-----/{print; next}{gsub(/ /,""); while (length($0) > 70) { print substr($0,1,70); $0 = substr($0,71) } if (length($0)) print}' \
+    > ~/.ssh/uat_deploy.folded && mv ~/.ssh/uat_deploy.folded ~/.ssh/uat_deploy
+  chmod 600 ~/.ssh/uat_deploy
+  echo "single-line key detected — re-folded"
+fi
+if ! PUBKEY="$(ssh-keygen -y -P '' -f ~/.ssh/uat_deploy 2>/dev/null)"; then
+  echo "FATAL: UAT_SSH_PRIVATE_KEY does not parse as an unencrypted private key."
+  echo "Safe diagnostics (no key material):"
+  echo "  first line : $(head -1 ~/.ssh/uat_deploy | cut -c1-40)"
+  echo "  line count : $(wc -l < ~/.ssh/uat_deploy)"
+  grep -q 'ENCRYPTED' ~/.ssh/uat_deploy && echo "  looks passphrase-protected — store an UNENCRYPTED deploy key (it lives only in the masked secret)"
+  head -1 ~/.ssh/uat_deploy | grep -q 'PuTTY' && echo "  PuTTY .ppk format — export as OpenSSH (puttygen -O private-openssh)"
+  head -1 ~/.ssh/uat_deploy | grep -q 'ssh-\|ecdsa-' && echo "  this is a PUBLIC key — store the PRIVATE half"
+  echo "Fix the UAT_SSH_PRIVATE_KEY secret and re-run. Nothing was provisioned."
+  exit 1
+fi
 echo "deploy public key: $PUBKEY"
 
 # ── 1. Locate or provision the VM ────────────────────────────────────────────
