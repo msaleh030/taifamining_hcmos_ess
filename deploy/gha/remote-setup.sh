@@ -71,11 +71,13 @@ prov omid.karambeck@taifamining.tz  'Omid Karambeck' R11 "$HQ_SITE"
 prov cecilia.mtweve@taifamining.tz  'Cecilia Mtweve' R07 "$HQ_SITE"
 prov omar.omar@taifamining.tz       'Omar Omar'      R15 "$HQ_SITE"
 prov viswa.medhuru@taifamining.tz   'Viswa Medhuru'  R16 "$HQ_SITE"
+# R12 is UNSCOPED by role config (site_scope.R12=false) — the home site below is
+# only the employee record's anchor; his visibility is All Sites by role.
+prov rajesh.chohan@taifamining.tz   'Rajesh Chohan'  R12 "$HQ_SITE"
 # Acceptance-probe R03 (temporary, clearly named; replaced when Taifa HR sends
 # the four HR Officer names):
 prov uat.probe.r03@taifamining.tz   'UAT Probe (HR Officer)' R03 "$ANY_SITE"
 echo "PENDING NAMES (provision when Taifa HR confirms): 4x R03, 2x R04, maurice.<surname> R06, richard.<surname> R14"
-echo "PENDING: rajesh.<surname> R12 UNSCOPED — surname needed for the firstname.lastname convention; provision via provisionSuperAdmin-style unscoped account, not a site-bound user"
 echo "SUPER ADMINS (interactive, hidden password — Kira runs on this box):" | tee -a "$CREDS"
 echo "  UAT_COMPANY=$UAT_CO node scripts/provision-super-admin.js mohammed@railgrid.tz" | tee -a "$CREDS"
 echo "  UAT_COMPANY=$UAT_CO node scripts/provision-super-admin.js admin@taifamining.tz" | tee -a "$CREDS"

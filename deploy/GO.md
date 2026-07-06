@@ -44,7 +44,7 @@ printed password on first sign-in.
 | 9 | Cecilia Mtweve | **R07 Payroll Officer** | `cecilia.mtweve@taifamining.tz` |
 | 10 | Omar Omar | **R15 Finance Manager** (ingest MAKER) | `omar.omar@taifamining.tz` |
 | 11 | Viswa Medhuru | **R16 Chief Financial Controller** (ingest CHECKER) | `viswa.medhuru@taifamining.tz` |
-| 12 | Rajesh `<surname>` | R12 System Administrator (UNSCOPED) | `rajesh.<surname>@taifamining.tz` |
+| 12 | Rajesh Chohan | R12 System Administrator (UNSCOPED — role config, All Sites) | `rajesh.chohan@taifamining.tz` |
 | 13 | Richard `<surname>` | R14 CEO / Executive (read-only, org-wide) | `richard.<surname>@taifamining.tz` |
 
 R11 (Head of HR) is central — sees every site's directory + permit alerts (I-5).
