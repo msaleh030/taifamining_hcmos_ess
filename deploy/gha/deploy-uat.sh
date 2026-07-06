@@ -12,7 +12,10 @@
 set -euo pipefail
 
 API=https://developers.hostinger.com/api
-HOSTNAME_WANT="${UAT_HOSTNAME:-hcmos-uat}"
+# Hostinger's setup API validates the hostname as an FQDN ([VPS:2004] on a bare
+# label), so the default carries the domain. This is the box's OS hostname only;
+# the public edge name stays uat.taifamining.tz via the Cloudflare tunnel.
+HOSTNAME_WANT="${UAT_HOSTNAME:-hcmos-uat.taifamining.tz}"
 say() { printf '\n=== CHECKPOINT: %s ===\n' "$*"; }
 hapi() { # method path [json-body]
   local m="$1" p="$2" body="${3:-}"
@@ -124,9 +127,15 @@ if [ "$STATE" = "initial" ]; then
   say "3. initial setup: Ubuntu 24.04 + deploy key + hostname (pins Frankfurt)"
   TPL_ID="$(hapi GET /vps/v1/templates | jq -r 'try ([.[] | select(.name | test("Ubuntu 24.04"; "i"))][0].id // empty) catch empty')"
   [ -n "$TPL_ID" ] || { echo "FATAL: Ubuntu 24.04 template not found"; exit 1; }
-  hapi POST "/vps/v1/virtual-machines/$VM_ID/setup" \
-    "{\"template_id\": $TPL_ID, \"data_center_id\": $DC_ID, \"hostname\": \"$HOSTNAME_WANT\", \"public_key\": {\"name\": \"hcmos-uat-deploy\", \"key\": \"$PUBKEY\"}}" \
-    | jq 'del(..|.token?, .secret?)' || true
+  SETUP_OUT="$(hapi POST "/vps/v1/virtual-machines/$VM_ID/setup" \
+    "{\"template_id\": $TPL_ID, \"data_center_id\": $DC_ID, \"hostname\": \"$HOSTNAME_WANT\", \"public_key\": {\"name\": \"hcmos-uat-deploy\", \"key\": \"$PUBKEY\"}}")"
+  echo "$SETUP_OUT" | jq 'del(..|.token?, .secret?)' 2>/dev/null || echo "$SETUP_OUT"
+  # Fail FAST on an API rejection (error shape: {message, correlation_id}) —
+  # never sit in the wait loop against a VM whose setup was refused.
+  if echo "$SETUP_OUT" | jq -e 'has("message") and ((has("id") or has("state")) | not)' >/dev/null 2>&1; then
+    echo "FATAL: setup rejected by the API (response above). Nothing was provisioned — fix and re-run."
+    exit 1
+  fi
 else
   say "3. VM already set up (state: $STATE) — deploy key must be authorised on the box"
 fi
@@ -134,14 +143,15 @@ fi
 # ── wait running + IP ─────────────────────────────────────────────────────────
 say "wait for running state + IPv4"
 IP=""
-for i in $(seq 1 60); do
+for i in $(seq 1 90); do
   VM_JSON="$(hapi GET "/vps/v1/virtual-machines/$VM_ID")"
   STATE="$(echo "$VM_JSON" | jq -r '.state // empty')"
   IP="$(echo "$VM_JSON" | jq -r 'try (.ipv4[0].address // .ipv4.address // .ip // empty) catch empty')"
   [ "$STATE" = "running" ] && [ -n "$IP" ] && break
+  [ $((i % 6)) -eq 0 ] && echo "  ...state=$STATE after $((i*10))s"
   sleep 10
 done
-[ -n "$IP" ] || { echo "FATAL: VM never reached running/IP"; exit 1; }
+[ -n "$IP" ] || { echo "FATAL: VM never reached running/IP (last state: ${STATE:-unknown})"; exit 1; }
 echo "VM running at $IP"
 
 # ── 4. Firewall via API (deny-all inbound; SSH only; tunnel dials out) ───────
