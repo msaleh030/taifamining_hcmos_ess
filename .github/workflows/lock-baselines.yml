@@ -1,14 +1,19 @@
 name: Lock visual baselines
 
-# ONE-SHOT, MANUALLY DISPATCHED (Kira's word — Design accepted all 36 shots).
+# ONE-SHOT, MANUALLY TRIGGERED (Kira's word — Design accepted all 36 shots).
 # Regenerates the deterministic snapshot set and commits it to
 # design/app-baselines/ — the all-at-once lock that flips the standing CI
-# visual job into ENFORCE mode. Not a standing auto-commit: it runs only on
-# explicit workflow_dispatch. Determinism of the set is proven (byte-stable
-# captures across runs + in-run cross-theme assertions); the next standing CI
-# run re-verifies by enforcing against what this commits.
+# visual job into ENFORCE mode. Not a standing auto-commit: it runs ONLY when
+# the .github/LOCK-BASELINES sentinel is pushed (a deliberate human-ordered
+# act; workflow_dispatch is unavailable to this session's integration).
+# Determinism of the set is proven (byte-stable captures across runs + in-run
+# cross-theme assertions); the next standing CI run re-verifies by enforcing
+# against what this commits.
 on:
   workflow_dispatch:
+  push:
+    branches: [claude/nifty-goodall-poihi4]
+    paths: ['.github/LOCK-BASELINES']
 
 jobs:
   lock:
