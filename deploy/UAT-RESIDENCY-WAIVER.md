@@ -30,3 +30,20 @@ UAT proceeds in **Frankfurt (DE)** under this waiver — EU, TEST data only.
 **Production residency needs a real decision before go-live**: an
 Africa-capable provider (registry `af-south-1` stands), or a documented
 EU-hosting lawful basis. Separate Kira decision; not blocked by UAT.
+
+## Production posture — DECIDED (Kira, 2026-07-06, later the same day)
+
+**Production stays on Hostinger** in the region of choice, under the
+**documented lawful basis** route — NOT an African provider (Kira's call;
+supersedes the open question above; the registry `af-south-1` value is
+retired as the production target once the lawful-basis documentation lands).
+
+**Region = lowest measured RTT to Tanzania, chosen empirically, never
+assumed.** Contenders from the catalogue: **Frankfurt (DC 19)** — current
+UAT — vs **Mumbai (DC 23)** — likely favoured by the Indian-Ocean cable
+paths to Dar es Salaam. Measurement: East-Africa probes (Globalping;
+Tanzania first, neighbours for corroboration) against paired neutral
+Frankfurt/Mumbai targets plus the real Hostinger Frankfurt box — see
+`.github/workflows/latency-probe.yml`. **Kira picks the winner from the
+numbers**, and verifies from Taifa's own network before production go-live.
+**UAT stays Frankfurt as-is** regardless of the production pick.
