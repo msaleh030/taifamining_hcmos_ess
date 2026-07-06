@@ -1,0 +1,70 @@
+name: Lock visual baselines
+
+# ONE-SHOT, MANUALLY DISPATCHED (Kira's word — Design accepted all 36 shots).
+# Regenerates the deterministic snapshot set and commits it to
+# design/app-baselines/ — the all-at-once lock that flips the standing CI
+# visual job into ENFORCE mode. Not a standing auto-commit: it runs only on
+# explicit workflow_dispatch. Determinism of the set is proven (byte-stable
+# captures across runs + in-run cross-theme assertions); the next standing CI
+# run re-verifies by enforcing against what this commits.
+on:
+  workflow_dispatch:
+
+jobs:
+  lock:
+    name: Regenerate + commit the accepted baseline set
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Start local PostgreSQL
+        run: |
+          set -euo pipefail
+          PG_VER="$(pg_lsclusters -h | awk 'NR==1{print $1}')"
+          PG_VER="${PG_VER:-16}"
+          sudo systemctl start "postgresql@${PG_VER}-main" 2>/dev/null \
+            || sudo pg_ctlcluster "$PG_VER" main start || true
+          for i in $(seq 1 30); do pg_isready -h 127.0.0.1 -p 5432 && break; sleep 1; done
+          pg_isready -h 127.0.0.1 -p 5432
+
+      - name: Build frontend
+        working-directory: frontend
+        run: |
+          npm install --no-audit --no-fund
+          npm run build
+
+      - name: Seed backend + start server
+        run: |
+          npm install --no-audit --no-fund
+          bash scripts/setup-db.sh && node scripts/migrate.js && node scripts/seed.js
+          node src/server.js &
+          for i in $(seq 1 30); do curl -sf http://127.0.0.1:3000/health && break; sleep 1; done
+          curl -sf http://127.0.0.1:3000/health
+
+      - name: Install Playwright chromium
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+
+      - name: Generate the snapshot set (assertions included)
+        working-directory: frontend
+        run: npm run visual:update
+
+      - name: Commit the locked baselines
+        run: |
+          set -euo pipefail
+          COUNT=$(find design/app-baselines -name '*.png' | wc -l)
+          echo "snapshot PNGs: $COUNT"
+          [ "$COUNT" -eq 36 ] || { echo "expected exactly 36 accepted shots"; exit 1; }
+          git config user.name 'hcmos-ci'
+          git config user.email 'hcmos-ci@users.noreply.github.com'
+          git add design/app-baselines
+          git diff --cached --quiet && { echo "baselines unchanged"; exit 0; }
+          git commit -m 'visual: LOCK the 36 Design-accepted baselines — CI enforces from here (dispatched on Kira'"'"'s word) [skip ci]'
+          git push origin "${GITHUB_REF_NAME}"
