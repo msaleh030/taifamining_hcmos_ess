@@ -64,14 +64,18 @@ prov() { # email name role site
     && echo "provisioned: $email ($role, $site)" || { echo "FAILED: $email ($role)"; return 1; }
 }
 
-prov omid.karambeck@taifamining.tz        'Omid Karambeck' R11 "$HQ_SITE"
-prov omid.karambeck+cfc@taifamining.tz    'Omid Karambeck (CFC)' R16 "$HQ_SITE"
-prov cecilia.mtweve@taifamining.tz        'Cecilia Mtweve' R07 "$HQ_SITE"
-prov cecilia.mtweve+finance@taifamining.tz 'Cecilia Mtweve (Finance Manager)' R15 "$HQ_SITE"
-# Acceptance-probe R03 (temporary, clearly named; replace when Taifa HR sends
-# the four HR Officer names — 4x R03, 2x R04, Maurice/Rajesh/Richard pending):
-prov uat.probe.r03@taifamining.tz         'UAT Probe (HR Officer)' R03 "$ANY_SITE"
-echo "PENDING NAMES (provision when Taifa HR confirms): 4x R03, 2x R04, maurice.<surname> R06, rajesh.<surname> R12, richard.<surname> R14"
+# REVISED v1.6 roster (Kira): SoD on two dedicated people, NO +alias accounts —
+# Omar Omar is the R15 maker, Viswa Medhuru the R16 checker; Omid is R11 only,
+# Cecilia R07 only. Rajesh (R12) + the two super admins are UNSCOPED.
+prov omid.karambeck@taifamining.tz  'Omid Karambeck' R11 "$HQ_SITE"
+prov cecilia.mtweve@taifamining.tz  'Cecilia Mtweve' R07 "$HQ_SITE"
+prov omar.omar@taifamining.tz       'Omar Omar'      R15 "$HQ_SITE"
+prov viswa.medhuru@taifamining.tz   'Viswa Medhuru'  R16 "$HQ_SITE"
+# Acceptance-probe R03 (temporary, clearly named; replaced when Taifa HR sends
+# the four HR Officer names):
+prov uat.probe.r03@taifamining.tz   'UAT Probe (HR Officer)' R03 "$ANY_SITE"
+echo "PENDING NAMES (provision when Taifa HR confirms): 4x R03, 2x R04, maurice.<surname> R06, richard.<surname> R14"
+echo "PENDING: rajesh.<surname> R12 UNSCOPED — surname needed for the firstname.lastname convention; provision via provisionSuperAdmin-style unscoped account, not a site-bound user"
 echo "SUPER ADMINS (interactive, hidden password — Kira runs on this box):" | tee -a "$CREDS"
 echo "  UAT_COMPANY=$UAT_CO node scripts/provision-super-admin.js mohammed@railgrid.tz" | tee -a "$CREDS"
 echo "  UAT_COMPANY=$UAT_CO node scripts/provision-super-admin.js admin@taifamining.tz" | tee -a "$CREDS"

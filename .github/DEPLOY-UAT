@@ -1,0 +1,4 @@
+UAT deploy trigger — Kira confirmed the repo secrets (HOSTINGER_API_TOKEN,
+UAT_SSH_PRIVATE_KEY) are in place; deploy the revised v1.6 roster (Omar Omar
+R15 maker, Viswa Medhuru R16 checker, no +alias accounts). Region assert:
+Amsterdam KVM 2. Super-admin passwords remain Kira's interactive on-box step.

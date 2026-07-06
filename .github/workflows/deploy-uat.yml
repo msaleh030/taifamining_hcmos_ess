@@ -30,6 +30,7 @@ jobs:
         env:
           H: ${{ secrets.HOSTINGER_API_TOKEN }}
           K: ${{ secrets.UAT_SSH_PRIVATE_KEY }}
+          CF: ${{ secrets.CLOUDFLARE_TUNNEL_TOKEN }}
         run: |
           missing=""
           [ -n "$H" ] || missing="$missing HOSTINGER_API_TOKEN"
@@ -39,6 +40,7 @@ jobs:
             exit 1
           fi
           echo "secrets present (values masked)"
+          if [ -n "$CF" ]; then echo "edge: CLOUDFLARE_TUNNEL_TOKEN present — cloudflared will be installed on the box (DNS route + Access policy remain dashboard steps)"; else echo "edge: no tunnel token — the whole edge is Kira's dashboard step (deploy/cloudflare-edge.md)"; fi
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
