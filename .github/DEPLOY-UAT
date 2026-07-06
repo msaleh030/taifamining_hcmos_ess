@@ -9,3 +9,4 @@ run: prefer RUNNING KVM2 (the box with the key) + schema-visible region assert 2
 run: FRANKFURT decision — pin VM 1798551 to DC 19, refire 2026-07-06T18:20:00Z
 run: FQDN hostname fix (hcmos-uat.taifamining.tz) + fail-fast on setup rejection 2026-07-06T18:19:26Z
 run: restore-test fix — pg_restore via stdin (postgres cannot read root-700 backup dir) 2026-07-06T18:26:14Z
+run: smoke-test chk_code fix + seed run-once guard + probe lastIndexOf 2026-07-06T18:31:29Z

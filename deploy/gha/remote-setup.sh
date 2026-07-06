@@ -124,7 +124,9 @@ const fs = require('fs');
 const C = require('/opt/hcmos/src/crypto');
 const creds = fs.readFileSync('/root/uat-credentials.txt', 'utf8');
 function grab(email) {
-  const i = creds.indexOf(email);
+  // LAST occurrence: earlier deploy runs re-seeded and re-provisioned, so the
+  // file can hold stale generations above the current one.
+  const i = creds.lastIndexOf(email);
   if (i < 0) throw new Error('no creds for ' + email);
   const chunk = creds.slice(i, i + 600);
   const password = /password :\s*(\S+)/.exec(chunk)[1];

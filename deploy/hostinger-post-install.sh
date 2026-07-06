@@ -85,7 +85,15 @@ set -a; . "$ENV_FILE"; set +a
 # --- 5. Hardened DB (scram, no trust, localhost) + schema + scaffolding ------
 bash deploy/setup-db.prod.sh
 sudo -u "$SVC_USER" -E env PATH="$PATH" node scripts/migrate.js
-sudo -u "$SVC_USER" -E env PATH="$PATH" node scripts/seed.js
+# seed.js is DESTRUCTIVE-idempotent (truncates every table, resets the audit
+# chain) — right for CI, wrong for a live box: a redeploy would wipe provisioned
+# users (incl. Kira's super admins) and loaded UAT data. Seed only a virgin DB;
+# force with RESEED=1 when a wipe is the intent.
+if [ "${RESEED:-0}" = "1" ] || [ "$(sudo -u postgres psql -d hcmos -Atc 'SELECT count(*) FROM tenant' 2>/dev/null || echo 0)" = "0" ]; then
+  sudo -u "$SVC_USER" -E env PATH="$PATH" node scripts/seed.js
+else
+  echo "[post-install] seed SKIPPED (tenant rows exist — live box; RESEED=1 to force a wipe)"
+fi
 # DATA LOAD (test data — 340 balances + permits): a FOLLOW-UP. Drop the files on the
 # box and load them through the ingestion path (deploy/README.md §3); the app now
 # defaults to the seed's synthetic directory until then.
