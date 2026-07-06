@@ -1,0 +1,61 @@
+name: Deploy UAT
+
+# GO.md end-to-end against the Kira-approved Amsterdam KVM 2 (Path A: the
+# runner has the egress this sandboxed session does not). Trigger: the
+# .github/DEPLOY-UAT sentinel push (Code, on Kira's word) or the Actions
+# "Run workflow" button (Kira). Secrets (Settings → Secrets → Actions):
+#   HOSTINGER_API_TOKEN      required — one-time provisioning credential
+#   UAT_SSH_PRIVATE_KEY      required — deploy keypair (public half is derived)
+#   CLOUDFLARE_TUNNEL_TOKEN  optional — token-managed tunnel; else edge is Kira-side
+# All secrets are masked by Actions; the scripts never echo them, and user
+# credentials are written only to /root/uat-credentials.txt ON THE BOX (600).
+on:
+  workflow_dispatch:
+  push:
+    branches: [claude/nifty-goodall-poihi4]
+    paths: ['.github/DEPLOY-UAT']
+
+concurrency:
+  group: deploy-uat
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Provision + harden + deploy (Amsterdam KVM 2)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Preflight — secrets present
+        env:
+          H: ${{ secrets.HOSTINGER_API_TOKEN }}
+          K: ${{ secrets.UAT_SSH_PRIVATE_KEY }}
+        run: |
+          missing=""
+          [ -n "$H" ] || missing="$missing HOSTINGER_API_TOKEN"
+          [ -n "$K" ] || missing="$missing UAT_SSH_PRIVATE_KEY"
+          if [ -n "$missing" ]; then
+            echo "::error::Missing repo secrets:$missing — add under Settings → Secrets and variables → Actions, then re-run."
+            exit 1
+          fi
+          echo "secrets present (values masked)"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # Build the ENFORCED frontend from this exact ref — the same build CI
+      # pixel-diffs against the 36 locked baselines.
+      - name: Build enforced frontend
+        working-directory: frontend
+        run: |
+          npm install --no-audit --no-fund
+          npm run build
+
+      - name: Provision + deploy (checkpointed)
+        env:
+          HOSTINGER_API_TOKEN: ${{ secrets.HOSTINGER_API_TOKEN }}
+          UAT_SSH_PRIVATE_KEY: ${{ secrets.UAT_SSH_PRIVATE_KEY }}
+          CLOUDFLARE_TUNNEL_TOKEN: ${{ secrets.CLOUDFLARE_TUNNEL_TOKEN }}
+        run: bash deploy/gha/deploy-uat.sh

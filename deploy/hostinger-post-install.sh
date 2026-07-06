@@ -43,14 +43,20 @@ ufw allow 22/tcp           # tighten to known RailGrid IPs: ufw allow from <IP> 
 # public IP + reverse proxy instead, uncomment:  ufw allow 443/tcp
 ufw --force enable
 
-# --- 3. Service user + repo at the green ref --------------------------------
+# --- 3. Service user + source ------------------------------------------------
+# LOCAL_SRC=1: the source (incl. the CI-built enforced frontend/dist) was shipped
+# as a tarball by the GitHub Actions deploy (the repo is private — no anonymous
+# clone). Without it, classic clone mode for hand-runs with a reachable repo.
 id "$SVC_USER" >/dev/null 2>&1 || useradd --system --create-home --shell /usr/sbin/nologin "$SVC_USER"
 install -d -o "$SVC_USER" -g "$SVC_USER" "$APP_DIR"
-if [ ! -d "$APP_DIR/.git" ]; then sudo -u "$SVC_USER" git clone "$REPO_URL" "$APP_DIR"; fi
+if [ "${LOCAL_SRC:-0}" != "1" ]; then
+  if [ ! -d "$APP_DIR/.git" ]; then sudo -u "$SVC_USER" git clone "$REPO_URL" "$APP_DIR"; fi
+  cd "$APP_DIR"
+  sudo -u "$SVC_USER" git fetch --all --quiet
+  sudo -u "$SVC_USER" git checkout "$REPO_REF"
+  sudo -u "$SVC_USER" git pull --ff-only || true
+fi
 cd "$APP_DIR"
-sudo -u "$SVC_USER" git fetch --all --quiet
-sudo -u "$SVC_USER" git checkout "$REPO_REF"
-sudo -u "$SVC_USER" git pull --ff-only || true
 sudo -u "$SVC_USER" npm install --no-audit --no-fund
 
 # --- 4. Secrets: GENERATE strong values into the EnvironmentFile (600) -------

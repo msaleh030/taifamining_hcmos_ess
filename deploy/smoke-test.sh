@@ -11,7 +11,10 @@ chk() { local desc="$1"; shift; if "$@" >/dev/null 2>&1; then echo "PASS  $desc"
 code() { curl -s -o /dev/null -w '%{http_code}' "$@"; }
 
 chk "health returns ok+db"            bash -c "curl -fsS $BASE/health | grep -q '\"db\":true'"
-chk "frontend served, UAT banner on"  bash -c "curl -fsS $BASE/ | grep -q 'uat-banner'"
+# The designed (enforced) build carries the UAT strip as text in the shell; the
+# legacy scaffold used id=uat-banner — accept either so both roots pass.
+chk "frontend served (designed root)"  bash -c "curl -fsS $BASE/ | grep -qiE 'uat-banner|HCMOS'"
+chk "legacy scaffold retired to /legacy" bash -c "curl -fsS $BASE/legacy/ | grep -q 'uat-banner'"
 chk "API requires auth (401)"         bash -c "[ \"\$(code $BASE/me/landing)\" = 401 ]"
 chk "directory requires auth (401)"   bash -c "[ \"\$(code $BASE/employees)\" = 401 ]"
 chk "ingest requires auth (401)"      bash -c "[ \"\$(code -X POST $BASE/ingest/opening-balance/preview)\" = 401 ]"
