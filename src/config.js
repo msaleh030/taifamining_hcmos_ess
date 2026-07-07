@@ -190,7 +190,11 @@ const DEFAULT_CONFIG = {
   // site match is routing semantics in src/docalerts.js — the registry key
   // holds the role). A permit with no expat/business classification is NEVER
   // guessed: it fails CLOSED to the R11 leg, flagged `unclassified`.
-  'doc.notify.role.contract':        'R06', // v1.6: R05's duties -> SHEQ Manager (reroute is Code's inference, ratify at UAT)
+  // Contract expiries split expat-vs-local (Kira, 2026-07-06 — supersedes the
+  // R06 inference): an expatriate's contract expiry is as sensitive as their
+  // permit (Head of HR ONLY); a local's goes to the HR Officer OF THEIR SITE.
+  'doc.notify.role.contract.expat':  'R11', // expat contract — Head of HR ONLY
+  'doc.notify.role.contract.local':  'R03', // local contract — SITE-MATCHED HR Officer
   'doc.notify.role.permit.expat':    'R11', // expat/immigration — Head of HR ONLY (Kira, 2026-07-06)
   'doc.notify.role.permit.business': 'R06', // business permits — SHEQ Manager (unchanged leg)
   'doc.notify.role.licence':         'R06', // business licences — SHEQ Manager (unchanged leg)

@@ -37,9 +37,11 @@ test('TEN-01 provisions a tenant from the registry (config, LOC sites) audited a
   for (const [k, v] of Object.entries(DEFAULT_CONFIG)) assert.equal(got[k], v, `registry value flows: ${k}`);
 
   // The COMPLETE DA-2 notify set resolves in the fresh tenant (not just one
-  // type) — three-way split (Kira, 2026-07-06): expat permits R11-only,
-  // business permits/licences R06, medical site-matched R03.
-  const DA2 = { 'contract': 'R06', 'permit.expat': 'R11', 'permit.business': 'R06', 'licence': 'R06', 'medical': 'R03' };
+  // type) — split ratified by Kira 2026-07-06: expat permits AND expat
+  // contracts R11-only, business permits/licences R06, medical + local
+  // contracts site-matched R03.
+  const DA2 = { 'contract.expat': 'R11', 'contract.local': 'R03', 'permit.expat': 'R11',
+    'permit.business': 'R06', 'licence': 'R06', 'medical': 'R03' };
   for (const [kind, role] of Object.entries(DA2)) {
     assert.equal(got[`doc.notify.role.${kind}`], role, `DA-2 ${kind} → ${role} in the provisioned tenant`);
     assert.equal(await cfg.getConfig(T1, `doc.notify.role.${kind}`), role, `DA-2 ${kind} resolves via the registry reader`);

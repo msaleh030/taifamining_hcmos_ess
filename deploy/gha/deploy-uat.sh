@@ -184,6 +184,7 @@ STAGE="$(mktemp -d)"
 git archive --format=tar --prefix=hcmos/ HEAD | tar -x -C "$STAGE"
 mkdir -p "$STAGE/hcmos/frontend"
 cp -r frontend/dist "$STAGE/hcmos/frontend/dist"      # the ENFORCED build from this runner
+git rev-parse HEAD > "$STAGE/hcmos/BUILD_SHA"          # box-side proof of the deployed ref
 tar -czf /tmp/hcmos-src.tgz -C "$STAGE" hcmos
 scp "${SSH_OPTS[@]}" /tmp/hcmos-src.tgz "root@$IP:/root/hcmos-src.tgz"
 

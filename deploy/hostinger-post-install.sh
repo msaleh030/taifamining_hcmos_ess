@@ -94,6 +94,9 @@ if [ "${RESEED:-0}" = "1" ] || [ "$(sudo -u postgres psql -d hcmos -Atc 'SELECT 
 else
   echo "[post-install] seed SKIPPED (tenant rows exist — live box; RESEED=1 to force a wipe)"
 fi
+# NEW registry keys shipped since the tenant was seeded are added with their
+# defaults; existing values are never touched (registry edits are Kira's).
+sudo -u "$SVC_USER" -E env PATH="$PATH" node scripts/sync-config.js
 # DATA LOAD (test data — 340 balances + permits): a FOLLOW-UP. Drop the files on the
 # box and load them through the ingestion path (deploy/README.md §3); the app now
 # defaults to the seed's synthetic directory until then.

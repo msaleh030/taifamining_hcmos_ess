@@ -44,6 +44,15 @@ UAT — vs **Mumbai (DC 23)** — likely favoured by the Indian-Ocean cable
 paths to Dar es Salaam. Measurement: East-Africa probes (Globalping;
 Tanzania first, neighbours for corroboration) against paired neutral
 Frankfurt/Mumbai targets plus the real Hostinger Frankfurt box — see
-`.github/workflows/latency-probe.yml`. **Kira picks the winner from the
-numbers**, and verifies from Taifa's own network before production go-live.
-**UAT stays Frankfurt as-is** regardless of the production pick.
+`.github/workflows/latency-probe.yml`. **UAT stays Frankfurt as-is**
+regardless of the production pick.
+
+**Measured + CONFIRMED (Kira, 2026-07-06): FRANKFURT.** The shootout (run
+28819468970; no Tanzania probes existed, so Nairobi ×6 paths and Kampala ×2
+carried it): median RTT **Frankfurt ~159–160 ms vs Mumbai ~264–268 ms** —
+Frankfurt by ~100 ms with 0% loss on every path, while Mumbai paths showed
+11% loss and 570 ms+ jitter spikes. East-African transit egresses via the
+Mombasa landings toward Europe, so the Indian-Ocean prior did not survive
+measurement. **Production region = Frankfurt**, to be verified with a ping
+run from Taifa's own Dar es Salaam network before go-live
+(`fra-de-ping.vultr.com` vs `bom-in-ping.vultr.com`).

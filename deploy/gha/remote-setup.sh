@@ -20,7 +20,7 @@ id hcmos >/dev/null 2>&1 || useradd --system --create-home --shell /usr/sbin/nol
 install -d -o hcmos -g hcmos "$APP_DIR"
 rsync -a --delete --chown=hcmos:hcmos "$TMP/hcmos/" "$APP_DIR/"
 rm -rf "$TMP" /root/hcmos-src.tgz
-DEPLOY_REF=$(cd "$APP_DIR" && (git rev-parse --short HEAD 2>/dev/null || echo 'tarball'))
+DEPLOY_REF=$(cat "$APP_DIR/BUILD_SHA" 2>/dev/null || (cd "$APP_DIR" && git rev-parse --short HEAD 2>/dev/null) || echo 'tarball')
 echo "deployed ref: $DEPLOY_REF (tarball of the CI-enforced head; dist included: $(test -f $APP_DIR/frontend/dist/index.html && echo yes || echo NO))"
 
 # ── base stack + hardened DB + app service (LOCAL_SRC: no clone) ─────────────
@@ -89,6 +89,19 @@ if ls /root/uat-data/*.csv >/dev/null 2>&1; then
 else
   echo "AWAITING DATA DROP: no /root/uat-data/*.csv on the box. Seeded scaffolding is live;"
   echo "drop Baraka's files + control.json and run GO.md §7 (loads through the audited ingestion path)."
+fi
+
+# ── expat classification (is_expat + permit_type) — gated on the CSV drop ────
+say "expat classification (61-name authoritative list -> is_expat + permit_type)"
+if [ -f /root/uat-data/expat-permit-classification.csv ]; then
+  # Counts print here; NAMES/PII go only to the 600-mode report on the box —
+  # this log is public with the repo, so the report never echoes through it.
+  UAT_COMPANY=$UAT_CO node "$APP_DIR/scripts/classify-expats.js" \
+    /root/uat-data/expat-permit-classification.csv /root/expat-classification-report.txt \
+    && echo "report (names, on-box only): /root/expat-classification-report.txt"
+else
+  echo "AWAITING CSV: drop expat-permit-classification.csv into /root/uat-data (NEVER the repo — it carries passports/PII)."
+  echo "Then re-run this deploy, or on the box: UAT_COMPANY=$UAT_CO node $APP_DIR/scripts/classify-expats.js /root/uat-data/expat-permit-classification.csv /root/expat-classification-report.txt"
 fi
 
 # ── backups + ONE tested restore ──────────────────────────────────────────────

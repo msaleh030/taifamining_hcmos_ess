@@ -87,8 +87,11 @@ test('an expiring document raises an alert to the DA-2 role and clears on renewa
 //        medical→site-matched R03; unclassified permit fails CLOSED to R11. ──
 test('expiry alerts route each document type to its registry DA-2 leg', async () => {
   // valid_until 2026-07-10 is within every DA-1 lead window at this asOf.
+  // Contract splits expat-vs-local (Kira, 2026-07-06): DAVE is flagged expat
+  // for the test; CAROL stays local (default false).
   const cases = [
-    { name: 'contract', kind: 'contract', permitType: null, role: 'R06' },
+    { name: 'contract-local', kind: 'contract', permitType: null, role: 'R03', site: F.SITE.A1 },          // Carol's site
+    { name: 'contract-expat', kind: 'contract', permitType: null, role: 'R11', emp: F.EMP.DAVE },          // sensitive — Head of HR ONLY
     { name: 'permit-expat', kind: 'permit', permitType: 'expat', role: 'R11' },      // sensitive — Head of HR ONLY
     { name: 'permit-business', kind: 'permit', permitType: 'business', role: 'R06' },
     { name: 'permit-unclassified', kind: 'permit', permitType: null, role: 'R11', unclassified: true }, // fail closed, never guessed
@@ -96,11 +99,12 @@ test('expiry alerts route each document type to its registry DA-2 leg', async ()
     { name: 'medical', kind: 'medical', permitType: null, role: 'R03', site: F.SITE.A1 }, // Carol's site
   ];
   const ids = {};
+  await owner(`UPDATE employee SET is_expat=true WHERE id=$1`, [F.EMP.DAVE]);
   for (const t of cases) {
     ids[t.name] = (await owner(
       `INSERT INTO employee_document(company_id,employee_id,kind,name,valid_until,permit_type)
        VALUES ($1,$2,$3,$4,'2026-07-10',$5) RETURNING id`,
-      [A, F.EMP.CAROL, t.kind, `T-${t.name}`, t.permitType])).rows[0].id;
+      [A, t.emp || F.EMP.CAROL, t.kind, `T-${t.name}`, t.permitType])).rows[0].id;
   }
   try {
     const r = await docalerts.runExpiryAlerts(admin, '2026-06-29');
@@ -117,6 +121,7 @@ test('expiry alerts route each document type to its registry DA-2 leg', async ()
     }
     assert.equal(r.unclassified_count, 1, 'exactly the unclassified permit is flagged for Kira to classify');
   } finally {
+    await owner(`UPDATE employee SET is_expat=false WHERE id=$1`, [F.EMP.DAVE]);
     for (const id of Object.values(ids)) {
       await owner(`DELETE FROM notification WHERE kind='doc.expiry' AND body->>'document_id'=$1`, [id]);
       await owner(`DELETE FROM employee_document WHERE id=$1`, [id]);
@@ -134,12 +139,15 @@ test('alert dashboard visibility: expat R11-only; medical site-matched R03; busi
   const mk = async (emp, kind, permitType) => (await owner(
     `INSERT INTO employee_document(company_id,employee_id,kind,name,valid_until,permit_type)
      VALUES ($1,$2,$3,$4,'2026-07-10',$5) RETURNING id`, [A, emp, kind, `V-${kind}-${permitType || 'none'}-${emp.slice(-2)}`, permitType])).rows[0].id;
+  await owner(`UPDATE employee SET is_expat=true WHERE id=$1`, [F.EMP.DSUBJ]); // Dan @A1 — expat for the contract leg
   const ids = {
     expat: await mk(F.EMP.CAROL, 'permit', 'expat'),
     unclassified: await mk(F.EMP.CAROL, 'permit', null),
     business: await mk(F.EMP.CAROL, 'permit', 'business'),
     medicalA1: await mk(F.EMP.CAROL, 'medical', null), // Carol @ SITE.A1 — HR_A's site
     medicalA2: await mk(F.EMP.DAVE, 'medical', null),  // Dave @ SITE.A2 — NOT HR_A's site
+    contractExpat: await mk(F.EMP.DSUBJ, 'contract', null), // expat contract — R11 only
+    contractLocal: await mk(F.EMP.CAROL, 'contract', null), // local contract — site R03 only
   };
   try {
     await docalerts.runExpiryAlerts(admin, '2026-06-29');
@@ -149,17 +157,23 @@ test('alert dashboard visibility: expat R11-only; medical site-matched R03; busi
     assert.ok(r11.has(ids.expat) && r11.has(ids.unclassified), 'R11 sees the sensitive permit legs');
     assert.ok(r11.has(ids.business), 'R11 sees business permits (unchanged leg)');
     assert.ok(!r11.has(ids.medicalA1) && !r11.has(ids.medicalA2), 'medical is site-R03 only — not the Head of HR');
+    assert.ok(r11.has(ids.contractExpat), 'R11 sees the expat contract (sensitive leg)');
+    assert.ok(!r11.has(ids.contractLocal), 'local contracts are site-R03 only — not the Head of HR');
 
     const r12 = await seen(admin);
     assert.ok(!r12.has(ids.expat) && !r12.has(ids.unclassified), 'expat/unclassified permits are R11-ONLY — hidden from the admin');
     assert.ok(r12.has(ids.business), 'admin still sees business permits (unchanged leg)');
     assert.ok(!r12.has(ids.medicalA1), 'admin does not see medical (site-R03 only)');
+    assert.ok(!r12.has(ids.contractExpat) && !r12.has(ids.contractLocal), 'contract legs hidden from the admin');
 
     const r03 = await seen(hrA1);
     assert.ok(r03.has(ids.medicalA1), 'the R03 at the employee\'s site sees the medical alert');
     assert.ok(!r03.has(ids.medicalA2), 'an R03 at ANOTHER site does not — site-matched, not all HR Officers');
     assert.ok(!r03.has(ids.expat) && !r03.has(ids.unclassified), 'R03 never sees the sensitive permit legs');
+    assert.ok(r03.has(ids.contractLocal), 'the R03 at the employee\'s site sees the local contract');
+    assert.ok(!r03.has(ids.contractExpat), 'the expat contract never reaches an R03');
   } finally {
+    await owner(`UPDATE employee SET is_expat=false WHERE id=$1`, [F.EMP.DSUBJ]);
     for (const id of Object.values(ids)) {
       await owner(`DELETE FROM notification WHERE kind='doc.expiry' AND body->>'document_id'=$1`, [id]);
       await owner(`DELETE FROM employee_document WHERE id=$1`, [id]);

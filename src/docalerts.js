@@ -4,15 +4,19 @@
 // (bumps notify_count) until renewed; clears on renewal. Lead times AND notified
 // roles are read from the registry — nothing hard-coded.
 //
-// DA-2 THREE-WAY split (Kira, ratified 2026-07-06):
+// DA-2 split (Kira, ratified 2026-07-06; contract split added later same day):
 //   • expat/immigration permit expiries → Head of HR (R11) ONLY — sensitive;
 //     visibility AND notification are scoped to R11 alone, never the SHEQ Manager.
 //   • business permit / licence expiries → SHEQ Manager (R06) — unchanged leg.
 //   • medical-document expiries → the HR Officer (R03) FOR THE EMPLOYEE'S SITE —
 //     the site-scoped R03 matching the employee's site, NOT all HR Officers.
+//   • contract expiries key off employee.is_expat (the CSV-driven flag):
+//     expat → R11 ONLY (as sensitive as their permit); local → the SITE-MATCHED
+//     R03. Never the SHEQ Manager (supersedes the R06 inference).
 // A permit whose expat-vs-business classification is missing is NEVER guessed:
 // it FAILS CLOSED to the sensitive leg (R11-only) and carries `unclassified`
-// until someone who knows sets employee_document.permit_type.
+// until someone who knows sets employee_document.permit_type
+// (scripts/classify-expats.js applies the authoritative client list).
 const db = require('./db');
 const cfg = require('./config');
 const sitescope = require('./sitescope');
@@ -27,7 +31,7 @@ function addDaysStr(iso, n) {
 }
 
 // Resolve the DA-2 route for one document: { role, site, unclassified }.
-// `site` is non-null only for the site-matched medical leg.
+// `site` is non-null only for the site-matched legs (medical, local contract).
 function routeFor(roles, d) {
   if (d.kind === 'permit') {
     if (d.permit_type === 'business') return { role: roles.permitBusiness, site: null, unclassified: false };
@@ -36,6 +40,13 @@ function routeFor(roles, d) {
     return { role: roles.permitExpat, site: null, unclassified: true };
   }
   if (d.kind === 'medical') return { role: roles.medical, site: d.site_id, unclassified: false };
+  if (d.kind === 'contract') {
+    // employee.is_expat is deterministic (default false = local, per Kira:
+    // everyone not on the authoritative list is local) — no unclassified leg.
+    return d.is_expat
+      ? { role: roles.contractExpat, site: null, unclassified: false }
+      : { role: roles.contractLocal, site: d.site_id, unclassified: false };
+  }
   return { role: roles[d.kind], site: null, unclassified: false };
 }
 
@@ -56,7 +67,8 @@ async function runExpiryAlerts(session, asOf) {
     const lead = {};
     for (const k of ALERTABLE) lead[k] = await cfg.getInt(co, `doc.lead_time.${k}`, 30, c);
     const roles = {
-      contract: await cfg.getConfig(co, 'doc.notify.role.contract', null, c),
+      contractExpat: await cfg.getConfig(co, 'doc.notify.role.contract.expat', null, c),
+      contractLocal: await cfg.getConfig(co, 'doc.notify.role.contract.local', null, c),
       permitExpat: await cfg.getConfig(co, 'doc.notify.role.permit.expat', null, c),
       permitBusiness: await cfg.getConfig(co, 'doc.notify.role.permit.business', null, c),
       licence: await cfg.getConfig(co, 'doc.notify.role.licence', null, c),
@@ -68,7 +80,8 @@ async function runExpiryAlerts(session, asOf) {
     // carries the employee's site for the site-matched medical leg.
     const inList = ALERTABLE.map((k) => `'${k}'`).join(',');
     const docs = (await c.query(
-      `SELECT d.id, d.employee_id, d.kind, d.permit_type, d.valid_until::text AS valid_until, e.site_id
+      `SELECT d.id, d.employee_id, d.kind, d.permit_type, d.valid_until::text AS valid_until,
+              e.site_id, e.is_expat
          FROM employee_document d JOIN employee e ON e.id = d.employee_id
         WHERE d.kind IN (${inList}) AND d.valid_until IS NOT NULL`)).rows;
 
@@ -114,11 +127,11 @@ async function runExpiryAlerts(session, asOf) {
 // Row-level DA-2 visibility (Kira, 2026-07-06) applies ON TOP of the
 // alerts.view.roles module gate the route already enforced:
 //   • expat permits — and unclassified permits, which fail closed — are
-//     visible to R11 ONLY (not even the admin sees the sensitive leg);
-//   • medical alerts are visible only to the R03 whose own site matches the
-//     employee's site (NOT all HR Officers, and no one else);
-//   • every other kind (contract, licence, business permit) is unchanged —
-//     visible to any alerts.view.roles member.
+//     visible to the routed role ONLY (R11; not even the admin sees them);
+//   • medical alerts and LOCAL contract alerts are visible only to the routed
+//     role whose own site matches the employee's (the site-matched R03);
+//   • EXPAT contract alerts mirror expat permits — routed role (R11) only;
+//   • licence + business permit are unchanged — any alerts.view.roles member.
 async function listOpen(session) {
   return db.withTenant(session.company_id, async (c) => {
     const rows = (await c.query(
@@ -127,10 +140,15 @@ async function listOpen(session) {
          FROM doc_alert a JOIN employee_document d ON d.id = a.document_id
         WHERE a.status='open' ORDER BY a.due_date`)).rows;
     const role = session.role_code;
-    const mySite = role === 'R03' ? await sitescope.requesterSite(c, session) : null;
+    const mySite = rows.some((r) => r.notify_site != null)
+      ? await sitescope.requesterSite(c, session) : null;
     const open = rows.filter((r) => {
-      if (r.kind === 'permit' && (r.unclassified || r.permit_type === 'expat')) return role === 'R11';
-      if (r.kind === 'medical') return role === 'R03' && r.notify_site != null && r.notify_site === mySite;
+      if (r.kind === 'permit' && (r.unclassified || r.permit_type === 'expat')) return role === r.notify_role;
+      if (r.kind === 'medical' || r.kind === 'contract') {
+        return r.notify_site == null
+          ? role === r.notify_role                                    // expat contract — sensitive leg
+          : role === r.notify_role && r.notify_site === mySite;       // site-matched leg
+      }
       return true;
     });
     return { open };
