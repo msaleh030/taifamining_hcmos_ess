@@ -28,6 +28,18 @@ say "post-install (Node LTS, Postgres 16, UFW, scram, systemd)"
 cd "$APP_DIR"
 LOCAL_SRC=1 bash deploy/hostinger-post-install.sh
 
+# hcmos-run: run any on-box command with the SAME environment the systemd
+# service gets (EnvironmentFile sourced) — a bare shell otherwise misses
+# PG_OWNER_PW and owner-role scripts fail scram auth.
+cat > /usr/local/bin/hcmos-run <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+set -a; . /etc/hcmos/hcmos.env; set +a
+cd /opt/hcmos
+exec "$@"
+EOF
+chmod 755 /usr/local/bin/hcmos-run
+
 set -a; . /etc/hcmos/hcmos.env; set +a
 
 # ── cloudflared (only if the token was staged) ────────────────────────────────
@@ -78,9 +90,17 @@ prov rajesh.chohan@taifamining.tz   'Rajesh Chohan'  R12 "$HQ_SITE"
 # the four HR Officer names):
 prov uat.probe.r03@taifamining.tz   'UAT Probe (HR Officer)' R03 "$ANY_SITE"
 echo "PENDING NAMES (provision when Taifa HR confirms): 4x R03, 2x R04, maurice.<surname> R06, richard.<surname> R14"
-echo "SUPER ADMINS (interactive, hidden password — Kira runs on this box):" | tee -a "$CREDS"
-echo "  UAT_COMPANY=$UAT_CO node scripts/provision-super-admin.js mohammed@railgrid.tz" | tee -a "$CREDS"
-echo "  UAT_COMPANY=$UAT_CO node scripts/provision-super-admin.js admin@taifamining.tz" | tee -a "$CREDS"
+# hcmos-run sources the service's EnvironmentFile first — a bare `node`
+# invocation misses PG_OWNER_PW and fails Postgres auth.
+if ! grep -q 'hcmos-run node scripts/provision-super-admin.js' "$CREDS" 2>/dev/null; then
+  { echo "SUPER ADMINS (interactive, hidden password — Kira runs on this box):"
+    echo "  UAT_COMPANY=$UAT_CO hcmos-run node scripts/provision-super-admin.js mohammed@railgrid.tz"
+    echo "  UAT_COMPANY=$UAT_CO hcmos-run node scripts/provision-super-admin.js admin@taifamining.tz"
+  } >> "$CREDS"
+fi
+echo "SUPER ADMINS (interactive, hidden password — Kira runs on this box):"
+echo "  UAT_COMPANY=$UAT_CO hcmos-run node scripts/provision-super-admin.js mohammed@railgrid.tz"
+echo "  UAT_COMPANY=$UAT_CO hcmos-run node scripts/provision-super-admin.js admin@taifamining.tz"
 
 # ── data load: gated on the files being dropped ───────────────────────────────
 say "data load (838 leave records + North Mara payroll + permits)"
@@ -101,7 +121,7 @@ if [ -f /root/uat-data/expat-permit-classification.csv ]; then
     && echo "report (names, on-box only): /root/expat-classification-report.txt"
 else
   echo "AWAITING CSV: drop expat-permit-classification.csv into /root/uat-data (NEVER the repo — it carries passports/PII)."
-  echo "Then re-run this deploy, or on the box: UAT_COMPANY=$UAT_CO node $APP_DIR/scripts/classify-expats.js /root/uat-data/expat-permit-classification.csv /root/expat-classification-report.txt"
+  echo "Then re-run this deploy, or on the box: UAT_COMPANY=$UAT_CO hcmos-run node scripts/classify-expats.js /root/uat-data/expat-permit-classification.csv /root/expat-classification-report.txt"
 fi
 
 # ── backups + ONE tested restore ──────────────────────────────────────────────

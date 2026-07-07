@@ -57,11 +57,16 @@ the same-user-403 rule never self-blocks with this roster.
 SUPER ADMINS (LI-7 — R12, UNSCOPED, MFA mandatory; INTERACTIVE hidden password,
 stored hash-only — never in repo/config/env, never printed; enrol each printed
 otpauth, shown once). `admin@taifamining.tz` is a SUPER ADMIN — **not** an R11
-user — in addition to Kira's railgrid account:
+user — in addition to Kira's railgrid account. The owner-role DB password lives
+ONLY in `/etc/hcmos/hcmos.env` (systemd's EnvironmentFile) — a bare `node` in a
+shell misses it and fails Postgres auth, so use the `hcmos-run` wrapper (sources
+the env file, cd's to /opt/hcmos):
 ```
-UAT_COMPANY=11111111-1111-1111-1111-111111111111 node scripts/provision-super-admin.js mohammed@railgrid.tz
-UAT_COMPANY=11111111-1111-1111-1111-111111111111 node scripts/provision-super-admin.js admin@taifamining.tz
+UAT_COMPANY=11111111-1111-1111-1111-111111111111 hcmos-run node scripts/provision-super-admin.js mohammed@railgrid.tz
+UAT_COMPANY=11111111-1111-1111-1111-111111111111 hcmos-run node scripts/provision-super-admin.js admin@taifamining.tz
 ```
+(Equivalent by hand: `cd /opt/hcmos && set -a; . /etc/hcmos/hcmos.env; set +a`
+first, then the plain `node …` commands.)
 
 ## 5. Cloudflare — DNS + TLS + Access + cache  (→ I-1)  [your account]
 Follow `deploy/cloudflare-edge.md`:
