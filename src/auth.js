@@ -5,6 +5,7 @@ const db = require('./db');
 const cfg = require('./config');
 const roles = require('./roles');
 const a3 = require('./a3');
+const sitescope = require('./sitescope');
 const C = require('./crypto');
 const { HttpError, genericAuthError } = require('./errors');
 
@@ -63,7 +64,11 @@ async function fieldLogin({ device_id, pin, idempotency_key }) {
   if (!d) throw genericAuthError();                       // unregistered device refused
   if (d.company_status !== 'active') throw genericAuthError();
   if (d.device_status !== 'active') throw genericAuthError();
-  if (d.user_status === 'terminated') throw genericAuthError(); // terminated refused
+  // A non-active app_user (suspended OR terminated) is refused — same rule the
+  // console path enforces (status must be 'active'). user_status is NULL only
+  // for the no-app_user field bootstrap (device maps to an employee with no
+  // console account); that path is allowed and takes field.default.role.
+  if (d.user_status && d.user_status !== 'active') throw genericAuthError();
   if (future(d.locked_until)) throw genericAuthError();
 
   if (!C.verifySecret(pin, d.pin_hash)) {
@@ -156,11 +161,24 @@ function landing(session) {
 
 // A3 confidential-field enforcement on profile reads (server-side). Shares the
 // Slice 2 assembler so forbidden fields are absent (table not even joined).
+// This is a profile READ of an arbitrary employee id, so it MUST carry the SAME
+// two access gates as GET /employees/:id (employees.get) — A3 field-gating
+// alone is not enough: without them a site-bound role reads out-of-site
+// profiles (incl. medical/disciplinary), and a directory-denied finance role
+// reads anyone's pay/bank. Kept in lock-step with employees.js:104-118.
 async function readProfile(session, employeeId) {
   if (!isUuid(employeeId)) throw new HttpError(400, 'invalid request');
+  const deny = await cfg.getRoleSet(session.company_id, 'directory.deny.roles', 'R12,R13,R15,R16');
+  if (deny.has(session.role_code)) throw new HttpError(403, 'forbidden');
   return db.withTenant(session.company_id, async (c) => {
     const r = await c.query('SELECT * FROM employee WHERE id=$1', [employeeId]);
-    if (r.rows.length === 0) throw new HttpError(404, 'not found');
+    if (r.rows.length === 0) throw new HttpError(404, 'not found'); // RLS already hid other tenants
+    // Site check BEFORE any confidential assembly (Section 17.2): an out-of-site
+    // request 404s exactly as the directory does.
+    if (await sitescope.isScoped(c, session.role_code)) {
+      const mySite = await sitescope.requesterSite(c, session);
+      if (!mySite || r.rows[0].site_id !== mySite) throw new HttpError(404, 'not found');
+    }
     return a3.assembleProfile(c, session, r.rows[0]);
   });
 }

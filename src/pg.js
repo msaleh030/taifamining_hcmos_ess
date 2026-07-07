@@ -180,7 +180,12 @@ class Client {
   }
 
   _fail(err) {
+    this._closed = true;
     if (this._connectCbs) { this._connectCbs.reject(err); this._connectCbs = null; }
+    // The IN-FLIGHT query must be settled too — otherwise a connection that dies
+    // mid-query leaves its `await c.query(...)` pending forever and the pooled
+    // connection leaks. Reject it before draining the backlog.
+    if (this._cur) { this._cur.reject(err); this._cur = null; }
     while (this._queue.length) this._queue.shift().reject(err);
   }
 
@@ -350,7 +355,14 @@ function parseErr(body) {
 class Pool {
   constructor(opts, max = 6) { this.opts = opts; this.max = max; this.idle = []; this.size = 0; this.waiters = []; }
   async acquire() {
-    if (this.idle.length) return this.idle.pop();
+    // Never hand out a dead idle connection (Postgres restart, idle timeout, TCP
+    // reset all set _closed on the client). Discard closed ones and free their
+    // pool slot so a live replacement can be created.
+    while (this.idle.length) {
+      const c = this.idle.pop();
+      if (!c._closed) return c;
+      this.size--;
+    }
     if (this.size < this.max) {
       this.size++;
       try { const c = await new Client(this.opts).connect(); return c; }

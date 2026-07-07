@@ -12,6 +12,7 @@
 // SoD is server-enforced from the registry and holds even on a direct call.
 const db = require('./db');
 const cfg = require('./config');
+const sitescope = require('./sitescope');
 const { HttpError } = require('./errors');
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -50,6 +51,14 @@ async function issueAction(issuer, input = {}, opts = {}) {
     const subj = (await c.query(
       'SELECT id, site_id, status, full_name FROM employee WHERE id=$1', [employeeId])).rows[0];
     if (!subj) throw new HttpError(404, 'employee not found');
+
+    // Site scope: a site-bound issuer (e.g. R02/R06) may only act on — and by
+    // loading full_name/site_id, read — employees at their OWN site. Same 404
+    // the directory gives for an out-of-site id (Section 17.2).
+    if (await sitescope.isScoped(c, issuer.role_code)) {
+      const mySite = await sitescope.requesterSite(c, issuer);
+      if (!mySite || subj.site_id !== mySite) throw new HttpError(404, 'employee not found');
+    }
 
     const issuerU  = await resolveUser(c, issuer.user_id);
     if (!issuerU) throw new HttpError(403, 'unknown issuer');
