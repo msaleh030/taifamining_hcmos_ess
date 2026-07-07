@@ -214,10 +214,17 @@ async function apply(session, input = {}) {
     if (!empId) throw new HttpError(403, 'no employee for user');
 
     if (leave_type === 'annual') {
+      // Serialize concurrent applies for the SAME employee so the read-check-
+      // insert cannot double-spend: two simultaneous requests would each read
+      // the pre-insert balance and both pass. The xact-scoped advisory lock
+      // makes the second wait for the first to commit, then see its row.
+      await c.query('SELECT pg_advisory_xact_lock(hashtext($1))', [empId]);
       const max = await cfg.getInt(co, 'leave.max_continuous_days', 14, c); // LR-5
       if (d > max && !hoh_override) throw new HttpError(409, `exceeds ${max} continuous days without HoH override`);
       const entitlement = await cfg.getInt(co, 'leave.entitlement.default', 21, c);
-      const available = entitlement + (await openCarry(c, empId)) - (await takenOf(c, empId, 'annual'));
+      // Round to match the balance card (round1); an unrounded float would
+      // falsely reject an exact-integer request at a fractional-carry boundary.
+      const available = round1(entitlement + (await openCarry(c, empId)) - (await takenOf(c, empId, 'annual')));
       if (d > available) throw new HttpError(409, 'insufficient annual balance');
     }
     // sick: separate bucket (LR-7 limits [TBC], not enforced here) — never annual.

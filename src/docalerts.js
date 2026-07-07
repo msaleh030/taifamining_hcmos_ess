@@ -140,14 +140,17 @@ async function listOpen(session) {
          FROM doc_alert a JOIN employee_document d ON d.id = a.document_id
         WHERE a.status='open' ORDER BY a.due_date`)).rows;
     const role = session.role_code;
-    const mySite = rows.some((r) => r.notify_site != null)
-      ? await sitescope.requesterSite(c, session) : null;
+    const mySite = await sitescope.requesterSite(c, session);
     const open = rows.filter((r) => {
       if (r.kind === 'permit' && (r.unclassified || r.permit_type === 'expat')) return role === r.notify_role;
       if (r.kind === 'medical' || r.kind === 'contract') {
-        return r.notify_site == null
-          ? role === r.notify_role                                    // expat contract — sensitive leg
-          : role === r.notify_role && r.notify_site === mySite;       // site-matched leg
+        // The SITE-LESS branch is reserved for the genuinely site-less sensitive
+        // leg: the EXPAT CONTRACT, routed to R11 (notify_role='R11'). For the
+        // site-matched legs (medical + LOCAL contract, routed to the site R03),
+        // a null notify_site is a data gap (employee with no site) — it must
+        // FAIL CLOSED, not fan out to every HR Officer in the tenant.
+        if (r.notify_site == null) return role === r.notify_role && role === 'R11';
+        return role === r.notify_role && mySite != null && r.notify_site === mySite;
       }
       return true;
     });
