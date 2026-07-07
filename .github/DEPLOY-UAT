@@ -16,3 +16,4 @@ run: rowCount fix + self-verifying config sync — truthful box report 2026-07-0
 run: LR-6 coverage floor default:1 (Kira) — sync promotes the box [TBC] sentinel 2026-07-07T04:43:36Z
 run: hcmos-run wrapper (EnvironmentFile-sourced on-box commands) + corrected super-admin instructions 2026-07-07T05:08:42Z
 run: super-admin env guard (clear message when EnvironmentFile not loaded) 2026-07-07T05:23:52Z
+run: security bug-hunt fixes H1-H4/M1-M3/L1-L5 (migration 022, session/auth hardening) 2026-07-07T10:52:51Z
