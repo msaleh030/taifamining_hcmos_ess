@@ -22,6 +22,9 @@ async function consoleLogin({ email, password, mfa }) {
 
   const r = await db.query('SELECT * FROM auth_lookup_console($1)', [email]);
   const u = r.rows[0];
+  // Always spend the scrypt cost, even for an unknown/inactive/locked account,
+  // so login timing never reveals whether the email exists (enumeration oracle).
+  const pwOk = C.verifySecret(password, (u && u.password_hash) || C.DUMMY_HASH);
   if (!u) throw genericAuthError();                       // unknown email
   if (u.company_status !== 'active') throw genericAuthError();
   if (future(u.locked_until)) throw genericAuthError();   // AC-AUTH-03: still locked
@@ -30,8 +33,10 @@ async function consoleLogin({ email, password, mfa }) {
   if (mfaRequired && !mfa) throw genericAuthError();      // AUTH-04: never name the factor
 
   // Verify the factors; status must be active (terminated/suspended refused).
+  // verifyTotp now accepts only the [step-1, step] window — a code from the
+  // FUTURE (the old +1 step) is never valid, halving the acceptance window.
   const ok = u.status === 'active'
-    && C.verifySecret(password, u.password_hash)
+    && pwOk
     && (!mfaRequired || C.verifyTotp(mfa, u.mfa_secret));
 
   if (!ok) {

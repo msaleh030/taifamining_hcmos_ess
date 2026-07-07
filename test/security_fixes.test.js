@@ -9,6 +9,7 @@ const auth = require('../src/auth');
 const disc = require('../src/disciplinary');
 const leave = require('../src/leave');
 const docalerts = require('../src/docalerts');
+const C = require('../src/crypto');
 const { Client, Pool } = require('../src/pg');
 const { F } = H;
 
@@ -158,5 +159,64 @@ test('M3: medical alert for a site-less employee is not fanned out to all HR Off
     await owner(`DELETE FROM notification WHERE kind='doc.expiry' AND body->>'document_id'=$1`, [doc]);
     await owner('DELETE FROM employee_document WHERE id=$1', [doc]);
     await owner('DELETE FROM employee WHERE id=$1', [emp]);
+  }
+});
+
+// ── L1: login does the scrypt work even for an unknown email (no oracle) ──────
+test('L1: DUMMY_HASH is a real scrypt hash that always fails verification', () => {
+  assert.ok(/^scrypt\$/.test(C.DUMMY_HASH), 'dummy is a syntactically valid scrypt hash');
+  assert.equal(C.verifySecret('anything', C.DUMMY_HASH), false, 'nothing verifies against it — but the work still runs');
+});
+
+// ── L2: a code from the FUTURE step is never accepted ────────────────────────
+test('L2: verifyTotp rejects a future-step code, accepts current and one prior', () => {
+  const secret = F.MFA_SECRET;
+  const now = 1_700_000_000_000;
+  const step = Math.floor(now / 1000 / 30);
+  const codeAt = (s) => C.currentTotp(secret, s * 30 * 1000);
+  assert.equal(C.verifyTotp(codeAt(step), secret, now), true, 'current step accepted');
+  assert.equal(C.verifyTotp(codeAt(step - 1), secret, now), true, 'one prior step accepted (drift)');
+  assert.equal(C.verifyTotp(codeAt(step + 1), secret, now), false, 'a FUTURE code is refused (was accepted before)');
+});
+
+// ── L4: re-firing the SAME asOf sweep does not double-notify ─────────────────
+test('L4: runExpiryAlerts is idempotent for a given asOf', async () => {
+  const admin = { company_id: A, user_id: F.USERS.ADMIN_A.id, role_code: 'R12' };
+  const doc = (await owner(
+    `INSERT INTO employee_document(company_id, employee_id, kind, name, valid_until, permit_type)
+     VALUES ($1,$2,'permit','L4 permit','2026-07-10','business') RETURNING id`, [A, F.EMP.CAROL])).rows[0].id;
+  try {
+    await docalerts.runExpiryAlerts(admin, '2026-06-29');
+    await docalerts.runExpiryAlerts(admin, '2026-06-29'); // same date again
+    const a = (await owner(`SELECT notify_count FROM doc_alert WHERE document_id=$1`, [doc])).rows[0];
+    assert.equal(a.notify_count, 1, 'notify_count not inflated by a same-date re-fire');
+    const n = (await owner(
+      `SELECT count(*)::int c FROM notification WHERE kind='doc.expiry' AND body->>'document_id'=$1`, [doc])).rows[0].c;
+    assert.equal(n, 1, 'exactly one notification, not two');
+  } finally {
+    await owner(`DELETE FROM notification WHERE kind='doc.expiry' AND body->>'document_id'=$1`, [doc]);
+    await owner('DELETE FROM employee_document WHERE id=$1', [doc]);
+  }
+});
+
+// ── L5: provisioning a duplicate email leaves no orphan employee ─────────────
+test('L5: provision-uat-user is atomic — a dup email rolls back the employee', async () => {
+  const { execFileSync } = require('node:child_process');
+  const path = require('node:path');
+  const script = path.join(__dirname, '..', 'scripts', 'provision-uat-user.js');
+  const email = 'cecilia.mtweve@a.example'; // reuse an existing seeded email
+  await owner(
+    `INSERT INTO app_user(id,company_id,employee_id,email,password_hash,mfa_secret,role_code,status)
+     VALUES (gen_random_uuid(),$1,NULL,$2,'x','x','R07','active')`, [A, email]).catch(() => {});
+  const before = (await owner(`SELECT count(*)::int c FROM employee WHERE company_id=$1 AND email=$2`, [A, email])).rows[0].c;
+  try {
+    assert.throws(() => execFileSync(process.execPath, [script], {
+      env: { ...process.env, UAT_COMPANY: A, UAT_EMAIL: email, UAT_NAME: 'Dup Person', UAT_ROLE: 'R03', UAT_SITE: 'Head Office', UAT_PASSWORD: 'DupPass!2026x' },
+      stdio: 'pipe',
+    }), 'duplicate email is refused');
+    const after = (await owner(`SELECT count(*)::int c FROM employee WHERE company_id=$1 AND email=$2`, [A, email])).rows[0].c;
+    assert.equal(after, before, 'no orphan employee row was left behind');
+  } finally {
+    await owner(`DELETE FROM app_user WHERE company_id=$1 AND email=$2`, [A, email]);
   }
 });

@@ -90,12 +90,19 @@ async function runExpiryAlerts(session, asOf) {
     for (const d of docs) {
       const within = String(d.valid_until).slice(0, 10) <= addDaysStr(asOf, lead[d.kind]);
       const existing = (await c.query(
-        'SELECT id, status FROM doc_alert WHERE document_id=$1', [d.id])).rows[0];
+        'SELECT id, status, last_notified_at::text AS last_notified_at FROM doc_alert WHERE document_id=$1', [d.id])).rows[0];
 
       if (within) {
         openCount++;
         const route = routeFor(roles, d);
         if (route.unclassified) unclassifiedCount++;
+        // Idempotent per asOf: a re-fire of the SAME sweep date must not
+        // re-notify or inflate notify_count. Skip a still-open alert already
+        // notified as of this date (the re-open-from-cleared path still runs).
+        if (existing && existing.status === 'open'
+            && String(existing.last_notified_at).slice(0, 10) === String(asOf).slice(0, 10)) {
+          continue;
+        }
         if (!existing) {
           const ins = (await c.query(
             `INSERT INTO doc_alert (company_id, document_id, kind, due_date, lead_days, notify_role, notify_site, unclassified, status, notify_count, last_notified_at)

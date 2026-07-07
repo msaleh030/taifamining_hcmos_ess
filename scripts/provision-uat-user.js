@@ -40,14 +40,28 @@ async function main() {
   const secret = base32Encode(crypto.randomBytes(20)); // per-user TOTP secret
 
   await db.withOwner(async (c) => {
-    const site = (await c.query('SELECT id FROM site WHERE company_id=$1 AND lower(name)=lower($2)', [company, siteName])).rows[0];
-    if (!site) throw new Error(`site "${siteName}" not found in tenant ${company}`);
-    const empId = await employees.create(c, company, { full_name: name, site_id: site.id, role_code: role, status: 'active', email });
-    const userId = crypto.randomUUID();
-    await c.query(
-      `INSERT INTO app_user(id,company_id,employee_id,email,password_hash,mfa_secret,role_code,status)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,'active')`,
-      [userId, company, empId, email, C.hashSecret(password), secret, role]);
+    // Atomic + idempotent: the employee and the uniquely-constrained app_user
+    // must land together, or not at all. Without the transaction, a duplicate
+    // email (unique on app_user) threw AFTER the employee row committed,
+    // leaving an orphan employee. Dup-guard up front, wrap the rest in a tx.
+    await c.query('BEGIN');
+    try {
+      const dup = await c.query(
+        'SELECT 1 FROM app_user WHERE company_id=$1 AND lower(email)=lower($2)', [company, email]);
+      if (dup.rows.length) throw new Error(`${email} already exists — refusing to create a duplicate`);
+      const site = (await c.query('SELECT id FROM site WHERE company_id=$1 AND lower(name)=lower($2)', [company, siteName])).rows[0];
+      if (!site) throw new Error(`site "${siteName}" not found in tenant ${company}`);
+      const empId = await employees.create(c, company, { full_name: name, site_id: site.id, role_code: role, status: 'active', email });
+      const userId = crypto.randomUUID();
+      await c.query(
+        `INSERT INTO app_user(id,company_id,employee_id,email,password_hash,mfa_secret,role_code,status)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,'active')`,
+        [userId, company, empId, email, C.hashSecret(password), secret, role]);
+      await c.query('COMMIT');
+    } catch (e) {
+      try { await c.query('ROLLBACK'); } catch { /* ignore */ }
+      throw e;
+    }
 
     const label = encodeURIComponent(`HCMOS UAT:${email}`);
     const otpauth = `otpauth://totp/${label}?secret=${secret}&issuer=${encodeURIComponent('HCMOS UAT')}&digits=6&period=30&algorithm=SHA1`;
