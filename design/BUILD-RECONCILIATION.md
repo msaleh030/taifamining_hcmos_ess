@@ -19,9 +19,18 @@ who sees it.
    open-approvals tiles, workforce-by-site, employment-type, activity feed,
    pending-approvals panel. Built: navigable KPI strip from the certified
    scorecard + designed empty states. Needs: an overview-aggregates endpoint.
-2. **C10 Leave approve + coverage** — approval queue, coverage meter, audited
+2. **C10 Leave approve + coverage** — ~~approval queue, coverage meter, audited
    override. The certified leave flow is apply/balance (self-service, server-
-   validated); there is no request-queue/approve endpoint.
+   validated); there is no request-queue/approve endpoint.~~ **BUILT on Kira's
+   order (2026-07-06)**: `GET /leave/requests` (queue + per-request coverage
+   meter) and `POST /leave/requests/:id/decide` — RBAC `leave.approve`
+   (R02/R04/R11), SOD-01 same-user-403, site-bound approvers scoped to their
+   site. LR-6 coverage is warn-not-block: `leave.coverage.thresholds` stays
+   [TBC] (meter reads `pending`, approval proceeds); once set, a below-threshold
+   approval 409s until the acknowledged override, which is audited (UNI-06).
+   Apply now accepts an optional from/to window (coverage math; `days` stays
+   authoritative for balances). Pins: `test/c10_leave_approve.test.js`.
+   Screen build can proceed.
 3. **C20b alert configuration** — per-doc-type lead-time set/repeat/clear.
    Built: sweep + routed-role list (certified); lead-time chips display the
    DA-1 registry values read-only.

@@ -157,6 +157,13 @@ const routes = [
     handler: async (req, m, url, s) => ({ status: 200, body: await leave.balance(s) }) },
   { method: 'POST', pattern: /^\/leave\/apply$/,
     handler: async (req, m, url, s) => ({ status: 200, body: await leave.apply(s, await readJson(req)) }) },
+  // ── C10: approval queue + decision (LV-03) — RBAC action leave.approve
+  // (R02/R04/R11). SOD-01 same-user-403 and site scoping are enforced in the
+  // service; LR-6 coverage is warn-not-block with the UNI-06 audited override.
+  { method: 'GET', pattern: /^\/leave\/requests$/, action: 'leave.approve',
+    handler: async (req, m, url, s) => ({ status: 200, body: await leave.queue(s) }) },
+  { method: 'POST', pattern: /^\/leave\/requests\/([0-9a-f-]+)\/decide$/i, action: 'leave.approve',
+    handler: async (req, m, url, s) => ({ status: 200, body: await leave.decide(s, m[1], await readJson(req)) }) },
   { method: 'GET', pattern: /^\/liability\/batch\/([0-9a-f-]+)$/i, allow: 'a3.pay.roles',
     handler: async (req, m, url, s) => ({ status: 200, body: await liability.batchLiability(s, m[1]) }) },
 

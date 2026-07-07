@@ -11,6 +11,7 @@
 // test/leave.test.js — do not change without Kira.
 const db = require('./db');
 const cfg = require('./config');
+const sitescope = require('./sitescope');
 const { HttpError } = require('./errors');
 
 const round1 = (x) => Math.round(x * 10) / 10;
@@ -198,6 +199,16 @@ async function apply(session, input = {}) {
   }
   if (!(d > 0)) throw new HttpError(400, 'days must be positive');
 
+  // Optional request window (C10): the dates the coverage meter computes over.
+  // `days` stays authoritative for balance math — the window never changes it.
+  const { from_date, to_date } = input;
+  const isoDate = (v) => /^\d{4}-\d{2}-\d{2}$/.test(String(v));
+  if ((from_date == null) !== (to_date == null)) throw new HttpError(400, 'from_date and to_date go together');
+  if (from_date != null) {
+    if (!isoDate(from_date) || !isoDate(to_date)) throw new HttpError(400, 'dates must be YYYY-MM-DD');
+    if (String(to_date) < String(from_date)) throw new HttpError(400, 'to_date before from_date');
+  }
+
   return db.withTenant(co, async (c) => {
     const empId = await employeeOf(c, session);
     if (!empId) throw new HttpError(403, 'no employee for user');
@@ -211,10 +222,137 @@ async function apply(session, input = {}) {
     }
     // sick: separate bucket (LR-7 limits [TBC], not enforced here) — never annual.
     const r = await c.query(
-      `INSERT INTO leave_request(company_id, employee_id, leave_type, days, hoh_override, status)
-       VALUES ($1,$2,$3,$4,$5,'applied') RETURNING id`, [co, empId, leave_type, d, !!hoh_override]);
-    return { id: r.rows[0].id, employee_id: empId, leave_type, days: d };
+      `INSERT INTO leave_request(company_id, employee_id, leave_type, days, hoh_override, status, from_date, to_date)
+       VALUES ($1,$2,$3,$4,$5,'applied',$6,$7) RETURNING id`,
+      [co, empId, leave_type, d, !!hoh_override, from_date || null, to_date || null]);
+    return { id: r.rows[0].id, employee_id: empId, leave_type, days: d,
+             ...(from_date ? { from_date, to_date } : {}) };
   });
 }
 
-module.exports = { carrySweep, balance, apply };
+// ═══ C10 — approve + coverage (Kira's build order, 2026-07-06) ═══════════════
+// LV-03 approval queue and decision; SOD-01 maker ≠ checker (same-user-403);
+// LR-6 coverage is WARN-NOT-BLOCK: a below-threshold approval may proceed but
+// only with the acknowledged override, which is audited (UNI-06).
+
+// LR-6 thresholds: 'R01:2,R13:5' → Map(role → minimum present). The key is
+// [TBC] until the client sets it — null here means "not configured".
+function parseThresholds(v) {
+  if (cfg.isPending(v)) return null;
+  const m = new Map();
+  for (const part of String(v).split(',')) {
+    const [role, n] = part.split(':').map((s) => s.trim());
+    if (role && Number.isFinite(Number(n))) m.set(role, Number(n));
+  }
+  return m.size ? m : null;
+}
+
+// Coverage of the requester's role at their site over the request window:
+// present = active same-role colleagues at the site (excluding the requester)
+// not on APPROVED leave overlapping the window. Statuses:
+//   pending — thresholds [TBC] (LR-6 unconfigured) or the request has no
+//             window: nothing to warn on, approval proceeds without override;
+//   ok      — present >= threshold (or the role has no threshold);
+//   warn    — present < threshold: approvable ONLY with the audited override.
+async function coverageOf(c, co, reqRow) {
+  const thresholds = parseThresholds(await cfg.getConfig(co, 'leave.coverage.thresholds', null, c));
+  if (!thresholds) return { status: 'pending', reason: 'leave.coverage.thresholds [TBC] — LR-6 not configured' };
+  const emp = (await c.query('SELECT site_id, role_code FROM employee WHERE id=$1', [reqRow.employee_id])).rows[0];
+  if (!emp) return { status: 'pending', reason: 'requester has no employee record' };
+  const threshold = thresholds.get(emp.role_code);
+  if (threshold == null) return { status: 'ok', role: emp.role_code, reason: 'no threshold for role' };
+  if (!reqRow.from_date || !reqRow.to_date) return { status: 'pending', reason: 'request has no from/to window' };
+  const present = (await c.query(
+    `SELECT count(*)::int n FROM employee e
+      WHERE e.site_id=$1 AND e.role_code=$2 AND e.status='active' AND e.id <> $3
+        AND NOT EXISTS (SELECT 1 FROM leave_request lr
+              WHERE lr.employee_id = e.id AND lr.status='approved'
+                AND lr.from_date IS NOT NULL AND lr.from_date <= $5::date AND lr.to_date >= $4::date)`,
+    [emp.site_id, emp.role_code, reqRow.employee_id, reqRow.from_date, reqRow.to_date])).rows[0].n;
+  return { status: present < threshold ? 'warn' : 'ok', role: emp.role_code, site_id: emp.site_id,
+           present, threshold, window: { from: String(reqRow.from_date).slice(0, 10), to: String(reqRow.to_date).slice(0, 10) } };
+}
+
+// GET /leave/requests — the approval queue (status 'applied'), each with its
+// coverage meter. A site-bound approver (R02/R04) sees only their own site.
+async function queue(session) {
+  const co = session.company_id;
+  return db.withTenant(co, async (c) => {
+    const site = await sitescope.scopeSite(c, session);
+    const rows = (await c.query(
+      `SELECT lr.id, lr.employee_id, e.full_name, e.emp_no, e.role_code, e.site_id, s.name AS site,
+              lr.leave_type, lr.days::float8 AS days, lr.from_date::text AS from_date,
+              lr.to_date::text AS to_date, lr.hoh_override, lr.applied_at::text AS applied_at
+         FROM leave_request lr
+         JOIN employee e ON e.id = lr.employee_id
+         LEFT JOIN site s ON s.id = e.site_id
+        WHERE lr.status = 'applied' ${site ? 'AND e.site_id = $1' : ''}
+        ORDER BY lr.applied_at`, site ? [site] : [])).rows;
+    const pending = [];
+    for (const r of rows) pending.push({ ...r, coverage: await coverageOf(c, co, r) });
+    return { pending };
+  });
+}
+
+// POST /leave/requests/:id/decide {approve, override_ack?, note?}
+async function decide(session, requestId, input = {}) {
+  const co = session.company_id;
+  const { approve, override_ack, note } = input;
+  if (typeof approve !== 'boolean') throw new HttpError(400, 'approve must be true or false');
+  return db.withTenant(co, async (c) => {
+    const req = (await c.query('SELECT * FROM leave_request WHERE id=$1', [requestId])).rows[0];
+    if (!req) throw new HttpError(404, 'request not found');
+    if (req.status !== 'applied') throw new HttpError(409, `already ${req.status}`);
+
+    // SOD-01: the requester never decides their own leave (same-user-403).
+    const own = await employeeOf(c, session);
+    if (own && own === req.employee_id) throw new HttpError(403, 'cannot decide own leave (SOD-01)');
+
+    // A site-bound approver decides only their own site's requests.
+    const site = await sitescope.scopeSite(c, session);
+    if (site) {
+      const emp = (await c.query('SELECT site_id FROM employee WHERE id=$1', [req.employee_id])).rows[0];
+      if (!emp || emp.site_id !== site) throw new HttpError(403, 'request outside your site');
+    }
+
+    // LR-6 on approval: warn-not-block — a coverage gap needs the acknowledged
+    // override; the 409 carries the meter so the approver sees exactly the gap.
+    let coverage = null, overridden = false;
+    if (approve) {
+      coverage = await coverageOf(c, co, req);
+      if (coverage.status === 'warn') {
+        if (!override_ack) {
+          throw new HttpError(409, 'coverage below threshold — acknowledge the gap to proceed (LR-6 warn-not-block)', { coverage });
+        }
+        overridden = true;
+      }
+    }
+
+    const status = approve ? 'approved' : 'declined';
+    await c.query(
+      `UPDATE leave_request SET status=$2, decided_by=$3, decided_at=now(), decision_note=$4, coverage_override=$5
+        WHERE id=$1`, [requestId, status, session.user_id, note || null, overridden]);
+
+    // UNI-06: the override is its own audit event — approver, role, the gap.
+    if (overridden) {
+      await c.query('SELECT audit_append($1,$2,$3,$4,$5,$6,$7,$8)', [
+        co, String(session.user_id), session.role_code, 'leave.coverage.override',
+        'leave_request', requestId, { coverage }, { acknowledged: true, decided: status }]);
+    }
+    await c.query('SELECT audit_append($1,$2,$3,$4,$5,$6,$7,$8)', [
+      co, String(session.user_id), session.role_code, `leave.${status}`,
+      'leave_request', requestId, { status: 'applied' }, { status, note: note || null }]);
+
+    // The requester hears the outcome in ESS.
+    const emp = (await c.query('SELECT full_name FROM employee WHERE id=$1', [req.employee_id])).rows[0];
+    await c.query(
+      `INSERT INTO notification (company_id, employee_id, audience, recipient, kind, body)
+       VALUES ($1,$2,'ess',$3,'leave.decision',$4)`,
+      [co, req.employee_id, emp ? emp.full_name : 'employee',
+       { request_id: requestId, status, ...(overridden ? { coverage_override: true } : {}) }]);
+
+    return { id: requestId, status, coverage_override: overridden, ...(coverage ? { coverage } : {}) };
+  });
+}
+
+module.exports = { carrySweep, balance, apply, queue, decide };
