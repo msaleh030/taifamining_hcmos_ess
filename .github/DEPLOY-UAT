@@ -15,3 +15,4 @@ run: ratified build -> Frankfurt box (DA-2 full split incl. contract expat/local
 run: rowCount fix + self-verifying config sync — truthful box report 2026-07-07T04:18:59Z
 run: LR-6 coverage floor default:1 (Kira) — sync promotes the box [TBC] sentinel 2026-07-07T04:43:36Z
 run: hcmos-run wrapper (EnvironmentFile-sourced on-box commands) + corrected super-admin instructions 2026-07-07T05:08:42Z
+run: super-admin env guard (clear message when EnvironmentFile not loaded) 2026-07-07T05:23:52Z

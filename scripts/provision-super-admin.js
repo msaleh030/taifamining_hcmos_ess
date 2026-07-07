@@ -53,6 +53,17 @@ async function main() {
   const email = process.argv[2] || 'mohammed@railgrid.tz';
   const company = process.env.UAT_COMPANY || process.env.SUPERADMIN_COMPANY;
   if (!company) { console.error('set UAT_COMPANY=<tenant uuid>'); process.exit(2); }
+  // Deployed-box guard: the owner-role DB password lives ONLY in the systemd
+  // EnvironmentFile. A shell that has not sourced it starts node with the
+  // sandbox default and fails Postgres auth with a cryptic scram error AFTER
+  // the password prompts — catch it up front with the fix in hand.
+  const fs = require('node:fs');
+  if (fs.existsSync('/etc/hcmos/hcmos.env') && !process.env.PG_OWNER_PW) {
+    console.error('DB environment not loaded (found /etc/hcmos/hcmos.env but PG_OWNER_PW is unset).');
+    console.error(`Run via the wrapper:  UAT_COMPANY=${company} hcmos-run node scripts/provision-super-admin.js ${email}`);
+    console.error('or source it first:   set -a; . /etc/hcmos/hcmos.env; set +a   (same shell, then re-run)');
+    process.exit(2);
+  }
   const p1 = await promptHidden(`Super-admin password for ${email} (hidden, min 12 chars): `);
   const p2 = await promptHidden('Repeat password: ');
   if (p1 !== p2) { console.error('passwords do not match — nothing provisioned'); process.exit(1); }
