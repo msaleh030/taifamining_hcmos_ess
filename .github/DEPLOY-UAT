@@ -12,3 +12,4 @@ run: restore-test fix — pg_restore via stdin (postgres cannot read root-700 ba
 run: smoke-test chk_code fix + seed run-once guard + probe lastIndexOf 2026-07-06T18:31:29Z
 run: provision Rajesh Chohan R12 unscoped 2026-07-06T18:36:38Z
 run: ratified build -> Frankfurt box (DA-2 full split incl. contract expat/local, E6, C10, is_expat infra + config sync) 2026-07-07T04:10:57Z
+run: rowCount fix + self-verifying config sync — truthful box report 2026-07-07T04:18:59Z

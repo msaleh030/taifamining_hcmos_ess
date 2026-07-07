@@ -12,19 +12,28 @@ const { DEFAULT_CONFIG } = require('../src/config');
 async function main() {
   await db.withOwner(async (c) => {
     const tenants = (await c.query('SELECT company_id FROM tenant')).rows;
+    // SELECT-driven (not command-tag-driven): compute what is missing, insert,
+    // then VERIFY nothing is still missing — the report states facts.
+    const missingOf = async (co) => {
+      const have = new Set((await c.query(
+        'SELECT key FROM config WHERE company_id=$1', [co])).rows.map((r) => r.key));
+      return Object.keys(DEFAULT_CONFIG).filter((k) => !have.has(k));
+    };
     let added = 0;
     const addedKeys = new Set();
     for (const t of tenants) {
-      for (const [k, v] of Object.entries(DEFAULT_CONFIG)) {
-        const r = await c.query(
+      for (const k of await missingOf(t.company_id)) {
+        await c.query(
           `INSERT INTO config (company_id, key, value) VALUES ($1,$2,$3)
-           ON CONFLICT (company_id, key) DO NOTHING`, [t.company_id, k, v]);
-        if (r.rowCount) { added += r.rowCount; addedKeys.add(k); }
+           ON CONFLICT (company_id, key) DO NOTHING`, [t.company_id, k, DEFAULT_CONFIG[k]]);
+        added++; addedKeys.add(k);
       }
+      const still = await missingOf(t.company_id);
+      if (still.length) throw new Error(`tenant ${t.company_id} still missing: ${still.join(', ')}`);
     }
     /* eslint-disable no-console */
     console.log(`[sync-config] ${added} missing key(s) added across ${tenants.length} tenant(s)` +
-      (addedKeys.size ? `: ${[...addedKeys].sort().join(', ')}` : ''));
+      (addedKeys.size ? `: ${[...addedKeys].sort().join(', ')}` : '') + ' — verified complete');
   });
   await db.close();
 }

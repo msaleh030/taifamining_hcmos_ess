@@ -254,7 +254,13 @@ class Client {
         this._cur.rows.push(row);
         break;
       }
-      case 'C': break; // CommandComplete
+      case 'C': { // CommandComplete — tag 'INSERT 0 1' / 'UPDATE 3' / 'SELECT 5'
+        if (this._cur) {
+          const m = /(\d+)\0?$/.exec(body.toString('utf8'));
+          this._cur.rowCount = m ? parseInt(m[1], 10) : 0;
+        }
+        break;
+      }
       case 'I': break; // EmptyQueryResponse
       case '1': case '2': case '3': case 'n': case 't': break; // Parse/Bind/Close/NoData/ParamDesc
       case 'E': { // ErrorResponse
@@ -270,7 +276,7 @@ class Client {
   _finishCurrent() {
     const cur = this._cur; this._cur = null;
     if (cur.error) cur.reject(Object.assign(new Error(cur.error.message), cur.error));
-    else cur.resolve({ rows: cur.rows, fields: cur.fields });
+    else cur.resolve({ rows: cur.rows, fields: cur.fields, rowCount: cur.rowCount ?? cur.rows.length });
     this._drain();
   }
 
