@@ -172,7 +172,10 @@ fi
 
 # ── 5. Ship source (with enforced dist) + run remote setup ───────────────────
 say "5. ship enforced build + run remote setup"
-SSH_OPTS=(-i ~/.ssh/uat_deploy -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15)
+# ServerAliveInterval/CountMax makes a stalled connection drop after ~60s
+# instead of hanging the whole job on a dead box.
+SSH_OPTS=(-i ~/.ssh/uat_deploy -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15 \
+          -o ServerAliveInterval=15 -o ServerAliveCountMax=4)
 for i in $(seq 1 30); do ssh "${SSH_OPTS[@]}" "root@$IP" true 2>/dev/null && break; sleep 10; done
 ssh "${SSH_OPTS[@]}" "root@$IP" true || {
   echo "FATAL: SSH as root failed. If the VM predates this deploy, authorise the deploy key:"
@@ -197,6 +200,9 @@ else
   echo "no CLOUDFLARE_TUNNEL_TOKEN — edge (tunnel/DNS/Access) stays a Kira-side step (deploy/cloudflare-edge.md)"
 fi
 
-ssh "${SSH_OPTS[@]}" "root@$IP" 'bash -s' < deploy/gha/remote-setup.sh
+# Hard ceiling on the on-box run so a stuck step (npm/apt/a wedged request)
+# fails the deploy with a clear message instead of hanging to the job timeout.
+timeout 720 ssh "${SSH_OPTS[@]}" "root@$IP" 'bash -s' < deploy/gha/remote-setup.sh \
+  || { echo "FATAL: remote-setup did not finish within 12 min (see checkpoints above for where it stalled)."; exit 1; }
 say "deploy script finished — see remote checkpoints above"
 echo "box: $IP · credentials file for Kira: /root/uat-credentials.txt (600, on-box only)"

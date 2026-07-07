@@ -16,13 +16,19 @@ on:
     paths: ['.github/DEPLOY-UAT']
 
 concurrency:
+  # A new deploy CANCELS an in-flight one: the deploy is idempotent (seed-guard,
+  # prov() dup-checks), so the latest push should always win rather than queue
+  # behind — and a hung run must not block the next fix from landing.
   group: deploy-uat
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   deploy:
     name: Provision + harden + deploy (Frankfurt KVM 2)
     runs-on: ubuntu-latest
+    # A hang (slow box npm/apt, stalled SSH) must fail the job, not run for
+    # hours. The whole provision+deploy normally completes in ~1 minute.
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
 

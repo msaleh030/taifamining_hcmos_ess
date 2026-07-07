@@ -168,9 +168,12 @@ function grab(email) {
   const secret = /TOTP\s+:\s*([A-Z2-7]+)/.exec(chunk)[1];
   return { email, password, secret };
 }
+// Every request is bounded (10s) so a wedged app fails the probe fast rather
+// than hanging the whole deploy on an unresponsive port.
+const T = () => AbortSignal.timeout(10000);
 async function login(u) {
   const r = await fetch('http://127.0.0.1:3000/auth/console', {
-    method: 'POST', headers: { 'content-type': 'application/json' },
+    method: 'POST', headers: { 'content-type': 'application/json' }, signal: T(),
     body: JSON.stringify({ email: u.email, password: u.password, mfa: C.currentTotp(u.secret) }),
   });
   if (r.status !== 200) throw new Error(`login ${u.email}: ${r.status}`);
@@ -180,15 +183,15 @@ async function login(u) {
   const r03 = await login(grab('uat.probe.r03@taifamining.tz'));
   const r07 = await login(grab('cecilia.mtweve@taifamining.tz'));
   const code = async (tok, path) =>
-    (await fetch('http://127.0.0.1:3000' + path, { headers: { authorization: 'Bearer ' + tok } })).status;
+    (await fetch('http://127.0.0.1:3000' + path, { headers: { authorization: 'Bearer ' + tok }, signal: T() })).status;
   const liab03 = await code(r03, '/reports/register/leave-liability/00000000-0000-0000-0000-000000000000');
   const liab07 = await code(r07, '/reports/register/leave-liability/00000000-0000-0000-0000-000000000000');
   // R03 must be 403 at the gate; R07 passes the gate (404 = gate passed, batch absent).
-  const dirRes = await fetch('http://127.0.0.1:3000/employees?limit=1', { headers: { authorization: 'Bearer ' + r03 } });
+  const dirRes = await fetch('http://127.0.0.1:3000/employees?limit=1', { headers: { authorization: 'Bearer ' + r03 }, signal: T() });
   const rows = (await dirRes.json()).rows || [];
   let payLeak = false;
   if (rows.length) {
-    const emp = await (await fetch('http://127.0.0.1:3000/employees/' + rows[0].id, { headers: { authorization: 'Bearer ' + r03 } })).json();
+    const emp = await (await fetch('http://127.0.0.1:3000/employees/' + rows[0].id, { headers: { authorization: 'Bearer ' + r03 }, signal: T() })).json();
     payLeak = 'basic_pay' in emp || 'bank_account' in emp;
   }
   const pass = liab03 === 403 && liab07 !== 403 && !payLeak;
