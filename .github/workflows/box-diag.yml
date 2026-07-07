@@ -1,0 +1,21 @@
+name: Box Diag
+
+# Read-only UAT-box diagnostic (owner-role auth reproduction). Trigger: the
+# .github/BOX-DIAG sentinel push or the Actions button. Prints only non-secret
+# facts (names, lengths, OK/FAIL, error classes).
+on:
+  workflow_dispatch:
+  push:
+    branches: [claude/nifty-goodall-poihi4]
+    paths: ['.github/BOX-DIAG']
+
+jobs:
+  diag:
+    name: Owner-role auth diagnostic
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run diagnostic
+        env:
+          UAT_SSH_PRIVATE_KEY: ${{ secrets.UAT_SSH_PRIVATE_KEY }}
+        run: bash deploy/gha/box-diag.sh
