@@ -41,7 +41,7 @@ row 2) and the dual-role `+alias` email convention (GO.md step 4).
 |---|---|---|
 | **Carry policy (opening bucket)** | Baraka | The GOING-FORWARD rule is BUILT (v1.5 LR-4/8/9); opening-bucket rows stay EXEMPT and the bucket→normal-carry conversion stays deliberately unbuilt until Baraka decides |
 | **Duplicate-file question** | Baraka | Treatment of cross-file duplicate PFs beyond flagging to the exception report |
-| LR-6 coverage thresholds | client | `leave.coverage.thresholds` [TBC] — blocks |
+| LR-6 coverage thresholds | client | **Floor DECIDED (Kira, 2026-07-07)**: `leave.coverage.thresholds` = `default:1` — warn the approver only when an approval would leave a role at a site with ZERO present (at least one must remain). Warn-not-block; per-role values from Omid/Baraka layer on via registry edit (`default:1,R13:5`), no deploy. Pinned `c10_leave_approve.test.js` |
 | PC-2 partial period | client | `payroll.partial_period` [TBC] — blocks |
 | Emp-no rollover >9999 | governance | Generator refuses to overflow |
 | A3 refinements (R11 medical, R05 scope) | 4-July return | `pending.a3.*` [TBC] (r08_pay removed — superseded by v1.5 LI-3 finance pay visibility) |

@@ -25,9 +25,10 @@ const frank = { company_id: A, user_id: F.USERS.FIELD_A.id, role_code: 'R13' }; 
 
 const setThresholds = (v) => owner(
   `UPDATE config SET value=$2 WHERE company_id=$1 AND key='leave.coverage.thresholds'`, [A, v]);
+const SEEDED = 'default:1'; // LR-6 floor (Kira, 2026-07-07) — the shipped registry value
 
 before(H.start);
-after(async () => { await setThresholds('__TBC__'); await H.stop(); });
+after(async () => { await setThresholds(SEEDED); await H.stop(); });
 
 async function cleanup(reqIds) {
   for (const id of reqIds.filter(Boolean)) {
@@ -38,6 +39,7 @@ async function cleanup(reqIds) {
 
 test('C10: SOD-01, site scope, [TBC] coverage pending, decline restores balance', async () => {
   const ids = [];
+  await setThresholds('__TBC__'); // pin the unconfigured behaviour explicitly
   try {
     // Frank (FIELDA @A1) applies with a window; the request enters the queue.
     const req = await leave.apply(frank, { leave_type: 'annual', days: 5, from_date: '2026-08-11', to_date: '2026-08-15' });
@@ -87,6 +89,7 @@ test('C10: SOD-01, site scope, [TBC] coverage pending, decline restores balance'
       `SELECT count(*)::int n FROM notification WHERE kind='leave.decision' AND employee_id=$1`, [F.EMP.FIELDA])).rows[0].n;
     assert.ok(notif >= 2, 'requester notified of approve + decline');
   } finally {
+    await setThresholds(SEEDED);
     await cleanup(ids);
   }
 });
@@ -134,27 +137,31 @@ test('C10: LR-6 warn-not-block — 409 with the meter, audited override approves
     assert.equal(aud.length, 1, 'the override is a first-class audit event');
     assert.equal(aud[0].role, 'R11');
 
-    // With CV1 now on approved leave, CV2's overlapping request drops present
-    // to 0 — the meter reflects approved overlaps.
+    // The SHIPPED floor (Kira, 2026-07-07): 'default:1' applies to any role
+    // without its own entry — warn only when approval would leave ZERO of the
+    // role on site. With CV1 on approved leave, CV2's overlapping request
+    // drops present to 0 → warn under the floor.
+    await setThresholds(SEEDED);
     const req2 = (await owner(
       `INSERT INTO leave_request(company_id, employee_id, leave_type, days, status, from_date, to_date)
        VALUES ($1,$2,'annual',3,'applied','2026-08-12','2026-08-14') RETURNING id`, [A, cv2])).rows[0].id;
     const meter2 = (await leave.queue(director)).pending.find((p) => p.id === req2).coverage;
-    assert.deepEqual({ status: meter2.status, present: meter2.present }, { status: 'warn', present: 0 });
+    assert.deepEqual({ status: meter2.status, present: meter2.present, threshold: meter2.threshold },
+      { status: 'warn', present: 0, threshold: 1 }, 'default floor warns when the last person would leave');
     await owner('DELETE FROM leave_request WHERE id=$1', [req2]);
 
-    // Raising the bar back down: threshold 1 with CV2 present → ok, no override.
-    await setThresholds('R01:1');
+    // One person still present satisfies the floor → ok, no override needed.
     const req3 = (await owner(
       `INSERT INTO leave_request(company_id, employee_id, leave_type, days, status, from_date, to_date)
        VALUES ($1,$2,'annual',2,'applied','2027-01-05','2027-01-06') RETURNING id`, [A, cv2])).rows[0].id;
     const ok3 = await leave.decide(director, req3, { approve: true });
     assert.equal(ok3.status, 'approved');
     assert.equal(ok3.coverage.status, 'ok');
+    assert.equal(ok3.coverage.threshold, 1, 'floor via the default entry');
     assert.equal(ok3.coverage_override, false);
     await owner('DELETE FROM leave_request WHERE id=$1', [req3]);
   } finally {
-    await setThresholds('__TBC__');
+    await setThresholds(SEEDED);
     await owner(`DELETE FROM notification WHERE kind='leave.decision' AND employee_id IN ($1,$2)`, [cv1, cv2]);
     await owner('DELETE FROM leave_request WHERE employee_id IN ($1,$2)', [cv1, cv2]);
     await owner('DELETE FROM employee WHERE id IN ($1,$2)', [cv1, cv2]);

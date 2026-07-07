@@ -235,8 +235,10 @@ async function apply(session, input = {}) {
 // LR-6 coverage is WARN-NOT-BLOCK: a below-threshold approval may proceed but
 // only with the acknowledged override, which is audited (UNI-06).
 
-// LR-6 thresholds: 'R01:2,R13:5' → Map(role → minimum present). The key is
-// [TBC] until the client sets it — null here means "not configured".
+// LR-6 thresholds: 'default:1,R13:5' → Map(role → minimum present). 'default'
+// is the floor for any role without its own entry (Kira, 2026-07-07: at least
+// one person must remain on site per role before the approver is warned).
+// A [TBC]/unset value means "not configured" — null.
 function parseThresholds(v) {
   if (cfg.isPending(v)) return null;
   const m = new Map();
@@ -259,7 +261,7 @@ async function coverageOf(c, co, reqRow) {
   if (!thresholds) return { status: 'pending', reason: 'leave.coverage.thresholds [TBC] — LR-6 not configured' };
   const emp = (await c.query('SELECT site_id, role_code FROM employee WHERE id=$1', [reqRow.employee_id])).rows[0];
   if (!emp) return { status: 'pending', reason: 'requester has no employee record' };
-  const threshold = thresholds.get(emp.role_code);
+  const threshold = thresholds.get(emp.role_code) ?? thresholds.get('default');
   if (threshold == null) return { status: 'ok', role: emp.role_code, reason: 'no threshold for role' };
   if (!reqRow.from_date || !reqRow.to_date) return { status: 'pending', reason: 'request has no from/to window' };
   const present = (await c.query(

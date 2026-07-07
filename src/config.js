@@ -109,7 +109,12 @@ const DEFAULT_CONFIG = {
   // would over-credit every entitlement by ~2 days/week. Both values pinned:
   // test/f3.test.js (LR-2 weeks→days 2→14/4→28) and test/payroll.test.js (PC-1=30).
   'leave.weeks_to_days':      '7',         // LR-2 (weeks → days; 7 days/week)
-  'leave.coverage.thresholds':PENDING,     // LR-6 [TBC] per-role coverage
+  // LR-6 coverage floor (Kira, 2026-07-07): at least ONE person must remain on
+  // site per role before the system warns an approver — i.e. warn when an
+  // approval would leave a role at a site with zero present. 'default' applies
+  // to any role without its own entry; per-role values from Omid/Baraka layer
+  // on via registry edit (e.g. 'default:1,R13:5'), no deploy.
+  'leave.coverage.thresholds':'default:1', // LR-6 global floor; warn-not-block
   // LR-7 CONFIRMED (v1.4): sick leave = 63 days full pay + 63 days half pay
   // (126 total); a medical certificate is required from day one. full/half is a
   // PAY split; both count against the 126-day entitlement. Pinned by
