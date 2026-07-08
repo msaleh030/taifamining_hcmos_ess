@@ -226,10 +226,14 @@ say "activation summary (email+password, MFA off in setup)"
 node - <<'EOF'
 const fs = require('fs');
 const creds = fs.readFileSync('/root/uat-credentials.txt', 'utf8');
-// Each provisioned block prints 'email : X' then 'password : Y'.
+// The matrix ACCUMULATES across deploys (re-seeds appended new generations),
+// so an email can appear more than once. Keep the NEWEST password per email
+// (last write wins) — the current credential — exactly like the confidentiality
+// probe's lastIndexOf. Trying an older generation would 401 on a valid account.
 const re = /email\s*:\s*(\S+)[\s\S]*?password\s*:\s*(\S+)/g;
-const accounts = []; let m;
-while ((m = re.exec(creds))) accounts.push({ email: m[1], password: m[2] });
+const latest = new Map(); let m;
+while ((m = re.exec(creds))) latest.set(m[1], m[2]); // later match overwrites
+const accounts = [...latest].map(([email, password]) => ({ email, password }));
 const T = () => AbortSignal.timeout(10000);
 (async () => {
   let ok = 0; const fails = [];
