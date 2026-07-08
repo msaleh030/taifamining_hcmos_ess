@@ -18,3 +18,4 @@ run: hcmos-run wrapper (EnvironmentFile-sourced on-box commands) + corrected sup
 run: super-admin env guard (clear message when EnvironmentFile not loaded) 2026-07-07T05:23:52Z
 run: security bug-hunt fixes H1-H4/M1-M3/L1-L5 (migration 022, session/auth hardening) 2026-07-07T10:52:51Z
 run: deploy resilience — job timeout 15m, cancel-in-progress, SSH keepalive, remote-setup 12m ceiling, probe fetch timeouts; cancels the hung eeab83f run 2026-07-07T11:04:03Z
+run: setup-phase console MFA toggle (field hidden + enforcement off via auth.mfa.required=0); activation summary 2026-07-08T23:50:21Z
