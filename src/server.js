@@ -66,6 +66,10 @@ const routes = [
   { method: 'GET', pattern: /^\/health$/, auth: false,
     handler: async () => { await db.query('SELECT 1'); return { status: 200, body: { ok: true, db: true } }; } },
 
+  // Public login config — the login UI reads it to show/hide the MFA field.
+  // Same key that gates enforcement, so field + enforcement never disagree.
+  { method: 'GET', pattern: /^\/auth\/config$/, auth: false,
+    handler: async () => ({ status: 200, body: await auth.publicAuthConfig() }) },
   { method: 'POST', pattern: /^\/auth\/console$/, auth: false,
     handler: async (req) => ({ status: 200, body: await auth.consoleLogin(await readJson(req)) }) },
   { method: 'POST', pattern: /^\/auth\/field$/, auth: false,

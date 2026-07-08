@@ -69,4 +69,9 @@ jobs:
           # Kira's region decision: pin the unset VM to Frankfurt; Manchester
           # box (1798564) stays unused pending his cancel-vs-spare call.
           UAT_VM_ID: '1798551'
+          # CONSOLE MFA setup-phase (Kira, time-boxed, REVERSIBLE): '1' = setup
+          # (login MFA field HIDDEN + enforcement OFF, one flag). ‼️ UAT WEEK:
+          # set this to '0' → field VISIBLE + enforced, together. Do not leave a
+          # half-flip. Drives auth.mfa.required for all tenants on the box.
+          MFA_SETUP_PHASE: '1'
         run: bash deploy/gha/deploy-uat.sh

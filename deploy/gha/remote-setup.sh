@@ -42,6 +42,21 @@ chmod 755 /usr/local/bin/hcmos-run
 
 set -a; . /etc/hcmos/hcmos.env; set +a
 
+# ── CONSOLE MFA setup-phase toggle (REVERSIBLE — one flag, field + enforcement)
+# MFA_SETUP_PHASE=1 (setup): auth.mfa.required=0 for EVERY tenant → the console
+#   login HIDES the MFA field (GET /auth/config) AND the server does NOT enforce
+#   it. Both flip together because both read this one key.
+# MFA_SETUP_PHASE=0 (UAT WEEK): auth.mfa.required=1 → field VISIBLE + enforced.
+# ‼️  UAT WEEK REVERSAL: set MFA_SETUP_PHASE=0 in .github/workflows/deploy-uat.yml
+#     and refire (or on the box: hcmos-run ... UPDATE config SET value='1' ...).
+#     A half-flip is impossible — one key drives both. Set for ALL tenants so the
+#     pre-auth field-visibility read can never disagree with per-tenant enforcement.
+say "console MFA toggle (setup-phase=${MFA_SETUP_PHASE:-1})"
+MFA_VALUE=$([ "${MFA_SETUP_PHASE:-1}" = "0" ] && echo 1 || echo 0)
+sudo -u postgres psql -d hcmos -c \
+  "UPDATE config SET value='$MFA_VALUE' WHERE key='auth.mfa.required'" >/dev/null
+echo "auth.mfa.required set to $MFA_VALUE for all tenants ($([ "$MFA_VALUE" = 0 ] && echo 'setup: field HIDDEN + not enforced' || echo 'UAT: field VISIBLE + enforced'))"
+
 # ── cloudflared (only if the token was staged) ────────────────────────────────
 if [ -f /etc/cloudflared/env ]; then
   say "cloudflared tunnel service (zero inbound 443)"
@@ -201,6 +216,36 @@ async function login(u) {
   console.log(pass ? 'CONFIDENTIALITY PROBE PASS' : 'CONFIDENTIALITY PROBE FAIL');
   process.exit(pass ? 0 : 1);
 })().catch((e) => { console.error('PROBE ERROR:', e.message); process.exit(1); });
+EOF
+
+# ── activation summary: every provisioned account logs in on EMAIL+PASSWORD ──
+# During setup MFA is off, so console login is email+password only. Parse the
+# 600-mode matrix, attempt each account, report X of N. Counts only — no
+# credential is printed to this (public) CI log.
+say "activation summary (email+password, MFA off in setup)"
+node - <<'EOF'
+const fs = require('fs');
+const creds = fs.readFileSync('/root/uat-credentials.txt', 'utf8');
+// Each provisioned block prints 'email : X' then 'password : Y'.
+const re = /email\s*:\s*(\S+)[\s\S]*?password\s*:\s*(\S+)/g;
+const accounts = []; let m;
+while ((m = re.exec(creds))) accounts.push({ email: m[1], password: m[2] });
+const T = () => AbortSignal.timeout(10000);
+(async () => {
+  let ok = 0; const fails = [];
+  for (const a of accounts) {
+    try {
+      const r = await fetch('http://127.0.0.1:3000/auth/console', {
+        method: 'POST', headers: { 'content-type': 'application/json' }, signal: T(),
+        body: JSON.stringify({ email: a.email, password: a.password }), // NO mfa (setup)
+      });
+      if (r.status === 200) ok++; else fails.push(`${a.email}:${r.status}`);
+    } catch (e) { fails.push(`${a.email}:ERR`); }
+  }
+  console.log(`ACTIVATION: ${ok} of ${accounts.length} provisioned accounts authenticate on email+password`);
+  if (fails.length) console.log(`  did not authenticate: ${fails.join(', ')}`);
+  console.log('NOTE: super admins (Kira, interactive) + pending-name roster are NOT in this file yet — target roster is 15.');
+})().catch((e) => { console.error('ACTIVATION ERROR:', e.message); });
 EOF
 
 say "remote setup complete"

@@ -19,11 +19,21 @@ export default function Login() {
   const [message, setMessage] = useState<string | null>(location.state?.message ?? null);
   const [busy, setBusy] = useState(false);
   const [offline, setOffline] = useState(!navigator.onLine);
+  // MFA field visibility follows the server's auth.mfa.required (ONE toggle:
+  // hidden here === not enforced there). Default true = shown until told
+  // otherwise, so a fetch failure never hides a required factor.
+  const [mfaField, setMfaField] = useState(true);
 
   useEffect(() => {
     const on = () => setOffline(false), off = () => setOffline(true);
     window.addEventListener('online', on); window.addEventListener('offline', off);
     return () => { window.removeEventListener('online', on); window.removeEventListener('offline', off); };
+  }, []);
+
+  useEffect(() => {
+    let live = true;
+    api.authConfig().then((c) => { if (live) setMfaField(c.mfaRequired); }).catch(() => { /* keep shown on error */ });
+    return () => { live = false; };
   }, []);
 
   async function submit(e: FormEvent<HTMLFormElement>) {
@@ -79,13 +89,16 @@ export default function Login() {
             <span className="lf-input"><IcLock style={{ width: 15, height: 15 }} />
               <input name="password" type="password" autoComplete="current-password" required /></span>
           </label>
-          <label className="lf-field">
-            <span>{t('auth.mfa')}</span>
-            <span className="lf-input"><IcShieldDots />
-              {/* optional: the server enforces it only when the tenant's
-                  auth.mfa.required config is on (AUTH-01 default) */}
-              <input name="mfa" inputMode="numeric" pattern="[0-9]*" maxLength={6} /></span>
-          </label>
+          {/* MFA field: shown + enforced when auth.mfa.required is on (AUTH-01
+              default). Hidden together with enforcement during the reversible
+              setup phase — driven by the SAME flag via GET /auth/config. */}
+          {mfaField && (
+            <label className="lf-field">
+              <span>{t('auth.mfa')}</span>
+              <span className="lf-input"><IcShieldDots />
+                <input name="mfa" inputMode="numeric" pattern="[0-9]*" maxLength={6} /></span>
+            </label>
+          )}
           <button className="btn primary lf-go" type="submit" disabled={busy || offline}>
             {busy ? t('auth.signing') : t('auth.signin')}
           </button>

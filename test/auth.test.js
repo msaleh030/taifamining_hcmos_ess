@@ -10,6 +10,33 @@ const { F } = H;
 before(H.start);
 after(H.stop);
 
+const owner = (sql, p) => db.withOwner((c) => c.query(sql, p));
+
+// ── Setup-phase MFA toggle: ONE flag flips field-visibility + enforcement ────
+test('MFA toggle: auth.mfa.required drives /auth/config AND enforcement together', async () => {
+  const A = F.TENANT_A;
+  try {
+    // Flag ON (default): field shown + MFA enforced.
+    const cfgOn = await H.req('GET', '/auth/config');
+    assert.equal(cfgOn.status, 200);
+    assert.equal(cfgOn.body.mfaRequired, true, 'config reports field visible');
+    const noMfaOn = await H.req('POST', '/auth/console',
+      { body: { email: F.USERS.EMP_A.email, password: F.USERS.EMP_A.password } }); // no mfa
+    assert.equal(noMfaOn.status, 401, 'MFA enforced: email+password alone refused');
+
+    // Flip the ONE flag to 0 for every tenant (the setup-phase state).
+    await owner(`UPDATE config SET value='0' WHERE key='auth.mfa.required'`);
+    const cfgOff = await H.req('GET', '/auth/config');
+    assert.equal(cfgOff.body.mfaRequired, false, 'config reports field HIDDEN — flips with enforcement');
+    const noMfaOff = await H.req('POST', '/auth/console',
+      { body: { email: F.USERS.EMP_A.email, password: F.USERS.EMP_A.password } }); // no mfa
+    assert.equal(noMfaOff.status, 200, 'setup phase: email+password alone authenticates');
+    assert.ok(noMfaOff.body.token);
+  } finally {
+    await owner(`UPDATE config SET value='1' WHERE key='auth.mfa.required'`); // restore (UAT posture)
+  }
+});
+
 // ── AC-AUTH-01: console verifies email + password + MFA, lands per A2 ───────
 test('AUTH-01 console sign-in with all three factors succeeds and returns A2 landing', async () => {
   const r = await H.loginConsole(F.USERS.EMP_A);

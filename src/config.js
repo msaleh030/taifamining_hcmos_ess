@@ -26,6 +26,15 @@ const DEFAULT_CONFIG = {
   'auth.lockout.threshold': '5',     // failed attempts before lock
   'auth.lockout.duration':  '900',   // lock seconds (15 min)
 
+  // MFA (TOTP) on the CONSOLE login — the SINGLE reversible toggle that flips
+  // BOTH the login MFA field's visibility (via GET /auth/config, read by the
+  // login UI) AND server-side enforcement (consoleLogin) together. Default '1'
+  // = field shown + enforced (AUTH-01 three-factor, the permanent posture).
+  // Setup phase sets it to '0' on the box = field HIDDEN + NOT enforced. UAT
+  // WEEK MUST flip it back to '1' — a half-flip is impossible because both the
+  // field and enforcement read THIS one key. Never affects field/PIN (ESS-only).
+  'auth.mfa.required':      '1',
+
   // session lifetime
   'session.ttl':            '3600',  // console session seconds (1 h)
   'session.field.ttl':      '43200', // field/kiosk session seconds (12 h shift)

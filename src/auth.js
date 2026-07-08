@@ -106,6 +106,20 @@ async function fieldLogin({ device_id, pin, idempotency_key }) {
   };
 }
 
+// PUBLIC (pre-auth) login config: tells the login UI whether to render the MFA
+// field. Reads the SAME `auth.mfa.required` key that consoleLogin enforces, so
+// the field's visibility and enforcement can never disagree (no half-flip).
+// Pre-auth there is no tenant context, so it resolves the primary (earliest
+// active) tenant — correct for the single-tenant UAT box; enforcement itself
+// always stays per-tenant on the actual login. No secrets in the response.
+async function publicAuthConfig() {
+  // SECURITY DEFINER read (tenant is under RLS; the app role has no company
+  // context pre-auth). Absent row → safe default (field shown).
+  const r = await db.query('SELECT * FROM auth_public_config()');
+  const mfaRequired = r.rows[0] ? r.rows[0].mfa_required !== false : true;
+  return { mfaRequired };
+}
+
 // Session validation — run on every authenticated request.
 async function verifySession(token) {
   if (!token) return null;
@@ -198,6 +212,6 @@ async function performAction(session, action) {
 }
 
 module.exports = {
-  consoleLogin, fieldLogin, verifySession,
+  consoleLogin, fieldLogin, verifySession, publicAuthConfig,
   resetPassword, resetPin, landing, readProfile, performAction,
 };

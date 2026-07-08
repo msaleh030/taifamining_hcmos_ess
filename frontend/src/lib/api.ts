@@ -47,6 +47,9 @@ async function request<Out>(path: string, opts: { method?: string; body?: unknow
 }
 
 export const api = {
+  // Public login config (pre-auth): drives the MFA field's visibility. Same key
+  // the server enforces, so the field and enforcement flip together.
+  authConfig: () => request<{ mfaRequired: boolean }>('/auth/config'),
   async login(email: string, password: string, mfa: string): Promise<T.LoginOut> {
     const out = await request<T.LoginOut>('/auth/console', { method: 'POST', body: { email, password, mfa } });
     session.set({ token: out.token, role: out.role });

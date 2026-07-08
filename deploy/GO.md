@@ -54,6 +54,12 @@ checker is **Viswa Medhuru (R16)** — two dedicated people, no dual-role
 +alias accounts (Kira's revision). Do NOT vest maker+checker in one person;
 the same-user-403 rule never self-blocks with this roster.
 
+> **‼️ SETUP-PHASE MFA (reversible):** during setup the console MFA field is
+> HIDDEN and enforcement is OFF, via the single flag `auth.mfa.required=0`
+> (`MFA_SETUP_PHASE='1'` in the deploy). **UAT week: flip it back** — set
+> `MFA_SETUP_PHASE='0'` and refire (field VISIBLE + enforced, together). Full
+> detail + the impossibility of a half-flip: `deploy/MFA-SETUP-TOGGLE.md`.
+
 SUPER ADMINS (LI-7 — R12, UNSCOPED, MFA mandatory; INTERACTIVE hidden password,
 stored hash-only — never in repo/config/env, never printed; enrol each printed
 otpauth, shown once). `admin@taifamining.tz` is a SUPER ADMIN — **not** an R11
