@@ -45,6 +45,33 @@ test('carry policy values are in the registry: cap 10 days, grace 3 months (do n
   assert.ok(!('leave.carry.lapse_years' in DEFAULT_CONFIG), 'the flat one-year lapse is GONE (replaced)');
 });
 
+// ── Negative opening balance (Omid ruling): persists + nets, never clamped ───
+test('a negative opening balance persists and NETS against entitlement (not clamped to 0)', async () => {
+  const emp = await mkEmployee('Juliana Deficit', '2020-01-10');
+  const uid = (await owner(
+    `INSERT INTO app_user(id, company_id, employee_id, email, password_hash, mfa_secret, role_code, status)
+     VALUES (gen_random_uuid(),$1,$2,'juliana.deficit@a.example','x','x','R01','active') RETURNING id`, [A, emp])).rows[0].id;
+  const sess = { company_id: A, user_id: uid, role_code: 'R01' };
+  try {
+    const entitlement = Number(DEFAULT_CONFIG['leave.entitlement.default'] || 21);
+    // The opening bucket CHECK now allows a negative deficit.
+    await addCarry(emp, -5, 2025, true);
+    assert.equal(await openSum(emp, true), -5, 'negative opening balance persists (was CHECK-rejected before)');
+    const bal = await leave.balance(sess);
+    assert.equal(bal.annual.carried, -5, 'carried reflects the deficit');
+    assert.equal(bal.annual.available, entitlement - 5, 'available NETS the deficit against entitlement — not clamped to 0');
+    assert.ok(bal.annual.available < entitlement, 'the deficit reduces available leave');
+
+    // Guard: a negative on a NORMAL (non-opening) carry row is still rejected —
+    // the FIFO forfeiture/cap sweep assumes non-negative balances.
+    await assert.rejects(addCarry(emp, -3, 2025, false), /leave_carry_days_check|violates check/,
+      'negative is allowed ONLY for the protected opening bucket');
+  } finally {
+    await owner(`DELETE FROM app_user WHERE id=$1`, [uid]);
+    await purge(emp);
+  }
+});
+
 // ── CR-1..CR-5 through a full anniversary cycle ──────────────────────────────
 test('CR-1..CR-5: cap at anniversary, forfeit unused at +3mo, opening exempt, idempotent, audited', async () => {
   // Joined 2020-01-10 → anniversary (cycle 2026) = 2026-01-10; grace end 2026-04-10.

@@ -210,20 +210,24 @@ test('OB-6 loaded employees are created via the app path and visible to a site-s
 test('OB-7 the exception report lists every blocking row with its reasons', async () => {
   const maker = await tok(F.USERS.FINMGR_A);
   const rows = [
-    { pf: '90060001', name: 'Good', site: 'North Mara', accrued: 5, taken: 0, balance: 5 }, // clean
-    { pf: 'xx', name: 'Bad PF', site: 'North Mara', accrued: 5, taken: 0, balance: 5 },      // exception
-    { pf: '90060002', name: 'Neg', site: 'North Mara', accrued: 0, taken: 5, balance: -5 },   // exception (negative + mismatch? -5==0-5 ok, so only negative)
+    { pf: '90060001', name: 'Good', site: 'North Mara', accrued: 5, taken: 0, balance: 5 },  // clean (+5)
+    { pf: 'xx', name: 'Bad PF', site: 'North Mara', accrued: 5, taken: 0, balance: 5 },       // exception (PF)
+    { pf: '90060003', name: 'Mismatch', site: 'North Mara', accrued: 5, taken: 0, balance: 3 }, // exception (balance != accrued-taken)
+    { pf: '90060002', name: 'Neg', site: 'North Mara', accrued: 0, taken: 5, balance: -5 },    // CLEAN now (deficit warning) — Omid ruling; -5 == 0-5
   ];
-  const sub = await post(maker, OBC, { rows, control_totals: [{ site: 'North Mara', count: 1, sum_balance: 5 }] });
+  // Clean rows Good(+5) + Neg(-5) = 0.
+  const sub = await post(maker, OBC, { rows, control_totals: [{ site: 'North Mara', count: 2, sum_balance: 0 }] });
   const batchId = sub.body.batch_id;
   try {
     const rep = await get(maker, `/ingest/batch/${batchId}/exceptions`);
     assert.equal(rep.status, 200);
-    assert.equal(rep.body.count, 2, 'both blocking rows in the report');
+    assert.equal(rep.body.count, 2, 'the two genuinely-blocking rows are in the report (bad PF + mismatch)');
     assert.ok(rep.body.exceptions.every((e) => Array.isArray(e.reasons) && e.reasons.length > 0), 'each names its reasons');
-    assert.ok(rep.body.exceptions.some((e) => e.reasons.join().includes('negative balance')));
+    // The negative balance is NO LONGER an exception — it loads as a deficit.
+    assert.ok(!rep.body.exceptions.some((e) => String(e.pf) === '90060002'),
+      'the negative opening balance loads (deficit), not blocked (Omid ruling)');
   } finally {
-    await purge(['90060001', '90060002'], [batchId]);
+    await purge(['90060001', '90060002', '90060003'], [batchId]);
   }
 });
 

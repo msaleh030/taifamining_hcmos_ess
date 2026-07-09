@@ -101,10 +101,20 @@ prov viswa.medhuru@taifamining.tz   'Viswa Medhuru'  R16 "$HQ_SITE"
 # R12 is UNSCOPED by role config (site_scope.R12=false) — the home site below is
 # only the employee record's anchor; his visibility is All Sites by role.
 prov rajesh.chohan@taifamining.tz   'Rajesh Chohan'  R12 "$HQ_SITE"
-# Acceptance-probe R03 (temporary, clearly named; replaced when Taifa HR sends
-# the four HR Officer names):
+# Acceptance-probe R03 (temporary, clearly named; kept for the confidentiality
+# probe alongside the now-confirmed named officers):
 prov uat.probe.r03@taifamining.tz   'UAT Probe (HR Officer)' R03 "$ANY_SITE"
-echo "PENDING NAMES (provision when Taifa HR confirms): 4x R03, 2x R04, maurice.<surname> R06, richard.<surname> R14"
+# R03 HR Officers — SITE-SCOPED (Baraka/Omid confirmed, 2026-07-09). prov()
+# resolves the site by name; if a site is not on the box yet (loaded from the
+# data), it logs FAILED for that one — re-run after the data load.
+prov yusuph.kabeza@taifamining.tz   'Yusuph Kabeza'    R03 "Mwadui"
+prov ali.mbarouk@taifamining.tz     'Ali Mbarouk'      R03 "$HQ_SITE"       # Head Office
+prov ramadhan.mchomvu@taifamining.tz 'Ramadhan Mchomvu' R03 "Nyanzaga"
+# 4th R03 (North Mara) is HELD: name discrepancy — Baraka 'Advera Speratus' vs
+# roster 'Alvera Salvator' (alvera.salvator@). NOT provisioned until Kira
+# confirms name+email (a wrong name = wrong email = broken login).
+echo "HELD (name discrepancy, Kira to confirm): 4th R03 North Mara — 'Advera Speratus' vs 'Alvera Salvator'"
+echo "PENDING NAMES (provision when Taifa HR confirms): 2x R04, maurice.<surname> R06, richard.<surname> R14"
 # hcmos-run sources the service's EnvironmentFile first — a bare `node`
 # invocation misses PG_OWNER_PW and fails Postgres auth.
 if ! grep -q 'hcmos-run node scripts/provision-super-admin.js' "$CREDS" 2>/dev/null; then

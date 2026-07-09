@@ -61,8 +61,15 @@ function validateOpening(raw, ctx) {
   if (!site_id) exceptions.push(`unknown site "${site}"`);
   if ([balance, accrued, taken].every(Number.isFinite) && Math.abs(balance - (accrued - taken)) > 0.5)
     exceptions.push('balance != accrued - taken (>0.5d)');
-  if (Number.isFinite(balance) && balance < 0) exceptions.push('negative balance');
-  if (Number.isFinite(balance) && balance > ctx.annual) warnings.push(`balance ${balance} exceeds annual entitlement ${ctx.annual} (magnitude)`);
+  // A negative opening balance is a VALID deficit (Omid's ruling, 2026-07-09):
+  // carried as a negative opening bucket that offsets future accrual, never
+  // clamped to zero. It is WARNED (for visibility) not excepted — the
+  // internal-consistency check above still catches garbage. Guard the
+  // magnitude so an implausibly large deficit is still flagged for review.
+  if (Number.isFinite(balance) && balance < 0)
+    warnings.push(`negative opening balance ${balance} — carried as a deficit that nets against future accrual (Omid ruling)`);
+  if (Number.isFinite(balance) && Math.abs(balance) > ctx.annual)
+    warnings.push(`balance ${balance} exceeds annual entitlement ${ctx.annual} (magnitude)`);
 
   return { pf, site_id, matched_employee: null,
     normalized: { pf, name, site, site_id, accrued, taken, balance, year },
