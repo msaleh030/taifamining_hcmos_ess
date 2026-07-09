@@ -127,14 +127,53 @@ echo "SUPER ADMINS (interactive, hidden password — Kira runs on this box):"
 echo "  UAT_COMPANY=$UAT_CO hcmos-run node scripts/provision-super-admin.js mohammed@railgrid.tz"
 echo "  UAT_COMPANY=$UAT_CO hcmos-run node scripts/provision-super-admin.js admin@taifamining.tz"
 
-# ── data load: gated on the files being dropped ───────────────────────────────
-say "data load (838 leave records + North Mara payroll + permits)"
-if ls /root/uat-data/*.csv >/dev/null 2>&1; then
-  echo "found /root/uat-data — load via: node scripts/load-ingest.js ... (see deploy/GO.md §7, maker cecilia+finance / checker omid+cfc)"
+# ── employee master: POPULATE the North Mara directory (285 real employees) ───
+# Identity-only load through the SAME audited maker-checker ingest (maker = Omar
+# R15, checker = Viswa R16). The CSV carries national_id/tin/bank (PII) so it
+# lives ONLY under /root/uat-data — NEVER the repo; this public log prints counts
+# only. Directory-visible: name/position/department/site. Confidential
+# (pay-gated): national_id/tin/bank. Idempotent: a re-run finds the PFs already
+# loaded (exceptions) and changes nothing.
+say "employee master load (North Mara directory: 285 real employees)"
+NM_MASTER=/root/uat-data/northmara-employee-master.csv
+if [ -f "$NM_MASTER" ]; then
+  # Independent control total (from Baraka's source document, NOT derived from
+  # the file): 285 North Mara headcount. A mismatch hard-blocks the commit.
+  echo '[{"site":"North Mara","count":285}]' > /root/uat-data/northmara-employee-master.control.json
+  UAT_COMPANY=$UAT_CO hcmos-run node scripts/load-ingest.js employee-master \
+    "$NM_MASTER" /root/uat-data/northmara-employee-master.control.json \
+    omar.omar@taifamining.tz viswa.medhuru@taifamining.tz --commit \
+    | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{const r=JSON.parse(s.slice(s.indexOf("{")));console.log(`master load: rows=${r.rows} clean=${r.clean} exceptions=${r.exceptions} control_ok=${r.control_ok} committed=${r.committed} loaded=${r.loaded||0}`);}catch(e){console.log(s);}})' \
+    || echo "MASTER LOAD FAILED — see the exception report next to the CSV (northmara-employee-master.csv.exceptions.json)"
 else
-  echo "AWAITING DATA DROP: no /root/uat-data/*.csv on the box. Seeded scaffolding is live;"
-  echo "drop Baraka's files + control.json and run GO.md §7 (loads through the audited ingestion path)."
+  echo "AWAITING CSV: drop northmara-employee-master.csv into /root/uat-data (NEVER the repo — it carries national_id/tin/bank PII)."
+  echo "Then re-run this deploy. Directory-visible: name/position/department/site; confidential (pay-gated): national_id/tin/bank."
 fi
+
+# ── re-attach leave: opening balances now MATCH the master by PF ───────────────
+# Once the master is loaded, an opening-balance load ATTACHES each balance to the
+# real employee record (matched by PF) instead of failing "no employee match".
+say "re-attach leave (opening balances -> real North Mara employees, matched by PF)"
+NM_LEAVE=$(ls /root/uat-data/northmara-leave.csv /root/uat-data/northmara-opening-balance*.csv 2>/dev/null | head -1 || true)
+if [ -n "$NM_LEAVE" ] && [ -f "/root/uat-data/northmara-leave.control.json" ]; then
+  UAT_COMPANY=$UAT_CO hcmos-run node scripts/load-ingest.js opening-balance \
+    "$NM_LEAVE" /root/uat-data/northmara-leave.control.json \
+    omar.omar@taifamining.tz viswa.medhuru@taifamining.tz --commit \
+    | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{const r=JSON.parse(s.slice(s.indexOf("{")));console.log(`leave attach: rows=${r.rows} clean(attached)=${r.clean} no-match(exceptions)=${r.exceptions} committed=${r.committed} loaded=${r.loaded||0}`);}catch(e){console.log(s);}})' \
+    || echo "LEAVE LOAD FAILED — see the exception report next to the CSV"
+else
+  echo "AWAITING CSV: drop northmara-leave.csv + northmara-leave.control.json into /root/uat-data."
+  echo "Balances whose PF is in the master ATTACH to that employee; unmatched PFs report as 'no employee match'."
+fi
+
+# ── VERIFY IT'S ALIVE: the directory Omid (R11, central) sees for North Mara ──
+say "directory headcount (what Omid R11 sees for North Mara)"
+sudo -u postgres psql -d hcmos -Atc "
+  SELECT 'North Mara directory rows: ' || count(*) ||
+         ' (master-loaded, position set: ' ||
+         count(*) FILTER (WHERE position IS NOT NULL) || ')'
+    FROM employee e JOIN site s ON s.id=e.site_id
+   WHERE e.company_id='$UAT_CO' AND s.name='North Mara'"
 
 # ── expat classification (is_expat + permit_type) — gated on the CSV drop ────
 say "expat classification (61-name authoritative list -> is_expat + permit_type)"

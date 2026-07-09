@@ -23,7 +23,13 @@ const { HttpError } = require('./errors');
 const round2 = (x) => Math.round(x * 100) / 100;
 const norm = (s) => String(s == null ? '' : s).trim();
 const num = (v) => { const n = Number(String(v == null ? '' : v).replace(/,/g, '').trim()); return Number.isFinite(n) ? n : NaN; };
-const KINDS = ['opening_balance', 'permit'];
+// Identity strings (national_id/tin) may arrive with a spreadsheet's text-guard
+// leading apostrophe (e.g. '19740225…) — strip it; keep the value otherwise verbatim.
+const idstr = (s) => norm(s).replace(/^'/, '');
+// A hire-date arrives as an Excel timestamp ("2022-01-13 19:25:45[.ffffff]");
+// keep the calendar date for joined_at, drop the time. Returns null if unparseable.
+const asDate = (s) => { const m = /^(\d{4}-\d{2}-\d{2})/.exec(norm(s)); return m ? m[1] : null; };
+const KINDS = ['opening_balance', 'permit', 'employee_master'];
 
 async function siteMap(exec) {
   const r = await exec.query('SELECT id, name FROM site');
@@ -52,15 +58,21 @@ function validateOpening(raw, ctx) {
   const year = Number.isFinite(num(raw.year)) ? num(raw.year) : ctx.openingYear;
   const site_id = ctx.sites.get(site.toUpperCase()) || null;
   const exceptions = [], warnings = [];
+  // ATTACH-BY-PF: once the employee master is loaded, a balance whose PF already
+  // exists ATTACHES to that real employee record (not a duplicate, not an
+  // exception). A PF with no employee still CREATES one (greenfield path), so a
+  // balances-only load keeps working. This is what re-attaches the North Mara
+  // leave to the master records instead of failing "no employee match".
+  const matched = pf && ctx.existing.has(pf) ? ctx.existing.get(pf) : null;
 
   if (!/^\d+$/.test(pf)) exceptions.push('PF not numeric');
   else if ((ctx.pfCount.get(pf) || 0) > 1) exceptions.push('duplicate PF within batch');
-  else if (ctx.existing.has(pf)) exceptions.push('PF already loaded (cross-file duplicate)');
   if (!name) exceptions.push('name missing');
   if (!Number.isFinite(balance)) exceptions.push('balance missing');
   if (!site_id) exceptions.push(`unknown site "${site}"`);
   if ([balance, accrued, taken].every(Number.isFinite) && Math.abs(balance - (accrued - taken)) > 0.5)
     exceptions.push('balance != accrued - taken (>0.5d)');
+  if (matched) warnings.push('attaching to an existing employee (matched by PF)');
   // A negative opening balance is a VALID deficit (Omid's ruling, 2026-07-09):
   // carried as a negative opening bucket that offsets future accrual, never
   // clamped to zero. It is WARNED (for visibility) not excepted — the
@@ -71,8 +83,36 @@ function validateOpening(raw, ctx) {
   if (Number.isFinite(balance) && Math.abs(balance) > ctx.annual)
     warnings.push(`balance ${balance} exceeds annual entitlement ${ctx.annual} (magnitude)`);
 
-  return { pf, site_id, matched_employee: null,
+  return { pf, site_id, matched_employee: matched,
     normalized: { pf, name, site, site_id, accrued, taken, balance, year },
+    exceptions, warnings, status: exceptions.length ? 'exception' : 'clean' };
+}
+
+// ── Employee-master validation ──────────────────────────────────────────────
+// Identity-only load that POPULATES the directory (name / position / department /
+// site are directory-visible; national_id / tin / bank are confidential, loaded
+// behind the pay gate). One-time create keyed on PF: a PF that already exists is
+// an exception (never a silent duplicate). Missing national_id / position are a
+// completeness punch-list (WARN, load anyway), not a block.
+function validateEmployee(raw, ctx) {
+  const pf = norm(raw.pf), name = norm(raw.name), site = norm(raw.site);
+  const position = norm(raw.position), dept = norm(raw.department || raw.dept);
+  const hire_date = asDate(raw.hire_date || raw.joined_at);
+  const national_id = idstr(raw.national_id), tin = idstr(raw.tin), bank = norm(raw.bank);
+  const site_id = ctx.sites.get(site.toUpperCase()) || null;
+  const exceptions = [], warnings = [];
+
+  if (!/^\d+$/.test(pf)) exceptions.push('PF not numeric');
+  else if ((ctx.pfCount.get(pf) || 0) > 1) exceptions.push('duplicate PF within batch');
+  else if (ctx.existing.has(pf)) exceptions.push('PF already loaded (employee exists)');
+  if (!name) exceptions.push('name missing');
+  if (!site_id) exceptions.push(`unknown site "${site}"`);
+  if (norm(raw.hire_date || raw.joined_at) && !hire_date) warnings.push(`unparseable hire_date "${norm(raw.hire_date)}" — loaded without a join date`);
+  if (!position) warnings.push('position (job title) missing — completeness punch-list');
+  if (!national_id) warnings.push('national_id missing — completeness punch-list');
+
+  return { pf, site_id, matched_employee: null,
+    normalized: { pf, name, site, site_id, position, dept, hire_date, national_id, tin, bank },
     exceptions, warnings, status: exceptions.length ? 'exception' : 'clean' };
 }
 
@@ -97,7 +137,8 @@ async function validatePermit(raw, ctx, exec) {
 }
 
 // Control totals over the CLEAN rows. opening_balance: per-site {count,sum_balance}
-// keyed by site name; permit: a single {count}.
+// keyed by site name; employee_master: per-site {count} (a headcount check, no
+// sum); permit: a single {count}.
 function computeControl(kind, cleanRows) {
   if (kind === 'permit') return { ALL: { count: cleanRows.length } };
   const by = {};
@@ -105,13 +146,13 @@ function computeControl(kind, cleanRows) {
     const k = norm(r.normalized.site).toUpperCase();
     by[k] = by[k] || { count: 0, sum_balance: 0 };
     by[k].count += 1;
-    by[k].sum_balance = round2(by[k].sum_balance + r.normalized.balance);
+    if (kind === 'opening_balance') by[k].sum_balance = round2(by[k].sum_balance + r.normalized.balance);
   }
   return by;
 }
 
-// Normalise a caller's supplied control totals ([{site,count,sum_balance}] or the
-// permit {count}) into the same shape computeControl produces.
+// Normalise a caller's supplied control totals ([{site,count[,sum_balance]}] or
+// the permit {count}) into the same shape computeControl produces.
 function normSupplied(kind, supplied) {
   if (kind === 'permit') return { ALL: { count: Number((supplied && supplied.count) || 0) } };
   const by = {};
@@ -145,7 +186,10 @@ async function evaluate(exec, companyId, kind, rows) {
 
   const results = [];
   for (let i = 0; i < rows.length; i++) {
-    const res = kind === 'permit' ? await validatePermit(rows[i], ctx, exec) : validateOpening(rows[i], ctx);
+    let res;
+    if (kind === 'permit') res = await validatePermit(rows[i], ctx, exec);
+    else if (kind === 'employee_master') res = validateEmployee(rows[i], ctx);
+    else res = validateOpening(rows[i], ctx);
     results.push({ row_no: i + 1, ...res });
   }
   return results;
@@ -238,12 +282,44 @@ async function approve(session, kind, body, opts = {}) {
       const r = cleanRows[i];
       const nzd = r.normalized;
       if (opts.faultStep === 'mid_batch' && i === 1) throw new Error('injected fault (test)');
-      if (kind === 'opening_balance') {
-        // OB-6: create the employee through the application path (site-scoped).
-        const empId = await employees.create(c, session.company_id,
-          { legacy_id: r.pf, full_name: nzd.name, site_id: r.site_id, role_code: 'R01', status: 'active' });
+      if (kind === 'employee_master') {
+        // EM: create the employee through the application path (site-scoped,
+        // directory-visible). PF is the legacy number AND emp_no.
+        const empId = await employees.create(c, session.company_id, {
+          legacy_id: nzd.pf, emp_no: nzd.pf, full_name: nzd.name, site_id: r.site_id,
+          dept: nzd.dept, position: nzd.position, joined_at: nzd.hire_date,
+          role_code: 'R01', status: 'active',
+        });
+        // Confidential identity (national_id / tin / bank) → employee_pay, behind
+        // the pay gate. Only write the row when there is something to protect, so
+        // "no confidential data" stays "no row" (C5: absent, not null-flagged).
+        if (nzd.national_id || nzd.tin || nzd.bank) {
+          await c.query(
+            `INSERT INTO employee_pay (employee_id, company_id, bank_name, national_id, tin)
+             VALUES ($1,$2,$3,$4,$5)`,
+            [empId, session.company_id, nzd.bank || null, nzd.national_id || null, nzd.tin || null]);
+        }
+      } else if (kind === 'opening_balance') {
+        // ATTACH-BY-PF (re-attach leave to the master): if the employee already
+        // exists, attach the balance to that real record — idempotently, so a
+        // re-run of the same year's opening bucket UPDATES it rather than doubling.
+        // No match → create the employee (greenfield balances-only load).
+        let empId = r.matched_employee;
+        let attached = false;
+        if (empId) {
+          const upd = await c.query(
+            `UPDATE leave_carry SET days=$4, lapsed_at=NULL
+              WHERE company_id=$1 AND employee_id=$2 AND opening_bucket=true AND carried_for_year=$3`,
+            [session.company_id, empId, nzd.year, nzd.balance]);
+          attached = upd.rowCount > 0;
+        } else {
+          // OB-6: create the employee through the application path (site-scoped).
+          empId = await employees.create(c, session.company_id,
+            { legacy_id: nzd.pf, full_name: nzd.name, site_id: r.site_id, role_code: 'R01', status: 'active' });
+        }
         // OB-5: opening balance → protected opening bucket, exempt from the lapse.
-        await c.query(
+        // (Only INSERT when we did not update an existing same-year bucket.)
+        if (!attached) await c.query(
           `INSERT INTO leave_carry (company_id, employee_id, days, carried_for_year, opening_bucket)
            VALUES ($1,$2,$3,$4,true)`, [session.company_id, empId, nzd.balance, nzd.year]);
       } else {

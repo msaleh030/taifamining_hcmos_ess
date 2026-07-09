@@ -15,8 +15,9 @@ const isUuid = (s) => typeof s === 'string' && UUID_RE.test(s);
 // Fields a maker may propose a change to (whitelist → safe to interpolate).
 const EDITABLE_FIELDS = new Set(['phone', 'email', 'dept', 'home_address', 'full_name']);
 
-// Directory list columns (non-confidential).
-const LIST_COLS = 'id, emp_no, full_name, role_code, site_id, dept, status, phone, email';
+// Directory list columns (non-confidential). `position` (job title) is
+// directory-visible alongside name/dept/site (identity, not pay/PII).
+const LIST_COLS = 'id, emp_no, full_name, role_code, site_id, dept, position, status, phone, email';
 
 async function directoryDenied(companyId, role) {
   const deny = await cfg.getRoleSet(companyId, 'directory.deny.roles', 'R12,R13,R15,R16');
@@ -258,10 +259,10 @@ async function create(exec, companyId, data = {}) {
   const role_code = data.role_code || 'R01';
   const status = data.status || 'active';
   const r = await exec.query(
-    `INSERT INTO employee (company_id, full_name, emp_no, legacy_id, role_code, site_id, dept, status, phone, email, joined_at)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING id`,
+    `INSERT INTO employee (company_id, full_name, emp_no, legacy_id, role_code, site_id, dept, position, status, phone, email, joined_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING id`,
     [companyId, full_name, data.emp_no || null, data.legacy_id || null, role_code, data.site_id,
-     data.dept || null, status, data.phone || null, data.email || null, data.joined_at || null]);
+     data.dept || null, data.position || null, status, data.phone || null, data.email || null, data.joined_at || null]);
   return r.rows[0].id;
 }
 

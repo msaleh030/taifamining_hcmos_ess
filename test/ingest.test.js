@@ -29,6 +29,7 @@ async function purge(pfs, batchIds = []) {
       await owner(`DELETE FROM leave_carry_sweep WHERE employee_id=$1`, [e.id]);
       await owner(`DELETE FROM leave_carry WHERE employee_id=$1`, [e.id]);
       await owner(`DELETE FROM employee_document WHERE employee_id=$1`, [e.id]);
+      await owner(`DELETE FROM employee_pay WHERE employee_id=$1`, [e.id]);
       await owner(`DELETE FROM employee WHERE id=$1`, [e.id]);
     }
   }
@@ -228,6 +229,122 @@ test('OB-7 the exception report lists every blocking row with its reasons', asyn
       'the negative opening balance loads (deficit), not blocked (Omid ruling)');
   } finally {
     await purge(['90060001', '90060002', '90060003'], [batchId]);
+  }
+});
+
+// ── EM: employee-master load populates the directory; identity gated correctly ─
+const EMP = '/ingest/employee-master/preview';
+const EMC = '/ingest/employee-master/commit';
+test('EM-1 employee-master load creates directory-visible employees; identity columns land; confidential fields gated', async () => {
+  const maker = await tok(F.USERS.FINMGR_A);
+  const checker = await tok(F.USERS.CFC_A);
+  const rows = [
+    { pf: '95000001', name: 'Zznm Alpha Master', site: 'North Mara', position: 'ADT Operator',
+      department: 'Production', hire_date: '2022-01-13 19:25:45', national_id: '19770205-16113-00001-20',
+      tin: '116013487', bank: 'CRDB BANK LTD Azikiwe' },
+    { pf: '95000002', name: 'Zznm Beta Master', site: 'North Mara', position: 'Boiler Maker',
+      department: 'PLI & PED', hire_date: '2023-03-01 13:50:50', national_id: '',  // blank → warn, load anyway
+      tin: '', bank: 'CRDB BANK LTD Lumumba' },
+  ];
+  const control_totals = [{ site: 'North Mara', count: 2 }];
+  // preview: clean split + warnings for the blank national_id
+  const prev = await post(maker, EMP, { rows, control_totals });
+  assert.equal(prev.body.clean_count, 2);
+  assert.equal(prev.body.control.ok, true, 'headcount control (285-style) reconciles');
+  assert.ok(prev.body.clean.some((r) => r.warnings.join().includes('national_id missing')), 'blank national_id is a punch-list warning, not a block');
+
+  const sub = await post(maker, EMC, { rows, control_totals });
+  const batchId = sub.body.batch_id;
+  try {
+    const appr = await post(checker, EMC, { batch_id: batchId });
+    assert.equal(appr.body.status, 'committed');
+    assert.equal(appr.body.loaded, 2);
+
+    const e = await empByPf('95000001');
+    assert.ok(e && e.site_id === F.SITE.A1, 'employee created, scoped to North Mara');
+    const row = (await owner(
+      `SELECT emp_no, position, dept, joined_at::text jd FROM employee WHERE id=$1`, [e.id])).rows[0];
+    assert.equal(row.emp_no, '95000001', 'PF is the emp_no');
+    assert.equal(row.position, 'ADT Operator', 'position (job title) stored');
+    assert.equal(row.dept, 'Production', 'department stored');
+    assert.equal(row.jd, '2022-01-13', 'hire_date time-portion dropped to a join date');
+    const pay = (await owner(
+      `SELECT bank_name, national_id, tin FROM employee_pay WHERE employee_id=$1`, [e.id])).rows[0];
+    assert.equal(pay.bank_name, 'CRDB BANK LTD Azikiwe', 'bank stored confidentially');
+    assert.equal(pay.national_id, '19770205-16113-00001-20');
+    assert.equal(pay.tin, '116013487');
+
+    // DIRECTORY: a site-scoped HR user (R03 @ North Mara) sees the loaded rows
+    // with position, but NOT the confidential identity.
+    const dir = await get(await tok(F.USERS.HR_A), '/employees?q=Zznm');
+    assert.equal(dir.status, 200);
+    const listed = dir.body.rows.find((r) => r.id === e.id);
+    assert.ok(listed, 'the loaded employee is in the directory');
+    assert.equal(listed.position, 'ADT Operator', 'position is directory-visible');
+    assert.ok(!('national_id' in listed) && !('tin' in listed) && !('bank_name' in listed), 'confidential identity absent from the directory row');
+
+    // PROFILE: R03 (no pay gate) — confidential identity ABSENT (not masked).
+    const asHr = await get(await tok(F.USERS.HR_A), `/employees/${e.id}`);
+    assert.equal(asHr.body.position, 'ADT Operator');
+    assert.ok(!('national_id' in asHr.body) && !('tin' in asHr.body) && !('bank_name' in asHr.body),
+      'C5: a role without the pay gate never sees the key at all');
+    // PROFILE: R07 (payroll, pay gate) — confidential identity PRESENT.
+    const asPay = await get(await tok(F.USERS.PAYROLL_A), `/employees/${e.id}`);
+    assert.equal(asPay.body.national_id, '19770205-16113-00001-20', 'pay-gated role sees national_id');
+    assert.equal(asPay.body.tin, '116013487', 'pay-gated role sees tin');
+    assert.equal(asPay.body.bank_name, 'CRDB BANK LTD Azikiwe', 'pay-gated role sees bank');
+  } finally {
+    await purge(['95000001', '95000002'], [batchId]);
+  }
+});
+
+test('EM-2 a duplicate PF (employee already exists) is an exception, never a silent duplicate', async () => {
+  const maker = await tok(F.USERS.FINMGR_A);
+  const checker = await tok(F.USERS.CFC_A);
+  const rows = [{ pf: '95020001', name: 'Zznm Dup Master', site: 'North Mara', position: 'X', department: 'Admin', hire_date: '2020-01-01' }];
+  const sub = await post(maker, EMC, { rows, control_totals: [{ site: 'North Mara', count: 1 }] });
+  const batchId = sub.body.batch_id;
+  try {
+    await post(checker, EMC, { batch_id: batchId });
+    // Re-loading the SAME PF now that the employee exists → exception, not a dup.
+    const prev = await post(maker, EMP, { rows, control_totals: [{ site: 'North Mara', count: 0 }] });
+    assert.equal(prev.body.exception_count, 1);
+    assert.ok(prev.body.exceptions[0].exceptions.join().includes('PF already loaded'));
+  } finally {
+    await purge(['95020001'], [batchId]);
+  }
+});
+
+// ── Re-attach: opening balances match the master by PF instead of failing ─────
+test('EM-3 after the master load, an opening-balance load ATTACHES to the existing employee (no duplicate) and is idempotent', async () => {
+  const maker = await tok(F.USERS.FINMGR_A);
+  const checker = await tok(F.USERS.CFC_A);
+  // 1) master creates the employee (no balance yet)
+  const emRows = [{ pf: '95010001', name: 'Zznm Attach Master', site: 'North Mara', position: 'Mechanic', department: 'PLI & PED', hire_date: '2021-05-01' }];
+  const emSub = await post(maker, EMC, { rows: emRows, control_totals: [{ site: 'North Mara', count: 1 }] });
+  await post(checker, EMC, { batch_id: emSub.body.batch_id });
+  const e = await empByPf('95010001');
+  const empCount = async () => Number((await owner(`SELECT count(*)::int n FROM employee WHERE legacy_id='95010001'`)).rows[0].n);
+  const carrySum = async () => Number((await owner(
+    `SELECT coalesce(sum(days),0)::float8 d FROM leave_carry WHERE employee_id=$1 AND opening_bucket=true`, [e.id])).rows[0].d);
+  const obRows = [{ pf: '95010001', name: 'Zznm Attach Master', site: 'North Mara', accrued: 12, taken: 0, balance: 12 }];
+  const obCtl = [{ site: 'North Mara', count: 1, sum_balance: 12 }];
+  try {
+    // 2) opening-balance load matches PF → attaches to the SAME employee
+    const obSub = await post(maker, OBC, { rows: obRows, control_totals: obCtl });
+    assert.ok(obSub.body.clean_count === 1, 'the balance is clean (matched), not a no-employee-match exception');
+    const obAppr = await post(checker, OBC, { batch_id: obSub.body.batch_id });
+    assert.equal(obAppr.body.loaded, 1);
+    assert.equal(await empCount(), 1, 'no duplicate employee created — attached to the master record');
+    assert.equal(await carrySum(), 12, 'balance attached to the opening bucket');
+
+    // 3) idempotent re-run for the SAME year nets (replaces), does not double
+    const obSub2 = await post(maker, OBC, { rows: obRows, control_totals: obCtl });
+    await post(checker, OBC, { batch_id: obSub2.body.batch_id });
+    assert.equal(await empCount(), 1, 'still one employee');
+    assert.equal(await carrySum(), 12, 're-run replaced the same-year opening bucket, not doubled to 24');
+  } finally {
+    await purge(['95010001'], [emSub.body.batch_id]);
   }
 });
 

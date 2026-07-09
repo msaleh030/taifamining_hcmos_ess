@@ -15,19 +15,24 @@
 // CSV headers (case-insensitive):
 //   opening-balance → pf,name,site,accrued,taken,balance[,year]
 //   permits         → pf,name,permit,expiry
+//   employee-master → pf,name,site,position,department,hire_date,national_id,tin,bank
 // control.json (expected totals, independent of the CSV):
 //   opening-balance → [{"site":"North Mara","count":2,"sum_balance":25}, …]
 //   permits         → {"count": 12}
+//   employee-master → [{"site":"North Mara","count":285}]   (headcount per site)
 const fs = require('node:fs');
 const db = require('../src/db');
 const cfg = require('../src/config');
 const exact = require('../src/exact');
 const ingest = require('../src/ingest');
 
-const KIND_ALIAS = { 'opening-balance': 'opening_balance', opening_balance: 'opening_balance', permits: 'permit', permit: 'permit' };
+const KIND_ALIAS = { 'opening-balance': 'opening_balance', opening_balance: 'opening_balance', permits: 'permit', permit: 'permit',
+  'employee-master': 'employee_master', employee_master: 'employee_master', employees: 'employee_master' };
 const HEADERS = {
   opening_balance: { pf: 'pf', name: 'name', site: 'site', accrued: 'accrued', taken: 'taken', balance: 'balance', year: 'year' },
   permit: { pf: 'pf', name: 'name', permit: 'permit', permit_name: 'permit', expiry: 'expiry', valid_until: 'expiry' },
+  employee_master: { pf: 'pf', name: 'name', site: 'site', position: 'position', department: 'department', dept: 'department',
+    hire_date: 'hire_date', joined_at: 'hire_date', national_id: 'national_id', tin: 'tin', bank: 'bank' },
 };
 
 function parseFile(kind, csvPath) {
@@ -89,7 +94,7 @@ async function main() {
   const commit = args.includes('--commit');
   const [kind, csvPath, controlPath, makerEmail, checkerEmail] = args.filter((a) => a !== '--commit');
   if (!kind || !csvPath || !controlPath || !makerEmail || !checkerEmail) {
-    console.error('usage: node scripts/load-ingest.js <opening-balance|permits> <data.csv> <control.json> <maker-email> <checker-email> [--commit]');
+    console.error('usage: node scripts/load-ingest.js <opening-balance|permits|employee-master> <data.csv> <control.json> <maker-email> <checker-email> [--commit]');
     process.exit(2);
   }
   const res = await runLoad({ kind, csvPath, controlPath, makerEmail, checkerEmail, commit });

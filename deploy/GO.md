@@ -91,9 +91,33 @@ Follow `deploy/cloudflare-edge.md`:
   the foot of `deploy/backup.sh`) and record it.
 
 ## 7. Real data  (→ I-5 full)
-Drop the **340 opening balances + permit files** (CSV) on the box, prepare a
+
+### 7a. Employee master — populate the directory FIRST
+The directory/leave/overview screens read the `employee` table; load the real
+master **before** balances so leave attaches to real records. Drop
+`northmara-employee-master.csv` (headers `pf,name,site,position,department,
+hire_date,national_id,tin,bank`) into `/root/uat-data` — **PII (national_id/tin/
+bank), NEVER the repo.** The deploy auto-loads it when present (maker Omar R15 /
+checker Viswa R16, independent control = 285 North Mara headcount) and prints
+counts only. By hand:
+```
+echo '[{"site":"North Mara","count":285}]' > /root/uat-data/northmara-employee-master.control.json
+UAT_COMPANY=11111111-1111-1111-1111-111111111111 hcmos-run node scripts/load-ingest.js \
+  employee-master /root/uat-data/northmara-employee-master.csv \
+  /root/uat-data/northmara-employee-master.control.json \
+  omar.omar@taifamining.tz viswa.medhuru@taifamining.tz --commit
+```
+Directory-visible: **name / position / department / site**. Confidential
+(pay-gated, same as pay/bank — visible only to R07/R11/R15/R16): **national_id /
+tin / bank**. Blank national_id (45 rows) + blank position (1 row) load anyway as
+a completeness punch-list (warnings, not blocks).
+
+### 7b. Opening balances — now ATTACH to the master by PF
+Drop the **opening balances + permit files** (CSV) on the box, prepare a
 `control.json` with the EXPECTED totals **from the source document** (independent
-check), then load through the ingestion discipline via the loader:
+check), then load through the ingestion discipline via the loader. A balance
+whose PF is in the master **attaches** to that employee (no duplicate); an
+unmatched PF reports as `no employee match`:
 ```
 cd /opt/hcmos; set -a; . /etc/hcmos/hcmos.env; set +a
 # dry-run first — prints clean/exception split + control check, loads NOTHING:

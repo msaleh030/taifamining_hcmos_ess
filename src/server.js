@@ -296,6 +296,14 @@ const routes = [
       const opts = process.env.NODE_ENV !== 'production' && body.faultStep ? { faultStep: body.faultStep } : {};
       return { status: 200, body: await ingest.commit(s, 'permit', body, opts) };
     } },
+  { method: 'POST', pattern: /^\/ingest\/employee-master\/preview$/, allow: 'ingest.roles',
+    handler: async (req, m, url, s) => ({ status: 200, body: await ingest.preview(s, 'employee_master', await readJson(req)) }) },
+  { method: 'POST', pattern: /^\/ingest\/employee-master\/commit$/, allow: 'ingest.roles',
+    handler: async (req, m, url, s) => {
+      const body = await readJson(req);
+      const opts = process.env.NODE_ENV !== 'production' && body.faultStep ? { faultStep: body.faultStep } : {};
+      return { status: 200, body: await ingest.commit(s, 'employee_master', body, opts) };
+    } },
   { method: 'GET', pattern: /^\/ingest\/batch\/([0-9a-f-]+)\/exceptions$/i, allow: 'ingest.roles',
     handler: async (req, m, url, s) => ({ status: 200, body: await ingest.exceptionReport(s, m[1]) }) },
 ];

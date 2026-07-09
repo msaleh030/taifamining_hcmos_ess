@@ -8,9 +8,10 @@
 // query is issued against employee_pay / employee_medical for that read.
 const cfg = require('./config');
 
-// Non-confidential directory/profile fields — always present.
+// Non-confidential directory/profile fields — always present. `position` (job
+// title) is directory-visible identity, like dept/site.
 const BASE_FIELDS = [
-  'id', 'emp_no', 'full_name', 'role_code', 'site_id', 'dept', 'status',
+  'id', 'emp_no', 'full_name', 'role_code', 'site_id', 'dept', 'position', 'status',
   'phone', 'email', 'home_address', 'joined_at',
 ];
 
@@ -33,9 +34,12 @@ async function assembleProfile(client, session, emp) {
 
   if (sets.pay.has(role)) {
     const r = await client.query(
-      'SELECT basic_pay, bank_name, bank_account FROM employee_pay WHERE employee_id=$1', [emp.id]);
-    const row = r.rows[0] || { basic_pay: null, bank_name: null, bank_account: null };
+      'SELECT basic_pay, bank_name, bank_account, national_id, tin FROM employee_pay WHERE employee_id=$1', [emp.id]);
+    const row = r.rows[0] || { basic_pay: null, bank_name: null, bank_account: null, national_id: null, tin: null };
     out.basic_pay = row.basic_pay; out.bank_name = row.bank_name; out.bank_account = row.bank_account;
+    // national_id + TIN are government identity numbers — confidential, behind
+    // the SAME pay gate as bank/pay data (not directory-visible).
+    out.national_id = row.national_id; out.tin = row.tin;
   }
 
   if (sets.medical.has(role)) {
