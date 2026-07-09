@@ -55,6 +55,7 @@ const DEFAULT_CONFIG = {
   // v1.5 LI-5 (OPEN): R03 added (HR Officer absorbs clinic/medical), R10 removed.
   'a3.medical.roles':      'R03,R06',      // v1.6: R05 absorbed by R06 (SHEQ Manager)
   'a3.disciplinary.roles': 'R06,R07,R11',  // v1.6: R05 absorbed by R06
+  'a3.national_id.roles':  'R03,R04,R07,R11', // Kira 2026-07-09: core HR identifier — HR-visible, NOT pay-gated (tin/bank stay pay)
 
   // Roles with NO directory access at all (server returns 403 on /employees*).
   // v1.5: R08/R09 retired; the finance class (R15/R16) stays directory-denied

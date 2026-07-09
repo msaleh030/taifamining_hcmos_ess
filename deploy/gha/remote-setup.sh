@@ -127,6 +127,17 @@ echo "SUPER ADMINS (interactive, hidden password — Kira runs on this box):"
 echo "  UAT_COMPANY=$UAT_CO hcmos-run node scripts/provision-super-admin.js mohammed@railgrid.tz"
 echo "  UAT_COMPANY=$UAT_CO hcmos-run node scripts/provision-super-admin.js admin@taifamining.tz"
 
+# ── scaffold purge: North-Mara-ONLY, Kira-authorized 2026-07-09 ───────────────
+# Clears the SYNTHETIC seed rows so the real master IS the directory. Strictly
+# scoped + fail-closed (see scripts/purge-nm-scaffold.js): only North Mara rows
+# with position NULL, a non-numeric/absent legacy_id (seed 'E00001' style — every
+# real load carries a numeric PF), and NO app_user link. One transaction, row-set
+# re-verified before any delete, audited on the hash-chain. Idempotent: a re-run
+# finds 0 candidates.
+say "scaffold purge (North-Mara-only synthetic seed rows — Kira-authorized)"
+UAT_COMPANY=$UAT_CO hcmos-run node scripts/purge-nm-scaffold.js \
+  || { echo "PURGE REFUSED — nothing deleted (fail-closed); see the reason above"; }
+
 # ── employee master: POPULATE the North Mara directory (285 real employees) ───
 # Identity-only load through the SAME audited maker-checker ingest (maker = Omar
 # R15, checker = Viswa R16). The CSV carries national_id/tin/bank (PII) so it
@@ -166,14 +177,46 @@ else
   echo "Balances whose PF is in the master ATTACH to that employee; unmatched PFs report as 'no employee match'."
 fi
 
-# ── VERIFY IT'S ALIVE: the directory Omid (R11, central) sees for North Mara ──
-say "directory headcount (what Omid R11 sees for North Mara)"
-sudo -u postgres psql -d hcmos -Atc "
-  SELECT 'North Mara directory rows: ' || count(*) ||
-         ' (master-loaded, position set: ' ||
-         count(*) FILTER (WHERE position IS NOT NULL) || ')'
-    FROM employee e JOIN site s ON s.id=e.site_id
-   WHERE e.company_id='$UAT_CO' AND s.name='North Mara'"
+# ── VERIFY IT'S ALIVE: log in AS OMID and count what HE sees via the real API ─
+# This is the honest verification: not a DB count, but Omid's actual session
+# paging the actual /employees endpoint (R11 = Head of HR, central, all sites).
+# It also reports his login state on every run (Kira: confirm he can
+# authenticate BEFORE we rely on "Omid sees the directory").
+say "Omid's directory (login as omid.karambeck@ + page /employees for North Mara)"
+NM_SITE_ID=$(sudo -u postgres psql -d hcmos -Atc \
+  "SELECT id FROM site WHERE company_id='$UAT_CO' AND name='North Mara' LIMIT 1")
+NM_SITE_ID=$NM_SITE_ID node - <<'EOF'
+const fs = require('fs');
+const creds = fs.readFileSync('/root/uat-credentials.txt', 'utf8');
+// Newest password per email (the matrix accumulates across deploys).
+const re = /email\s*:\s*(\S+)[\s\S]*?password\s*:\s*(\S+)/g;
+const latest = new Map(); let m;
+while ((m = re.exec(creds))) latest.set(m[1], m[2]);
+const password = latest.get('omid.karambeck@taifamining.tz');
+const T = () => AbortSignal.timeout(10000);
+(async () => {
+  if (!password) { console.log('OMID LOGIN: NO CREDENTIALS in the matrix — provision step missing?'); process.exit(1); }
+  const login = await fetch('http://127.0.0.1:3000/auth/console', {
+    method: 'POST', headers: { 'content-type': 'application/json' }, signal: T(),
+    body: JSON.stringify({ email: 'omid.karambeck@taifamining.tz', password }), // MFA off (setup phase)
+  });
+  if (login.status !== 200) {
+    console.log(`OMID LOGIN: FAILED (${login.status}) — fix before relying on directory verification`);
+    process.exit(1);
+  }
+  console.log('OMID LOGIN: OK (email+password, MFA off in setup phase)');
+  const token = (await login.json()).token;
+  let cursor = null, total = 0, withPosition = 0;
+  do {
+    const url = `http://127.0.0.1:3000/employees?limit=200&site=${process.env.NM_SITE_ID}` +
+      (cursor ? `&cursor=${encodeURIComponent(cursor)}` : '');
+    const page = await (await fetch(url, { headers: { authorization: 'Bearer ' + token }, signal: T() })).json();
+    for (const r of page.rows) { total++; if (r.position) withPosition++; }
+    cursor = page.next_cursor;
+  } while (cursor);
+  console.log(`OMID SEES: ${total} North Mara directory rows (${withPosition} with position = master-loaded)`);
+})().catch((e) => { console.error('OMID PROBE ERROR:', e.message); process.exit(1); });
+EOF
 
 # ── expat classification (is_expat + permit_type) — gated on the CSV drop ────
 say "expat classification (61-name authoritative list -> is_expat + permit_type)"

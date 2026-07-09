@@ -283,14 +283,16 @@ test('EM-1 employee-master load creates directory-visible employees; identity co
     assert.equal(listed.position, 'ADT Operator', 'position is directory-visible');
     assert.ok(!('national_id' in listed) && !('tin' in listed) && !('bank_name' in listed), 'confidential identity absent from the directory row');
 
-    // PROFILE: R03 (no pay gate) — confidential identity ABSENT (not masked).
+    // PROFILE: R03 (HR tier, Kira 2026-07-09) — national_id VISIBLE (core HR
+    // identifier); tin/bank remain pay-gated and ABSENT (not masked).
     const asHr = await get(await tok(F.USERS.HR_A), `/employees/${e.id}`);
     assert.equal(asHr.body.position, 'ADT Operator');
-    assert.ok(!('national_id' in asHr.body) && !('tin' in asHr.body) && !('bank_name' in asHr.body),
-      'C5: a role without the pay gate never sees the key at all');
-    // PROFILE: R07 (payroll, pay gate) — confidential identity PRESENT.
+    assert.equal(asHr.body.national_id, '19770205-16113-00001-20', 'national_id is HR-visible (R03 and up)');
+    assert.ok(!('tin' in asHr.body) && !('bank_name' in asHr.body) && !('basic_pay' in asHr.body),
+      'C5: tin/bank/pay stay behind the pay gate — absent for R03, never masked');
+    // PROFILE: R07 (payroll, pay gate) — sees everything.
     const asPay = await get(await tok(F.USERS.PAYROLL_A), `/employees/${e.id}`);
-    assert.equal(asPay.body.national_id, '19770205-16113-00001-20', 'pay-gated role sees national_id');
+    assert.equal(asPay.body.national_id, '19770205-16113-00001-20', 'payroll sees national_id');
     assert.equal(asPay.body.tin, '116013487', 'pay-gated role sees tin');
     assert.equal(asPay.body.bank_name, 'CRDB BANK LTD Azikiwe', 'pay-gated role sees bank');
   } finally {

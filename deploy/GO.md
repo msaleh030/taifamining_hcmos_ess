@@ -107,10 +107,18 @@ UAT_COMPANY=11111111-1111-1111-1111-111111111111 hcmos-run node scripts/load-ing
   /root/uat-data/northmara-employee-master.control.json \
   omar.omar@taifamining.tz viswa.medhuru@taifamining.tz --commit
 ```
-Directory-visible: **name / position / department / site**. Confidential
-(pay-gated, same as pay/bank — visible only to R07/R11/R15/R16): **national_id /
-tin / bank**. Blank national_id (45 rows) + blank position (1 row) load anyway as
-a completeness punch-list (warnings, not blocks).
+Directory-visible: **name / position / department / site**. **national_id is
+HR-visible** (Kira 2026-07-09: core HR identifier, not financial — profile-level
+for `a3.national_id.roles`, default R03/R04/R07/R11). Pay-gated (R07/R11/R15/R16
+only): **tin / bank / pay**. Blank national_id (45 rows) + blank position (1 row)
+load anyway as a completeness punch-list (warnings, not blocks).
+
+**Scaffold purge (Kira-authorized 2026-07-09):** before the master loads, the
+deploy runs a North-Mara-ONLY, audited purge of the synthetic seed rows
+(`scripts/purge-nm-scaffold.js`) so the real 285 ARE the directory. Fail-closed:
+only position-NULL rows with a non-numeric/absent legacy_id and NO app_user
+link; one transaction, re-verified row-by-row, on the audit hash-chain;
+idempotent (re-runs delete nothing).
 
 **Smart parsing (intelligent on format, uncompromising on truth):** the loader
 auto-detects the header row (even buried under merged title rows) and maps

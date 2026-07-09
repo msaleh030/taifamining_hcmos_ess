@@ -20,6 +20,9 @@ async function permittedSets(companyId) {
     pay: await cfg.getRoleSet(companyId, 'a3.pay.roles', 'R07,R11,R15,R16'),
     medical: await cfg.getRoleSet(companyId, 'a3.medical.roles', 'R03,R06'),
     disciplinary: await cfg.getRoleSet(companyId, 'a3.disciplinary.roles', 'R06,R07,R11'),
+    // Kira 2026-07-09: national_id is a CORE HR IDENTIFIER, not financial data —
+    // HR-visible (R03 and up + payroll), while tin/bank stay behind the pay gate.
+    national_id: await cfg.getRoleSet(companyId, 'a3.national_id.roles', 'R03,R04,R07,R11'),
   };
 }
 
@@ -33,13 +36,20 @@ async function assembleProfile(client, session, emp) {
   for (const f of BASE_FIELDS) if (f in emp) out[f] = emp[f];
 
   if (sets.pay.has(role)) {
+    // TIN + bank stay with pay data behind the pay gate (Kira 2026-07-09).
     const r = await client.query(
-      'SELECT basic_pay, bank_name, bank_account, national_id, tin FROM employee_pay WHERE employee_id=$1', [emp.id]);
-    const row = r.rows[0] || { basic_pay: null, bank_name: null, bank_account: null, national_id: null, tin: null };
+      'SELECT basic_pay, bank_name, bank_account, tin FROM employee_pay WHERE employee_id=$1', [emp.id]);
+    const row = r.rows[0] || { basic_pay: null, bank_name: null, bank_account: null, tin: null };
     out.basic_pay = row.basic_pay; out.bank_name = row.bank_name; out.bank_account = row.bank_account;
-    // national_id + TIN are government identity numbers — confidential, behind
-    // the SAME pay gate as bank/pay data (not directory-visible).
-    out.national_id = row.national_id; out.tin = row.tin;
+    out.tin = row.tin;
+  }
+
+  // national_id: HR-visible tier (its OWN role set, wider than pay). Stored in
+  // employee_pay for locality, but this read selects ONLY the identifier — a
+  // permitted HR role never touches the pay columns.
+  if (sets.national_id.has(role)) {
+    const r = await client.query('SELECT national_id FROM employee_pay WHERE employee_id=$1', [emp.id]);
+    out.national_id = r.rows[0] ? r.rows[0].national_id : null;
   }
 
   if (sets.medical.has(role)) {
