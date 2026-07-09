@@ -111,7 +111,7 @@ Directory-visible: **name / position / department / site**. **national_id is
 HR-visible** (Kira 2026-07-09: core HR identifier, not financial — profile-level
 for `a3.national_id.roles`, default R03/R04/R07/R11). Pay-gated (R07/R11/R15/R16
 only): **tin / bank / pay**. Blank national_id (45 rows) + blank position (1 row)
-load anyway as a completeness punch-list (warnings, not blocks).
+load anyway as a completeness punch-list (warnings, not blocks). A PF that already exists (e.g. an earlier balance load created it bare) is ENRICHED in place after a name+site identity check — never duplicated; a PF match with a DIFFERENT name/site is an exception, not an overwrite.
 
 **Scaffold purge (Kira-authorized 2026-07-09):** before the master loads, the
 deploy runs a North-Mara-ONLY, audited purge of the synthetic seed rows

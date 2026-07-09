@@ -41,15 +41,19 @@ async function siteMap(exec) {
 // Employees already loaded, keyed by PF = legacy_id (numeric for opening balances,
 // legacy master-file IDs for permits). PLACEHOLDER-parameterised — safe for any
 // string value (the vendored client can't bind a JS array, but it binds scalars).
+// Carries name + site so PF-matches can be identity-VERIFIED, never assumed.
 async function existingByPf(exec, pfs) {
   const uniq = [...new Set(pfs.map(norm).filter(Boolean))];
   const map = new Map();
   if (!uniq.length) return map;
   const ph = uniq.map((_, i) => `$${i + 1}`).join(',');
-  const r = await exec.query(`SELECT id, legacy_id FROM employee WHERE legacy_id IN (${ph})`, uniq);
-  for (const row of r.rows) map.set(row.legacy_id, row.id);
+  const r = await exec.query(`SELECT id, legacy_id, full_name, site_id FROM employee WHERE legacy_id IN (${ph})`, uniq);
+  for (const row of r.rows) map.set(row.legacy_id, { id: row.id, full_name: row.full_name, site_id: row.site_id });
   return map;
 }
+// Name comparison for PF-match verification: case/spacing-insensitive, verbatim
+// otherwise — 'Juma  Hamis Mgeni' == 'juma hamis mgeni', but never fuzzy.
+const sameName = (a, b) => norm(a).toLowerCase().replace(/\s+/g, ' ') === norm(b).toLowerCase().replace(/\s+/g, ' ');
 
 // ── Opening-balance validation ──────────────────────────────────────────────
 function validateOpening(raw, ctx) {
@@ -63,7 +67,7 @@ function validateOpening(raw, ctx) {
   // exception). A PF with no employee still CREATES one (greenfield path), so a
   // balances-only load keeps working. This is what re-attaches the North Mara
   // leave to the master records instead of failing "no employee match".
-  const matched = pf && ctx.existing.has(pf) ? ctx.existing.get(pf) : null;
+  const matched = pf && ctx.existing.has(pf) ? ctx.existing.get(pf).id : null;
 
   if (!/^\d+$/.test(pf)) exceptions.push('PF not numeric');
   else if ((ctx.pfCount.get(pf) || 0) > 1) exceptions.push('duplicate PF within batch');
@@ -102,9 +106,26 @@ function validateEmployee(raw, ctx) {
   const site_id = ctx.sites.get(site.toUpperCase()) || null;
   const exceptions = [], warnings = [];
 
+  // ENRICH-BY-PF (identity-verified): a PF that already exists — e.g. the 103
+  // North Mara employees an earlier opening-balance load created with identity
+  // fields missing — is the SAME person (PF is the authoritative key), so the
+  // master ENRICHES that record instead of duplicating or refusing. But only
+  // when the identity checks out: a different NAME or a different SITE on the
+  // same PF is genuine ambiguity → exception, never an overwrite.
+  let matched = null;
+  const prior = pf ? ctx.existing.get(pf) : undefined;
   if (!/^\d+$/.test(pf)) exceptions.push('PF not numeric');
   else if ((ctx.pfCount.get(pf) || 0) > 1) exceptions.push('duplicate PF within batch');
-  else if (ctx.existing.has(pf)) exceptions.push('PF already loaded (employee exists)');
+  else if (prior) {
+    if (!sameName(prior.full_name, name))
+      exceptions.push(`PF already loaded with a DIFFERENT name ("${prior.full_name}" vs "${name}") — verify identity, refusing to overwrite`);
+    else if (site_id && prior.site_id && prior.site_id !== site_id)
+      exceptions.push('PF already loaded at a DIFFERENT site — verify, refusing to move');
+    else {
+      matched = prior.id;
+      warnings.push('enriching an existing employee (matched by PF, name verified) — identity fields filled in, leave kept');
+    }
+  }
   if (!name) exceptions.push('name missing');
   if (!site_id) exceptions.push(`unknown site "${site}"`);
   if (norm(raw.hire_date || raw.joined_at) && !hire_date) warnings.push(`unparseable hire_date "${norm(raw.hire_date)}" — loaded without a join date`);
@@ -128,7 +149,7 @@ function validateEmployee(raw, ctx) {
   if (tin && (ctx.tinCount.get(tin) || 0) > 1)
     warnings.push('tin shared by more than one row in this batch — verify identity');
 
-  return { pf, site_id, matched_employee: null,
+  return { pf, site_id, matched_employee: matched,
     normalized: { pf, name, site, site_id, position, dept, hire_date, national_id, tin, bank },
     exceptions, warnings, status: exceptions.length ? 'exception' : 'clean' };
 }
@@ -138,7 +159,7 @@ async function validatePermit(raw, ctx, exec) {
   const pf = norm(raw.pf), name = norm(raw.name), permit = norm(raw.permit || raw.permit_name);
   const expiry = norm(raw.expiry);
   const exceptions = [], warnings = [];
-  let matched = pf && ctx.existing.has(pf) ? ctx.existing.get(pf) : null;
+  let matched = pf && ctx.existing.has(pf) ? ctx.existing.get(pf).id : null;
   let by = matched ? 'pf' : null;
   if (!matched && name) {  // fall back to name match, which needs manual confirm
     const r = await exec.query('SELECT id FROM employee WHERE lower(full_name)=lower($1)', [name]);
@@ -311,20 +332,37 @@ async function approve(session, kind, body, opts = {}) {
       const nzd = r.normalized;
       if (opts.faultStep === 'mid_batch' && i === 1) throw new Error('injected fault (test)');
       if (kind === 'employee_master') {
-        // EM: create the employee through the application path (site-scoped,
-        // directory-visible). PF is the legacy number AND emp_no.
-        const empId = await employees.create(c, session.company_id, {
-          legacy_id: nzd.pf, emp_no: nzd.pf, full_name: nzd.name, site_id: r.site_id,
-          dept: nzd.dept, position: nzd.position, joined_at: nzd.hire_date,
-          role_code: 'R01', status: 'active',
-        });
+        let empId = r.matched_employee;
+        if (empId) {
+          // ENRICH the PF-matched (identity-verified at validation) record: an
+          // earlier balances-only load created it with identity fields missing.
+          // Site/status/leave are untouched; the master fills in what it owns.
+          await c.query(
+            `UPDATE employee SET emp_no = coalesce(emp_no, $2), position = $3, dept = $4,
+                    joined_at = coalesce($5::date, joined_at)
+              WHERE id = $1`,
+            [empId, nzd.pf, nzd.position || null, nzd.dept || null, nzd.hire_date]);
+        } else {
+          // EM: create the employee through the application path (site-scoped,
+          // directory-visible). PF is the legacy number AND emp_no.
+          empId = await employees.create(c, session.company_id, {
+            legacy_id: nzd.pf, emp_no: nzd.pf, full_name: nzd.name, site_id: r.site_id,
+            dept: nzd.dept, position: nzd.position, joined_at: nzd.hire_date,
+            role_code: 'R01', status: 'active',
+          });
+        }
         // Confidential identity (national_id / tin / bank) → employee_pay, behind
         // the pay gate. Only write the row when there is something to protect, so
         // "no confidential data" stays "no row" (C5: absent, not null-flagged).
+        // Upsert: an enriched employee may already carry a pay row.
         if (nzd.national_id || nzd.tin || nzd.bank) {
           await c.query(
             `INSERT INTO employee_pay (employee_id, company_id, bank_name, national_id, tin)
-             VALUES ($1,$2,$3,$4,$5)`,
+             VALUES ($1,$2,$3,$4,$5)
+             ON CONFLICT (employee_id) DO UPDATE
+               SET bank_name = coalesce(EXCLUDED.bank_name, employee_pay.bank_name),
+                   national_id = coalesce(EXCLUDED.national_id, employee_pay.national_id),
+                   tin = coalesce(EXCLUDED.tin, employee_pay.tin)`,
             [empId, session.company_id, nzd.bank || null, nzd.national_id || null, nzd.tin || null]);
         }
       } else if (kind === 'opening_balance') {

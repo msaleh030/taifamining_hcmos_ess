@@ -300,7 +300,7 @@ test('EM-1 employee-master load creates directory-visible employees; identity co
   }
 });
 
-test('EM-2 a duplicate PF (employee already exists) is an exception, never a silent duplicate', async () => {
+test('EM-2 a PF match with a DIFFERENT name/site is an exception (identity ambiguity), never a silent overwrite', async () => {
   const maker = await tok(F.USERS.FINMGR_A);
   const checker = await tok(F.USERS.CFC_A);
   const rows = [{ pf: '95020001', name: 'Zznm Dup Master', site: 'North Mara', position: 'X', department: 'Admin', hire_date: '2020-01-01' }];
@@ -308,12 +308,57 @@ test('EM-2 a duplicate PF (employee already exists) is an exception, never a sil
   const batchId = sub.body.batch_id;
   try {
     await post(checker, EMC, { batch_id: batchId });
-    // Re-loading the SAME PF now that the employee exists → exception, not a dup.
-    const prev = await post(maker, EMP, { rows, control_totals: [{ site: 'North Mara', count: 0 }] });
-    assert.equal(prev.body.exception_count, 1);
-    assert.ok(prev.body.exceptions[0].exceptions.join().includes('PF already loaded'));
+    // Same PF, DIFFERENT name → exception (could be a different person on a reused PF).
+    const diff = await post(maker, EMP, {
+      rows: [{ pf: '95020001', name: 'Someone Else Entirely', site: 'North Mara', position: 'Y', department: 'Admin', hire_date: '2020-01-01' }],
+      control_totals: [{ site: 'North Mara', count: 0 }] });
+    assert.equal(diff.body.exception_count, 1);
+    assert.ok(diff.body.exceptions[0].exceptions.join().match(/DIFFERENT name.*refusing to overwrite/));
   } finally {
     await purge(['95020001'], [batchId]);
+  }
+});
+
+test('EM-5 ENRICH: a PF-matched (name-verified) row created by an earlier balance load is filled in, not duplicated', async () => {
+  const maker = await tok(F.USERS.FINMGR_A);
+  const checker = await tok(F.USERS.CFC_A);
+  // Simulate the box state: an earlier opening-balance load created the employee
+  // by PF with identity fields MISSING (position null, no pay row), + a balance.
+  const obSub = await post(maker, OBC, {
+    rows: [{ pf: '95040001', name: 'Zznm Enrich Target', site: 'North Mara', accrued: 8, taken: 0, balance: 8 }],
+    control_totals: [{ site: 'North Mara', count: 1, sum_balance: 8 }] });
+  await post(checker, OBC, { batch_id: obSub.body.batch_id });
+  const e0 = await empByPf('95040001');
+  assert.ok(e0, 'balance load created the bare employee');
+  const before = (await owner(`SELECT position, dept FROM employee WHERE id=$1`, [e0.id])).rows[0];
+  assert.equal(before.position, null, 'no identity yet (bare, from the balance load)');
+  const empCount = async () => Number((await owner(`SELECT count(*)::int n FROM employee WHERE legacy_id='95040001'`)).rows[0].n);
+  const carry = async () => Number((await owner(`SELECT coalesce(sum(days),0)::float8 d FROM leave_carry WHERE employee_id=$1 AND opening_bucket=true`, [e0.id])).rows[0].d);
+  const emRows = [{ pf: '95040001', name: 'Zznm Enrich Target', site: 'North Mara', position: 'Boiler Maker',
+    department: 'PLI & PED', hire_date: '2022-02-01', national_id: '19680515-14130-00001-23', tin: '146475558', bank: 'CRDB' }];
+  const emCtl = [{ site: 'North Mara', count: 1 }];
+  let emBatch;
+  try {
+    // Preview shows the enrich as CLEAN with the "enriching" warning (not an exception).
+    const emPrev = await post(maker, EMP, { rows: emRows, control_totals: emCtl });
+    assert.equal(emPrev.body.clean_count, 1, 'the pre-existing PF is clean (enrich), not an exception');
+    assert.ok(emPrev.body.clean[0].warnings.join().includes('enriching an existing employee'));
+    // Master enriches the SAME record (name matches) — no duplicate; leave kept.
+    const emSub = await post(maker, EMC, { rows: emRows, control_totals: emCtl });
+    emBatch = emSub.body.batch_id;
+    const appr = await post(checker, EMC, { batch_id: emBatch });
+    assert.equal(appr.body.loaded, 1);
+    assert.equal(await empCount(), 1, 'no duplicate employee — the master enriched the existing record');
+    const after = (await owner(`SELECT position, dept, joined_at::text jd, emp_no FROM employee WHERE id=$1`, [e0.id])).rows[0];
+    assert.equal(after.position, 'Boiler Maker', 'identity filled in');
+    assert.equal(after.dept, 'PLI & PED');
+    assert.equal(after.emp_no, '95040001', 'emp_no backfilled from PF');
+    assert.equal(await carry(), 8, 'the pre-existing leave balance is untouched');
+    const pay = (await owner(`SELECT national_id, tin, bank_name FROM employee_pay WHERE employee_id=$1`, [e0.id])).rows[0];
+    assert.equal(pay.national_id, '19680515-14130-00001-23', 'confidential identity attached');
+    assert.equal(pay.tin, '146475558');
+  } finally {
+    await purge(['95040001'], [obSub.body.batch_id, emBatch].filter(Boolean));
   }
 });
 
