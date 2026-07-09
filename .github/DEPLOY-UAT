@@ -21,3 +21,4 @@ run: deploy resilience — job timeout 15m, cancel-in-progress, SSH keepalive, r
 run: setup-phase console MFA toggle (field hidden + enforcement off via auth.mfa.required=0); activation summary 2026-07-08T23:50:21Z
 run: activation probe — newest-password-per-email (dedupe accumulated matrix) for a truthful X-of-N 2026-07-08T23:58:02Z
 run: negative opening balance (Omid) + 3 R03 site-scoped officers + Canoy expat permits (fail-closed R11) 2026-07-09T00:23:48Z
+run: employee-master ingest (populate North Mara directory) + opening-balance attach-by-PF; migration 025 2026-07-09T01:06:17Z
