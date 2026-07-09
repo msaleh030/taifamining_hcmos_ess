@@ -137,6 +137,21 @@ echo "  UAT_COMPANY=$UAT_CO hcmos-run node scripts/provision-super-admin.js admi
 say "scaffold purge (North-Mara-only synthetic seed rows — Kira-authorized)"
 UAT_COMPANY=$UAT_CO hcmos-run node scripts/purge-nm-scaffold.js \
   || { echo "PURGE REFUSED — nothing deleted (fail-closed); see the reason above"; }
+# Breakdown of what REMAINS at North Mara (counts + PF ranges only — no names/
+# PII in this public log). Anything numeric-PF was PROTECTED as real-shaped
+# data; this identifies the cohort so the 285 reconciliation is honest.
+echo "-- remaining North Mara rows, by protection reason:"
+sudo -u postgres psql -d hcmos -Atc "
+  SELECT 'app_user-linked (kept): ' ||
+         count(*) FILTER (WHERE EXISTS (SELECT 1 FROM app_user u WHERE u.employee_id=e.id)) ||
+         ' · numeric-PF (kept, real-shaped): ' ||
+         count(*) FILTER (WHERE e.legacy_id ~ '^[0-9]+\$') ||
+         ' (PF range ' || coalesce(min(e.legacy_id) FILTER (WHERE e.legacy_id ~ '^[0-9]+\$'),'-') ||
+         '..' || coalesce(max(e.legacy_id) FILTER (WHERE e.legacy_id ~ '^[0-9]+\$'),'-') || ')' ||
+         ' · with position set: ' || count(*) FILTER (WHERE e.position IS NOT NULL) ||
+         ' · total remaining: ' || count(*)
+    FROM employee e JOIN site s ON s.id=e.site_id
+   WHERE e.company_id='$UAT_CO' AND s.name='North Mara'"
 
 # ── employee master: POPULATE the North Mara directory (285 real employees) ───
 # Identity-only load through the SAME audited maker-checker ingest (maker = Omar
