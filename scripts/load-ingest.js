@@ -12,10 +12,15 @@
 //   node scripts/load-ingest.js opening-balance balances.csv control.json \
 //        maker@taifamining.tz checker@taifamining.tz [--commit]
 //
-// CSV headers (case-insensitive):
-//   opening-balance → pf,name,site,accrued,taken,balance[,year]
-//   permits         → pf,name,permit,expiry
-//   employee-master → pf,name,site,position,department,hire_date,national_id,tin,bank
+// SMART PARSING — intelligent on FORMAT, uncompromising on TRUTH:
+//   • auto-detects the header row (real sheets bury it under merged title rows —
+//     e.g. the North Mara master's header sits at row 8);
+//   • maps columns by recognising common header variants (EMPLOYEE ID / PF /
+//     Payroll No → pf; FULL NAME / Name → name; DATE ENGAGED → hire_date; …);
+//   • FAILS CLOSED on genuine ambiguity: two columns claiming the same field, or
+//     a required field it cannot find, REFUSE with a report — it never guesses.
+//     Data-level ambiguity (duplicate PFs, unmatched names, policy calls) stays
+//     with the server-side validators, which report exceptions, never fabricate.
 // control.json (expected totals, independent of the CSV):
 //   opening-balance → [{"site":"North Mara","count":2,"sum_balance":25}, …]
 //   permits         → {"count": 12}
@@ -28,22 +33,122 @@ const ingest = require('../src/ingest');
 
 const KIND_ALIAS = { 'opening-balance': 'opening_balance', opening_balance: 'opening_balance', permits: 'permit', permit: 'permit',
   'employee-master': 'employee_master', employee_master: 'employee_master', employees: 'employee_master' };
-const HEADERS = {
-  opening_balance: { pf: 'pf', name: 'name', site: 'site', accrued: 'accrued', taken: 'taken', balance: 'balance', year: 'year' },
-  permit: { pf: 'pf', name: 'name', permit: 'permit', permit_name: 'permit', expiry: 'expiry', valid_until: 'expiry' },
-  employee_master: { pf: 'pf', name: 'name', site: 'site', position: 'position', department: 'department', dept: 'department',
-    hire_date: 'hire_date', joined_at: 'hire_date', national_id: 'national_id', tin: 'tin', bank: 'bank' },
+
+// Header-variant recognition. Keys are NORMALISED header text (lowercase,
+// punctuation → space). Only unambiguous, widely-used payroll/HR spellings are
+// listed — a header outside this table is reported as unmapped, never guessed.
+const COMMON_SYNONYMS = {
+  pf:   ['pf', 'pf no', 'pf number', 'employee id', 'emp id', 'employee no', 'employee number',
+         'payroll no', 'payroll number', 'staff no', 'staff number'],
+  name: ['name', 'names', 'full name', 'fullname', 'employee name', 'employee names'],
+  site: ['site', 'site name', 'location', 'mine site'],
 };
+const KIND_SYNONYMS = {
+  opening_balance: {
+    ...COMMON_SYNONYMS,
+    accrued: ['accrued', 'accrued days', 'days accrued', 'leave accrued', 'earned'],
+    taken:   ['taken', 'days taken', 'leave taken', 'used', 'utilised', 'utilized'],
+    balance: ['balance', 'bal', 'balance days', 'leave balance', 'closing balance'],
+    year:    ['year', 'leave year'],
+  },
+  permit: {
+    pf: COMMON_SYNONYMS.pf, name: COMMON_SYNONYMS.name,
+    permit: ['permit', 'permit name', 'permit type', 'document', 'licence', 'license'],
+    expiry: ['expiry', 'expiry date', 'valid until', 'valid to', 'expires', 'expiration date'],
+  },
+  employee_master: {
+    ...COMMON_SYNONYMS,
+    position:    ['position', 'job title', 'title', 'designation'],
+    department:  ['department', 'dept', 'section'],
+    hire_date:   ['hire date', 'hired', 'date engaged', 'engagement date', 'date of employment',
+                  'employment date', 'start date', 'joined', 'join date', 'date joined', 'joined at'],
+    national_id: ['national id', 'national id no', 'nida', 'nida no', 'nida number', 'nin'],
+    tin:         ['tin', 'tin no', 'tin number'],
+    bank:        ['bank', 'bank name', 'bank branch'],
+  },
+};
+// A row only counts as THE header when every required field is present on it.
+const REQUIRED = {
+  opening_balance: ['pf', 'name', 'site', 'balance'],
+  permit: ['pf', 'name', 'permit', 'expiry'],
+  employee_master: ['pf', 'name', 'site'],
+};
+const HEADER_SCAN_ROWS = 30; // merged-title preambles are shallow; scan the top of the sheet
+
+const normHeader = (h) => String(h == null ? '' : h).replace(/^﻿/, '')
+  .trim().toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+
+// Build a reverse lookup (normalised variant → canonical field) for a kind.
+function variantMap(kind) {
+  const m = new Map();
+  for (const [field, variants] of Object.entries(KIND_SYNONYMS[kind])) {
+    for (const v of variants) m.set(v, field);
+  }
+  return m;
+}
+
+// Try to read one grid row as the header. Returns the column mapping, any
+// duplicate claims (two columns → one field), and unmapped headers.
+function tryHeaderRow(row, lookup) {
+  const cols = [];               // column index → canonical field (or null)
+  const byField = new Map();     // canonical field → [source header, …]
+  const unmapped = [];
+  row.forEach((cell, i) => {
+    const n = normHeader(cell);
+    const field = n ? lookup.get(n) : null;
+    cols.push(field || null);
+    if (field) byField.set(field, [...(byField.get(field) || []), String(cell).trim()]);
+    else if (n) unmapped.push(String(cell).trim());
+  });
+  const duplicates = [...byField.entries()].filter(([, srcs]) => srcs.length > 1);
+  return { cols, byField, duplicates, unmapped, matched: byField.size };
+}
+
+// Locate the header row: the FIRST row (within the scan window) on which every
+// required field maps. No such row → refuse, showing the best near-miss so the
+// operator can see exactly what was and wasn't recognised. Never guesses.
+function detectHeader(grid, kind) {
+  const lookup = variantMap(kind);
+  const required = REQUIRED[kind];
+  let best = null;
+  const limit = Math.min(grid.length, HEADER_SCAN_ROWS);
+  for (let r = 0; r < limit; r++) {
+    const attempt = tryHeaderRow(grid[r], lookup);
+    if (!best || attempt.matched > best.attempt.matched) best = { row: r, attempt };
+    const missing = required.filter((f) => !attempt.byField.has(f));
+    if (missing.length === 0) {
+      // FAIL-CLOSED on ambiguity: two source columns claiming one field is a
+      // question only the data owner can answer.
+      if (attempt.duplicates.length) {
+        const d = attempt.duplicates.map(([f, srcs]) => `"${srcs.join('" and "')}" both map to ${f}`).join('; ');
+        throw new Error(`ambiguous header row ${r + 1}: ${d} — refusing to guess which column is authoritative`);
+      }
+      return { rowIndex: r, ...attempt };
+    }
+  }
+  const near = best
+    ? ` Closest candidate: row ${best.row + 1} (matched: ${[...best.attempt.byField.keys()].join(', ') || 'none'}; ` +
+      `missing required: ${required.filter((f) => !best.attempt.byField.has(f)).join(', ')}).`
+    : '';
+  throw new Error(`no usable header row found in the first ${limit} rows — need columns for: ${required.join(', ')}.${near} ` +
+    `Recognised variants exist for each (e.g. EMPLOYEE ID/Payroll No → pf; FULL NAME → name); rename the headers or extend the mapping.`);
+}
 
 function parseFile(kind, csvPath) {
   const grid = exact.parseCsv(fs.readFileSync(csvPath, 'utf8'));
   if (!grid.length) throw new Error('empty file');
-  const map = HEADERS[kind];
-  const cols = grid[0].map((h) => map[String(h).trim().toLowerCase()] || null);
-  if (!cols.includes('pf') || !cols.includes('name')) throw new Error(`unrecognised header row: ${grid[0].join(',')}`);
-  return grid.slice(1)
+  const header = detectHeader(grid, kind);
+  const rows = grid.slice(header.rowIndex + 1)
     .filter((r) => r.some((c) => String(c).trim() !== ''))
-    .map((r) => { const row = {}; cols.forEach((k, i) => { if (k) row[k] = r[i]; }); return row; });
+    .map((r) => { const row = {}; header.cols.forEach((k, i) => { if (k) row[k] = r[i]; }); return row; });
+  // The mapping report makes the auto-detection auditable: exactly which source
+  // header fed each field, and which columns were left alone.
+  const mapping = {
+    header_row: header.rowIndex + 1,
+    fields: Object.fromEntries([...header.byField.entries()].map(([f, srcs]) => [f, srcs[0]])),
+    unmapped_columns: header.unmapped,
+  };
+  return { rows, mapping };
 }
 
 async function userByEmail(email) {
@@ -54,8 +159,8 @@ async function userByEmail(email) {
 
 async function runLoad({ kind: kindIn, csvPath, controlPath, makerEmail, checkerEmail, commit = false }) {
   const kind = KIND_ALIAS[kindIn];
-  if (!kind) throw new Error(`unknown kind "${kindIn}" (opening-balance | permits)`);
-  const rows = parseFile(kind, csvPath);
+  if (!kind) throw new Error(`unknown kind "${kindIn}" (opening-balance | permits | employee-master)`);
+  const { rows, mapping } = parseFile(kind, csvPath);
   const control = JSON.parse(fs.readFileSync(controlPath, 'utf8'));
 
   const maker = await userByEmail(makerEmail);
@@ -79,7 +184,11 @@ async function runLoad({ kind: kindIn, csvPath, controlPath, makerEmail, checker
   const prev = await ingest.preview(makerSession, kind, body);
   const excPath = `${csvPath}.exceptions.json`;
   fs.writeFileSync(excPath, JSON.stringify({ kind, count: prev.exception_count, exceptions: prev.exceptions }, null, 2));
-  const out = { kind, rows: rows.length, clean: prev.clean_count, exceptions: prev.exception_count,
+  // Rows that loaded clean but carry anomaly/punch-list warnings (format
+  // anomalies, blank punch-list fields, deficits) — surfaced, never blocking.
+  const warned = prev.clean.filter((r) => r.warnings && r.warnings.length).length;
+  const out = { kind, mapping, rows: rows.length, clean: prev.clean_count, warned,
+    exceptions: prev.exception_count,
     control_ok: prev.control.ok, mismatches: prev.control.mismatches, exception_report: excPath };
   if (!commit) return { ...out, mode: 'preview', committed: false };
   if (!prev.control.ok) throw new Error('control totals do not reconcile — refusing to commit (see mismatches in the preview output)');

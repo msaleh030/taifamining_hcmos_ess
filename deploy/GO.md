@@ -112,6 +112,17 @@ Directory-visible: **name / position / department / site**. Confidential
 tin / bank**. Blank national_id (45 rows) + blank position (1 row) load anyway as
 a completeness punch-list (warnings, not blocks).
 
+**Smart parsing (intelligent on format, uncompromising on truth):** the loader
+auto-detects the header row (even buried under merged title rows) and maps
+common header variants (EMPLOYEE ID / Payroll No → pf, FULL NAME → name, DATE
+ENGAGED → hire_date, NIDA NO → national_id, …) — no manual column mapping. It
+**fails closed on genuine ambiguity**: two columns claiming one field, or a
+required column it cannot find, refuse with a report — never a guess. Format
+anomalies (TIN not 9 digits, NIDA not 20 digits, future hire dates, one NIDA/TIN
+shared by two rows) are **flagged on the punch-list and loaded verbatim** —
+values are never "corrected". Duplicate PFs and unknown sites remain hard
+exceptions.
+
 ### 7b. Opening balances — now ATTACH to the master by PF
 Drop the **opening balances + permit files** (CSV) on the box, prepare a
 `control.json` with the EXPECTED totals **from the source document** (independent

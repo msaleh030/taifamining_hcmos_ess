@@ -14,9 +14,10 @@ async function main() {
     // Clean slate (FK-safe order). audit is append-only (DELETE is blocked by a
     // trigger), so TRUNCATE it — which also resets the chain to genesis.
     await c.query('TRUNCATE audit RESTART IDENTITY');
-    for (const t of ['idempotency', 'exact_row', 'exact_batch', 'notification', 'activity_feed',
+    for (const t of ['idempotency', 'exact_row', 'exact_batch', 'ingest_row', 'ingest_batch',
+      'notification', 'activity_feed',
       'attendance', 'doc_alert', 'support_ticket', 'policy_ack', 'policy', 'leave_request',
-      'field_change', 'leave_carry', 'geofence_zone', 'employee_document', 'employee_asset',
+      'field_change', 'leave_carry_sweep', 'leave_carry', 'geofence_zone', 'employee_document', 'employee_asset',
       'disciplinary', 'employee_medical', 'employee_pay', 'session', 'empno_counter', 'device',
       'app_user', 'employee', 'site', 'config', 'site_scope', 'exact_column', 'tenant']) {
       await c.query(`DELETE FROM ${t}`);

@@ -315,6 +315,32 @@ test('EM-2 a duplicate PF (employee already exists) is an exception, never a sil
   }
 });
 
+test('EM-4 format anomalies are FLAGGED on the punch-list but the row loads VERBATIM (never "fixed")', async () => {
+  const maker = await tok(F.USERS.FINMGR_A);
+  const rows = [
+    // tin 6 digits (TRA is 9); NIDA 12 digits (NIDA is 20); future hire_date.
+    { pf: '95030001', name: 'Zznm Anomaly One', site: 'North Mara', position: 'Welder',
+      department: 'Production', hire_date: '2036-01-01', national_id: '141300000227', tin: '123456' },
+    // Two rows sharing one national_id + tin — a real North Mara data pattern.
+    { pf: '95030002', name: 'Zznm Twin A', site: 'North Mara', position: 'Spotter',
+      department: 'Production', hire_date: '2024-01-01', national_id: '19770424-11101-00003-25', tin: '143578895' },
+    { pf: '95030003', name: 'Zznm Twin B', site: 'North Mara', position: 'Spotter',
+      department: 'Production', hire_date: '2024-01-01', national_id: '19770424-11101-00003-25', tin: '143578895' },
+  ];
+  const prev = await post(maker, EMP, { rows, control_totals: [{ site: 'North Mara', count: 3 }] });
+  assert.equal(prev.body.clean_count, 3, 'anomalies WARN — they never block a load (only ambiguity/policy does)');
+  const w = (pf) => prev.body.clean.find((r) => r.pf === pf).warnings.join(' | ');
+  assert.match(w('95030001'), /tin format anomaly "123456" \(TRA TIN is 9 digits\)/);
+  assert.match(w('95030001'), /national_id length anomaly \(12 digits; NIDA is 20\)/);
+  assert.match(w('95030001'), /hire_date 2036-01-01 is in the future/);
+  assert.match(w('95030002'), /national_id shared by more than one row/);
+  assert.match(w('95030003'), /tin shared by more than one row/);
+  // Values pass through VERBATIM — flagged, not "corrected".
+  const n = prev.body.clean.find((r) => r.pf === '95030001').normalized;
+  assert.equal(n.tin, '123456');
+  assert.equal(n.national_id, '141300000227');
+});
+
 // ── Re-attach: opening balances match the master by PF instead of failing ─────
 test('EM-3 after the master load, an opening-balance load ATTACHES to the existing employee (no duplicate) and is idempotent', async () => {
   const maker = await tok(F.USERS.FINMGR_A);

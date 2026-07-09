@@ -143,7 +143,7 @@ if [ -f "$NM_MASTER" ]; then
   UAT_COMPANY=$UAT_CO hcmos-run node scripts/load-ingest.js employee-master \
     "$NM_MASTER" /root/uat-data/northmara-employee-master.control.json \
     omar.omar@taifamining.tz viswa.medhuru@taifamining.tz --commit \
-    | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{const r=JSON.parse(s.slice(s.indexOf("{")));console.log(`master load: rows=${r.rows} clean=${r.clean} exceptions=${r.exceptions} control_ok=${r.control_ok} committed=${r.committed} loaded=${r.loaded||0}`);}catch(e){console.log(s);}})' \
+    | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{const r=JSON.parse(s.slice(s.indexOf("{")));console.log(`master load: header_row=${r.mapping.header_row} rows=${r.rows} clean=${r.clean} flagged(punch-list)=${r.warned} exceptions=${r.exceptions} control_ok=${r.control_ok} committed=${r.committed} loaded=${r.loaded||0}`);}catch(e){console.log(s);}})' \
     || echo "MASTER LOAD FAILED — see the exception report next to the CSV (northmara-employee-master.csv.exceptions.json)"
 else
   echo "AWAITING CSV: drop northmara-employee-master.csv into /root/uat-data (NEVER the repo — it carries national_id/tin/bank PII)."

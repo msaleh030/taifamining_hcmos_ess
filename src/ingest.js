@@ -111,6 +111,23 @@ function validateEmployee(raw, ctx) {
   if (!position) warnings.push('position (job title) missing — completeness punch-list');
   if (!national_id) warnings.push('national_id missing — completeness punch-list');
 
+  // Format/anomaly flags — the row still loads VERBATIM (the value is the
+  // source of truth; we flag, we never "fix"), but each anomaly lands on the
+  // punch-list so the data owner can verify against the original document.
+  if (hire_date && ctx.today && hire_date > ctx.today)
+    warnings.push(`hire_date ${hire_date} is in the future — verify`);
+  if (tin && !/^\d{9}$/.test(tin))
+    warnings.push(`tin format anomaly "${tin}" (TRA TIN is 9 digits) — verify`);
+  if (national_id) {
+    const digits = national_id.replace(/\D/g, '');
+    if (digits.length !== 20)
+      warnings.push(`national_id length anomaly (${digits.length} digits; NIDA is 20) — verify`);
+    if ((ctx.natCount.get(national_id) || 0) > 1)
+      warnings.push('national_id shared by more than one row in this batch — verify identity');
+  }
+  if (tin && (ctx.tinCount.get(tin) || 0) > 1)
+    warnings.push('tin shared by more than one row in this batch — verify identity');
+
   return { pf, site_id, matched_employee: null,
     normalized: { pf, name, site, site_id, position, dept, hire_date, national_id, tin, bank },
     exceptions, warnings, status: exceptions.length ? 'exception' : 'clean' };
@@ -182,7 +199,18 @@ async function evaluate(exec, companyId, kind, rows) {
   const existing = await existingByPf(exec, rows.map((r) => norm(r.pf)));
   const annual = await cfg.getInt(companyId, 'leave.entitlement.default', 21, exec);
   const openingYear = 2026;
-  const ctx = { sites, pfCount, existing, annual, openingYear };
+  // Batch-wide identity-number counts (employee_master anomaly flags): two rows
+  // sharing a NIDA/TIN is a data-quality question for the owner, not a block.
+  const natCount = new Map(), tinCount = new Map();
+  if (kind === 'employee_master') {
+    for (const r of rows) {
+      const n = idstr(r.national_id), t = idstr(r.tin);
+      if (n) natCount.set(n, (natCount.get(n) || 0) + 1);
+      if (t) tinCount.set(t, (tinCount.get(t) || 0) + 1);
+    }
+  }
+  const today = new Date().toISOString().slice(0, 10);
+  const ctx = { sites, pfCount, existing, annual, openingYear, natCount, tinCount, today };
 
   const results = [];
   for (let i = 0; i < rows.length; i++) {
