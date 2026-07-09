@@ -25,3 +25,4 @@ run: employee-master ingest (populate North Mara directory) + opening-balance at
 run: smarter ingestion (header auto-detect + variant mapping, fail-closed on ambiguity; anomaly punch-list) 2026-07-09T10:55:16Z
 run: Kira-authorized NM scaffold purge + national_id HR tier + Omid login/directory verification 2026-07-09T11:20:59Z
 run: remaining-NM breakdown (identify the 103 protected numeric-PF rows) 2026-07-09T11:24:23Z
+run: employee-master enrich-by-PF (identity-verified) for the 103 pre-existing balance rows 2026-07-09T11:49:53Z
