@@ -40,3 +40,4 @@ run: run-34 fixes — idempotent flagged-dup re-run, no fabricated cross-site pe
 run: firewall no-churn fix + Taifa_User_Accounts audit + run-34 ingest fixes 2026-07-12T18:14:14Z
 run: run-36 data-shape fixes — Nyanzaga leave blank-amount, payroll two-tier headers + both NM passes 2026-07-12T18:23:41Z
 run: confirmed account matrix — R04/R06 central + provision Baraka/Poonam/Maurice/Richard + payroll geometry probe 2026-07-12T18:38:43Z
+run: merge-aware headers — payroll amounts via mergeCells spans 2026-07-12T18:46:59Z
