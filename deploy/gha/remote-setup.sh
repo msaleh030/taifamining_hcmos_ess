@@ -291,6 +291,21 @@ if [ -n "$NM_LEAVE" ] && [ -f "/root/uat-data/northmara-leave.control.json" ]; t
     || echo "LEAVE LOAD FAILED — see the exception report next to the CSV"
 fi
 
+# ── bare cross-site orphans: identity-less rows whose PF is MASTERED at a
+# different site (run 34's leave load created 16 such at TSF before the
+# validator was tightened). REPORT ONLY — deleting or re-siting a person is a
+# Kira/Head-of-HR ruling, never automatic. Their balances stay attached; the
+# source files retain the data either way.
+say "bare cross-site orphans (report only — Kira ruling needed)"
+sudo -u postgres psql -d hcmos -c "
+  SELECT s.name AS site, count(*) AS bare_cross_site_orphans
+    FROM employee e JOIN site s ON s.id = e.site_id
+   WHERE e.company_id='$UAT_CO' AND e.position IS NULL
+     AND NOT EXISTS (SELECT 1 FROM app_user u WHERE u.employee_id = e.id)
+     AND EXISTS (SELECT 1 FROM employee m WHERE m.company_id = e.company_id
+                   AND m.legacy_id = e.legacy_id AND m.site_id <> e.site_id AND m.position IS NOT NULL)
+   GROUP BY s.name ORDER BY s.name"
+
 # ── ingest provenance: every batch ever committed on this box (counts only) ──
 # Answers "where did these balances come from" definitively — e.g. opening
 # buckets exist for sites our pipeline never loaded (Kira's on-box loads).

@@ -519,6 +519,18 @@ test('EM-6 rich fields land in their tiers; a BARE row is site-corrected; a MAST
     assert.ok(dup && dup.emp_no === null,
       'the flagged duplicate carries the PF as legacy id ONLY — emp_no stays company-unique (unassigned)');
     await owner(`DELETE FROM ingest_batch WHERE id=$1`, [sub2.body.batch_id]);
+    // IDEMPOTENT RE-RUN (run-34 regression): re-loading the same flagged
+    // duplicate ENRICHES it and must NOT backfill emp_no into a company-wide
+    // collision (the coalesce(NULL, pf) that aborted run 34's batches).
+    const sub3 = await post(maker, EMC, {
+      rows: [{ pf: '95050001', first_name: 'Zz', middle_name: 'Sitefix', surname: 'Person', site: 'North Mara', position: 'X' }],
+      control_totals: [{ site: 'North Mara', count: 1 }] });
+    const appr3 = await post(checker, EMC, { batch_id: sub3.body.batch_id });
+    assert.equal(appr3.status, 200, 're-run commits cleanly (no unique violation)');
+    assert.equal(appr3.body.loaded, 1);
+    const dupAfter = (await owner(`SELECT emp_no FROM employee WHERE legacy_id='95050001' AND site_id=$1`, [F.SITE.A1])).rows[0];
+    assert.equal(dupAfter.emp_no, null, 'emp_no stays unassigned on re-run (never backfilled into a collision)');
+    await owner(`DELETE FROM ingest_batch WHERE id=$1`, [sub3.body.batch_id]);
   } finally {
     await purge(['95050001'], [sub.body.batch_id]);
     await owner(`DELETE FROM site WHERE id=$1`, [site2]);
@@ -661,4 +673,27 @@ test('PM-2 payroll master fail-closed: unknown PF at the site / name mismatch / 
   assert.ok(reasons[1].includes('neither basic nor gross'), 'an amountless payroll row is an exception');
   const after = (await owner(`SELECT count(*)::int n FROM employee WHERE company_id=$1`, [F.TENANT_A])).rows[0].n;
   assert.equal(after, before, 'no employee was created by a payroll preview');
+});
+
+test('OB-8 a balance whose PF is mastered at a DIFFERENT site is an EXCEPTION — never a fabricated bare person (run-34 regression)', async () => {
+  const maker = await tok(F.USERS.FINMGR_A);
+  const checker = await tok(F.USERS.CFC_A);
+  // Master the person at North Mara (A1)...
+  const em = await post(maker, EMC, {
+    rows: [{ pf: '95110001', name: 'Zz Moved Person', site: 'North Mara', position: 'Fitter', department: 'P', hire_date: '2021-01-01' }],
+    control_totals: [{ site: 'North Mara', count: 1 }] });
+  try {
+    await post(checker, EMC, { batch_id: em.body.batch_id });
+    // ...then a Mwadui leave file claims the same PF: refuse, don't fabricate.
+    const prev = await post(maker, OBP, {
+      rows: [{ pf: '95110001', name: 'Zz Moved Person', site: 'Mwadui', accrued: 10, taken: 2, balance: 8 }],
+      control_totals: [{ site: 'Mwadui', count: 0 }] });
+    assert.equal(prev.body.clean_count, 0);
+    assert.ok(prev.body.exceptions[0].exceptions.join().includes('mastered at a DIFFERENT site'),
+      'cross-site balance is an exception for the data owner — no bare duplicate person is created');
+    const count = (await owner(`SELECT count(*)::int n FROM employee WHERE legacy_id='95110001'`)).rows[0].n;
+    assert.equal(count, 1, 'still exactly one person with this PF');
+  } finally {
+    await purge(['95110001'], [em.body.batch_id]);
+  }
 });

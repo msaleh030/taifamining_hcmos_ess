@@ -248,7 +248,12 @@ async function runLoad({ kind: kindIn, csvPath, controlPath, makerEmail, checker
     exception_kinds: histogram(prev.exceptions.map((e) => e.exceptions)),
     control_ok: prev.control.ok, mismatches: prev.control.mismatches, exception_report: excPath };
   if (!commit) return { ...out, mode: 'preview', committed: false };
-  if (!prev.control.ok) throw new Error('control totals do not reconcile — refusing to commit (see mismatches in the preview output)');
+  if (!prev.control.ok) {
+    // Show WHAT failed — site names + expected/computed numbers + masked
+    // exception kinds (CI-safe); the full rows are in the exception report.
+    throw new Error('control totals do not reconcile — refusing to commit. ' +
+      JSON.stringify({ mismatches: prev.control.mismatches, exception_kinds: out.exception_kinds }));
+  }
 
   const sub = await ingest.submit(makerSession, kind, body);
   const appr = await ingest.approve(checkerSession, kind, { batch_id: sub.batch_id });

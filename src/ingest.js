@@ -49,9 +49,9 @@ async function existingByPf(exec, pfs) {
   const map = new Map();
   if (!uniq.length) return map;
   const ph = uniq.map((_, i) => `$${i + 1}`).join(',');
-  const r = await exec.query(`SELECT id, legacy_id, full_name, site_id, position FROM employee WHERE legacy_id IN (${ph})`, uniq);
+  const r = await exec.query(`SELECT id, legacy_id, full_name, site_id, position, emp_no FROM employee WHERE legacy_id IN (${ph})`, uniq);
   for (const row of r.rows) {
-    const entry = { id: row.id, full_name: row.full_name, site_id: row.site_id, position: row.position };
+    const entry = { id: row.id, full_name: row.full_name, site_id: row.site_id, position: row.position, emp_no: row.emp_no };
     const prev = map.get(row.legacy_id);
     if (prev) prev.push(entry); else map.set(row.legacy_id, [entry]);
   }
@@ -89,8 +89,12 @@ function validateOpening(raw, ctx) {
   if ([balance, accrued, taken].every(Number.isFinite) && Math.abs(balance - (accrued - taken)) > 0.5)
     exceptions.push('balance != accrued - taken (>0.5d)');
   if (matched) warnings.push('attaching to an existing employee (matched by PF)');
+  // Site-level PF: a balance whose PF exists ONLY at other sites is genuine
+  // ambiguity (a moved worker, or the file's site is wrong). Creating a bare
+  // second person here fabricates identity (run 34 did exactly that at TSF) —
+  // EXCEPTION, resolved by the data owner, never a silent create.
   if (!matched && pf && ctx.existing.has(pf))
-    warnings.push('PF exists only at a DIFFERENT site (site-level PF) — not attached; a new employee record would be created at this site — verify the file\'s site');
+    exceptions.push('PF is mastered at a DIFFERENT site (site-level PF) — refusing to create a duplicate person here; resolve which site owns this employee');
   // A negative opening balance is a VALID deficit (Omid's ruling, 2026-07-09):
   // carried as a negative opening bucket that offsets future accrual, never
   // clamped to zero. It is WARNED (for visibility) not excepted — the
@@ -176,6 +180,10 @@ function validateEmployee(raw, ctx) {
       warnings.push(`cross-site duplicate PF — loaded as a new employee at this site, FLAGGED for correction (pending Head of HR approval)${
         sameNamed ? '; the other site lists the SAME name — possibly one person in two site files' : ''}; employee number left unassigned (PF kept as legacy id)`);
     }
+    // Idempotent RE-RUN of a flagged duplicate: the matched row's emp_no is
+    // NULL while another site's row owns the PF as emp_no company-wide — the
+    // enrich must NOT backfill it (that unique violation aborted run 34).
+    if (matched && priors.some((p) => p.id !== matched && p.emp_no === pf)) empnoConflict = true;
   }
   if (!name) exceptions.push('name missing');
   if (!site_id) exceptions.push(`unknown site "${site}"`);
@@ -519,7 +527,7 @@ async function approve(session, kind, body, opts = {}) {
                     email = coalesce($9, email), phone = coalesce($10, phone)
                     ${nzd.correct_site ? ', site_id = $11' : ''}
               WHERE id = $1`,
-            [empId, nzd.pf, nzd.position || null, nzd.dept || null, nzd.hire_date,
+            [empId, nzd.empno_conflict ? null : nzd.pf, nzd.position || null, nzd.dept || null, nzd.hire_date,
              nzd.level || null, nzd.employment_type || null, nzd.reports_to_title || null,
              nzd.email || null, nzd.phone || null,
              ...(nzd.correct_site ? [r.site_id] : [])]);
