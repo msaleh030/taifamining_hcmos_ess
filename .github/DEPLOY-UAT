@@ -29,3 +29,4 @@ run: employee-master enrich-by-PF (identity-verified) for the 103 pre-existing b
 run: bughunt-B port merged (PR #4, d71539e) — rank lattice, cycle-scoped leave, 11 more pinned fixes 2026-07-12T13:47:49Z
 run: six-site canonical model + per-site purge + xlsx master pipeline (awaits the 6-file drop) 2026-07-12T14:45:00Z
 run: multi-site scope + Advera Speratus R03 (both NM projects) + alvera cleanup check 2026-07-12T14:55:41Z
+run: six-file employee master LOAD (Kira dropped the xlsx into /root/uat-data) — canonical 1,044 across 6 sites 2026-07-12T16:32:32Z
