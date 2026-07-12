@@ -33,3 +33,4 @@ run: six-file employee master LOAD (Kira dropped the xlsx into /root/uat-data) �
 run: RESTART FIX — the running process now serves the deploy (health.build checkpoint) + field-completeness + warning histograms 2026-07-12T16:49:52Z
 run: Kira rulings — site-level PF (load the 19 flagged), draft-email list + collision count, title organogram, leave/permits/payroll wave 2026-07-12T17:16:13Z
 run: RETRY of a51c904 — Hostinger API returned Unauthenticated on the region assert (transient?) 2026-07-12T17:17:20Z
+run: token rotated — full re-fire: rulings + second wave + post-restart security re-verification + stale-window evidence 2026-07-12T17:25:46Z
