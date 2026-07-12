@@ -30,5 +30,21 @@ test('site-scope gate: site-bound roles are scoped to their own site; central ro
     assert.equal(await sitescope.scopeSite(c, supSession), F.SITE.A1, 'scoped role → own site');
     const paySession = { company_id: A, user_id: F.USERS.PAYROLL_A.id, role_code: 'R07' };
     assert.equal(await sitescope.scopeSite(c, paySession), null, 'central role → no site restriction');
+
+    // bughunt-B #11: the explicit three-state contract, unambiguous by mode.
+    assert.deepEqual(await sitescope.scopeSiteMode(c, supSession), { mode: 'site', siteId: F.SITE.A1 });
+    assert.deepEqual(await sitescope.scopeSiteMode(c, paySession), { mode: 'all' });
+  });
+});
+
+// ── bughunt-B #11: fail-CLOSED — a site-bound role whose site cannot be
+// resolved must be DENIED, never handed the org-wide view a bare null implied. ─
+test('site-scope gate: a site-bound role with no resolvable site is denied, not org-wide', async () => {
+  await db.withTenant(A, async (c) => {
+    // A site-bound session with no employee record behind it (site unresolvable).
+    const orphan = { company_id: A, user_id: null, role_code: 'R02' };
+    assert.deepEqual(await sitescope.scopeSiteMode(c, orphan), { mode: 'none' }, 'unresolved ≠ central');
+    await assert.rejects(() => sitescope.scopeSite(c, orphan), /site scope unresolved/,
+      'scopeSite throws (403) instead of returning a null a consumer would read as "no filter"');
   });
 });

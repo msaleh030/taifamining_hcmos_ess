@@ -115,3 +115,23 @@ test('computed value matches a hand-calculated fixture (tenant B)', async () => 
   assert.equal(disc.value, 0);
   assert.equal(disc.rag, 'green', 'zero disciplinary actions');
 });
+
+// ── bughunt-B #15: 0 is a REAL target (zero leave-liability, zero disciplinary
+// actions) — only null means "no target". A truthiness check greyed-out every
+// target-0 card; the up-direction target-0 case also guarded against value/0.
+test('KPI-B15 target 0 is a real target: progress computes (never grey/NaN/Infinity)', () => {
+  // down-direction, target 0 (e.g. disciplinary actions): value 0 = perfect.
+  const perfect = kpi.ragFor({ direction: 'down', target: 0, green: 0, amber: 0 }, 0);
+  assert.equal(perfect.progress, 1);
+  assert.equal(perfect.rag, 'green');
+  const off = kpi.ragFor({ direction: 'down', target: 0, green: 0, amber: 0 }, 5);
+  assert.equal(off.progress, 0, 'missed zero-target: progress 0, not null');
+  assert.equal(off.rag, 'red');
+  // up-direction, target 0: meeting-or-exceeding is progress 1 — never value/0.
+  const up = kpi.ragFor({ direction: 'up', target: 0, green: 0.9, amber: 0.7 }, 3);
+  assert.equal(up.progress, 1);
+  assert.equal(up.rag, 'green');
+  assert.ok(Number.isFinite(up.progress), 'no Infinity from dividing by a zero target');
+  // null target still means "no target" → grey.
+  assert.equal(kpi.ragFor({ direction: 'up', target: null, green: 0.9, amber: 0.7 }, 3).rag, 'grey');
+});

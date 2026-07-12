@@ -127,13 +127,20 @@ const DEFS = [
 ];
 
 // RAG + progress from a computed value.
+// bughunt-B #15: 0 is a REAL target (zero leave-liability, zero disciplinary
+// actions) — only null/undefined means "no target". A truthiness check silently
+// greyed-out every target-0 card. The up-direction target-0 case also guards
+// the division (value/0): meeting-or-exceeding a zero target is progress 1.
 function ragFor(def, value) {
+  const hasTarget = def.target != null;
   if (def.direction === 'down') {
     const rag = value <= def.green ? 'green' : value <= def.amber ? 'amber' : 'red';
-    const progress = def.target ? round2(Math.min(1, value === 0 ? 1 : def.target / value)) : null;
+    const progress = hasTarget ? round2(Math.min(1, value === 0 ? 1 : Math.min(1, def.target / value))) : null;
     return { rag, progress };
   }
-  const progress = def.target ? round2(value / def.target) : null;
+  const progress = hasTarget
+    ? (def.target === 0 ? (value >= 0 ? 1 : 0) : round2(value / def.target))
+    : null;
   const rag = progress === null ? 'grey' : progress >= def.green ? 'green' : progress >= def.amber ? 'amber' : 'red';
   return { rag, progress };
 }

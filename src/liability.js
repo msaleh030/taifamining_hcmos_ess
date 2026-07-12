@@ -21,7 +21,8 @@ const REMUNERATION = 'monthly remuneration';
 // dailyRate 100), not by this comment.
 async function dailyRate(session, cells) {
   const base = await exact.dailyRateBase(session, cells);                       // ONE base
-  const divisor = await cfg.getRequiredInt(session.company_id, 'payroll.daily_rate.divisor');
+  // bughunt-B #9: a zero/negative/garbage divisor must 409, never divide.
+  const divisor = await cfg.getRequiredPositiveInt(session.company_id, 'payroll.daily_rate.divisor');
   return round2(base / divisor);
 }
 
@@ -64,7 +65,13 @@ async function batchLiability(session, batchId) {
 
     const available = [], not_available = [], excluded = [];
     let total = 0;
+    // bughunt-B #6: an employee matched by MORE THAN ONE Exact row counts ONCE —
+    // openLeaveDays() returns their WHOLE outstanding balance, so each duplicate
+    // row would re-add the full liability to the register.
+    const seen = new Set();
     for (const row of rows) {
+      if (seen.has(row.employee_id)) { excluded.push({ employee_id: row.employee_id, status: 'duplicate-row' }); continue; }
+      seen.add(row.employee_id);
       if (row.status !== 'active') { excluded.push({ employee_id: row.employee_id, status: row.status }); continue; } // LVR-02
       const days = await openLeaveDays(c, row.employee_id);
       const res = await liabilityFor(session, { employeeId: row.employee_id, days, cells: row.cells });

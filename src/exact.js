@@ -73,10 +73,16 @@ function controlCols(ct) {
   return { tp: opt(ct.gross), td: opt(ct.total_deduction), net: opt(ct.net) }; // v1.5: gross
 }
 
-// ── AC-EXACT-06: stage a load (idempotent by file hash) ─────────────────────
+// ── AC-EXACT-06: stage a load (idempotent by PERIOD + file hash) ────────────
 async function stage(session, { period, filename, grid, controlTotals }) {
   if (!Array.isArray(grid)) throw new HttpError(400, 'grid required');
-  const fileHash = gridHash(grid);
+  // bughunt-B #7: dedupe is per (period, content). Fixed-salary tenants upload a
+  // byte-identical grid every month — a content-only hash silently deduped the
+  // NEW period to the OLD batch and a whole month of postings never staged.
+  // Folding the period into the stored hash keeps UNIQUE (company_id, file_hash)
+  // satisfied without a migration: same period+grid still dedupes; new period
+  // stages fresh.
+  const fileHash = crypto.createHash('sha256').update(`${period || ''}|${gridHash(grid)}`).digest('hex');
   const ct = controlCols(controlTotals);
 
   return db.withTenant(session.company_id, async (c) => {
@@ -233,8 +239,15 @@ async function runLeg(session, batchId, leg, opts = {}) {
     });
     return { leg, status: 'posted' };
   } catch (e) {
+    // bughunt-B #8: a concurrent runner can have POSTED this leg between our
+    // pre-check and this failure path — never stamp 'failed' over a durable
+    // 'posted' (the journal exists; marking it failed invites a double-post).
     await db.withTenant(co, (c) =>
-      c.query(`UPDATE exact_publish_leg SET status='failed', detail=$3, updated_at=now() WHERE batch_id=$1 AND leg=$2`, [batchId, leg, String(e.message)]));
+      c.query(`UPDATE exact_publish_leg SET status='failed', detail=$3, updated_at=now()
+                WHERE batch_id=$1 AND leg=$2 AND status <> 'posted'`, [batchId, leg, String(e.message)]));
+    const now = (await db.withTenant(co, (c) =>
+      c.query('SELECT status FROM exact_publish_leg WHERE batch_id=$1 AND leg=$2', [batchId, leg]))).rows[0];
+    if (now && now.status === 'posted') return { leg, status: 'posted', skipped: true };
     return { leg, status: 'failed', error: e.message };
   }
 }

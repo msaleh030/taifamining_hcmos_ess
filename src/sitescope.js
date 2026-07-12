@@ -15,6 +15,7 @@
 // reviews) MUST route through scopeSite() so a site-bound role (e.g. R02
 // Supervisor) only ever sees its own site — the gate cannot be re-implemented ad hoc.
 const cfg = require('./config');
+const { HttpError } = require('./errors');
 
 // Is this role site-bound? Reads the site_scope table (config), falling back to
 // the seeded SITE_SCOPE defaults. `exec` must be a client already pinned to the
@@ -34,11 +35,27 @@ async function requesterSite(exec, session) {
   return r.rows[0] ? r.rows[0].site_id : null;
 }
 
-// Convenience: the site a site-bound role must be restricted to, or null when the
-// role is central (unscoped). A consumer applies `WHERE site_id = <this>` when non-null.
-async function scopeSite(exec, session) {
-  if (!(await isScoped(exec, session.role_code))) return null;
-  return requesterSite(exec, session);
+// bughunt-B #11: the explicit three-state scope. A bare null used to mean BOTH
+// "central — no filter" AND "site-bound but unresolved", so a consumer applying
+// "filter only when non-null" would hand a site-bound role with an unknown site
+// the whole organisation. The states are now unambiguous:
+//   { mode: 'all' }            central role — no filter
+//   { mode: 'site', siteId }   site-bound, resolved — filter to siteId
+//   { mode: 'none' }           site-bound, UNRESOLVED — deny (fail closed)
+async function scopeSiteMode(exec, session) {
+  if (!(await isScoped(exec, session.role_code))) return { mode: 'all' };
+  const siteId = await requesterSite(exec, session);
+  return siteId ? { mode: 'site', siteId } : { mode: 'none' };
 }
 
-module.exports = { isScoped, requesterSite, scopeSite };
+// Convenience: the site a site-bound role must be restricted to, or null when the
+// role is central (unscoped). A consumer applies `WHERE site_id = <this>` when
+// non-null. FAIL-CLOSED: a site-bound role whose site cannot be resolved is
+// DENIED here — never handed the org-wide view a bare null would imply.
+async function scopeSite(exec, session) {
+  const s = await scopeSiteMode(exec, session);
+  if (s.mode === 'none') throw new HttpError(403, 'site scope unresolved — a site-bound role with no site sees nothing');
+  return s.mode === 'site' ? s.siteId : null;
+}
+
+module.exports = { isScoped, requesterSite, scopeSite, scopeSiteMode };

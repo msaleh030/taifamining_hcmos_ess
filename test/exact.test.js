@@ -196,3 +196,40 @@ test('v1.5 North Mara period reconciles: gross 551,896,561.41 − deductions 254
     await db.withOwner((c) => c.query('DELETE FROM exact_batch WHERE id=$1', [staged.batch_id]));
   }
 });
+
+// ── bughunt-B #7: dedupe is per (period, content) — a fixed-salary tenant's
+// byte-identical grid for a NEW month must stage a NEW batch, never silently
+// dedupe to the old period's batch (a whole month of postings would go missing).
+test('EXACT-06b the SAME grid under a NEW period stages a NEW batch; same period still dedupes', async () => {
+  const grid = validGrid([dataRow('E-A-0001', 'Alice'), dataRow('E-A-0002', 'Carol')]);
+  const june = await exact.stage(session, { period: '2026-06-fixed', grid });
+  const july = await exact.stage(session, { period: '2026-07-fixed', grid });
+  assert.equal(july.deduped, false, 'new period + identical grid → staged FRESH');
+  assert.notEqual(july.batch_id, june.batch_id, 'two periods → two batches');
+  const juneAgain = await exact.stage(session, { period: '2026-06-fixed', grid });
+  assert.equal(juneAgain.deduped, true, 'same period + same grid still dedupes');
+  assert.equal(juneAgain.batch_id, june.batch_id);
+});
+
+// ── bughunt-B #8: a durable 'posted' leg is never stamped 'failed' ────────────
+// The race: a concurrent runner posts the leg between runLeg's pre-check and its
+// failure path. The failure UPDATE is now guarded (AND status <> 'posted') — pin
+// the guard's semantics at the SQL level: against a posted row it changes nothing.
+test('EXACT-08b the failure UPDATE cannot overwrite a posted leg (guard pinned)', async () => {
+  const staged = await exact.stage(session, { period: '2026-06-guard',
+    grid: validGrid([dataRow('E-A-0001', 'Alice')]) });
+  await db.withOwner((c) => c.query(
+    `INSERT INTO exact_publish_leg (company_id, batch_id, leg, status) VALUES ($1,$2,'gl','posted')`,
+    [F.TENANT_A, staged.batch_id]));
+  try {
+    const upd = await db.withOwner((c) => c.query(
+      `UPDATE exact_publish_leg SET status='failed', detail='late failure', updated_at=now()
+        WHERE batch_id=$1 AND leg='gl' AND status <> 'posted'`, [staged.batch_id]));
+    assert.equal(upd.rowCount, 0, 'the guarded UPDATE refuses to touch a posted leg');
+    const st = (await db.withOwner((c) => c.query(
+      `SELECT status FROM exact_publish_leg WHERE batch_id=$1 AND leg='gl'`, [staged.batch_id]))).rows[0];
+    assert.equal(st.status, 'posted', 'the journal-backed status survives');
+  } finally {
+    await db.withOwner((c) => c.query('DELETE FROM exact_batch WHERE id=$1', [staged.batch_id]));
+  }
+});

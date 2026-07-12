@@ -59,3 +59,13 @@ is therefore no baseline to archive or restore.
 - The deploy prints an **activation summary**: `X of N provisioned accounts
   authenticate on email+password` (MFA off in setup). Super admins (Kira's
   interactive step) and pending-name roster are not yet in the file — target 15.
+
+## Deferred, bundled with the UAT-week reversal: the privileged-role MFA floor
+
+**bughunt-B #4 (Kira decision, 2026-07-12):** when `MFA_SETUP_PHASE` flips to
+`'0'` for UAT week, land — in the SAME change — a **privileged-role MFA floor**:
+R12 and super-admin accounts are ALWAYS MFA-enforced, regardless of
+`auth.mfa.required`. From that point no toggle (present or future) can un-MFA a
+privileged account. It is deliberately NOT landed during the setup phase: it
+would lock out the R12 admin (Rajesh), who has no TOTP enrolled while the setup
+toggle is on. One bundle: reversal + floor, tested together.

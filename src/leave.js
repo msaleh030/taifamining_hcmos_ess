@@ -22,11 +22,24 @@ async function employeeOf(client, session) {
   const r = await client.query('SELECT employee_id FROM app_user WHERE id=$1', [session.user_id]);
   return r.rows[0] ? r.rows[0].employee_id : null;
 }
+// The employee id AND joined_at (the cycle anchor) in one read.
+async function employeeRowOf(client, session) {
+  if (!session.user_id) return null;
+  const r = await client.query(
+    `SELECT u.employee_id AS id, e.joined_at::text AS joined
+       FROM app_user u LEFT JOIN employee e ON e.id = u.employee_id WHERE u.id=$1`, [session.user_id]);
+  return r.rows[0] && r.rows[0].id ? r.rows[0] : null;
+}
 const openCarry = async (c, empId) => Number((await c.query(
   `SELECT coalesce(sum(days),0)::float8 d FROM leave_carry WHERE employee_id=$1 AND lapsed_at IS NULL`, [empId])).rows[0].d);
-const takenOf = async (c, empId, type) => Number((await c.query(
-  `SELECT coalesce(sum(days),0)::float8 d FROM leave_request WHERE employee_id=$1 AND leave_type=$2 AND ${OPEN}`,
-  [empId, type])).rows[0].d);
+// Consumption within the CURRENT entitlement cycle (bughunt-B #1/#2): `since`
+// bounds the sum to the cycle start so entitlement RENEWS at each anniversary
+// and a prior-cycle day is never both balance-deducted AND carry-forfeited
+// (the double charge). since=null (no employment date) keeps the lifetime sum.
+const takenOf = async (c, empId, type, since = null) => Number((await c.query(
+  `SELECT coalesce(sum(days),0)::float8 d FROM leave_request
+    WHERE employee_id=$1 AND leave_type=$2 AND ${OPEN}${since ? ' AND applied_at >= $3::date' : ''}`,
+  since ? [empId, type, since] : [empId, type])).rows[0].d);
 
 // ── Date helpers for the anniversary math (pure string arithmetic on
 // 'YYYY-MM-DD'; day clamped so 29 Feb / month-length overflows land on the last
@@ -49,6 +62,16 @@ function addMonths(dateStr, months) {
   const total = (m - 1) + months;
   return iso(y + Math.floor(total / 12), (total % 12) + 1, d);
 }
+
+// The current entitlement cycle's start: the most recent employment anniversary,
+// or the join date itself during the first year. Shares anniversaryOf() with the
+// carry sweep so balance() and the sweep count consumption over the SAME window.
+function cycleStartFor(joined, asOf) {
+  if (!joined) return null;
+  const ann = anniversaryOf(joined.slice(0, 10), asOf);
+  return ann ? ann.anniversary : joined.slice(0, 10);
+}
+const todayIso = () => new Date().toISOString().slice(0, 10);
 
 // Forfeit `amount` carried days FIFO (oldest carried_for_year first) across the
 // employee's OPEN, NON-OPENING carry rows. A row drawn to zero is closed
@@ -164,12 +187,16 @@ function parseSickRule(v) {
 async function balance(session) {
   const co = session.company_id;
   return db.withTenant(co, async (c) => {
-    const empId = await employeeOf(c, session);
-    if (!empId) throw new HttpError(403, 'no employee for user');
+    const emp = await employeeRowOf(c, session);
+    if (!emp) throw new HttpError(403, 'no employee for user');
+    const empId = emp.id;
     const entitlement = await cfg.getInt(co, 'leave.entitlement.default', 21, c);
     const carried = await openCarry(c, empId);
-    const annualTaken = await takenOf(c, empId, 'annual');
-    const sickTaken = await takenOf(c, empId, 'sick');
+    // Entitlement RENEWS per anniversary cycle (#1): consumption is counted from
+    // the current cycle's start, the SAME window the carry sweep forfeits over (#2).
+    const since = cycleStartFor(emp.joined, todayIso());
+    const annualTaken = await takenOf(c, empId, 'annual', since);
+    const sickTaken = await takenOf(c, empId, 'sick', since);
     const sickRule = parseSickRule(await cfg.getConfig(co, 'leave.sick.rule', null, c));
     const sick = sickRule
       ? { ...sickRule, taken: sickTaken, available: round1(sickRule.entitlement - sickTaken) }
@@ -210,8 +237,9 @@ async function apply(session, input = {}) {
   }
 
   return db.withTenant(co, async (c) => {
-    const empId = await employeeOf(c, session);
-    if (!empId) throw new HttpError(403, 'no employee for user');
+    const emp = await employeeRowOf(c, session);
+    if (!emp) throw new HttpError(403, 'no employee for user');
+    const empId = emp.id;
 
     if (leave_type === 'annual') {
       // Serialize concurrent applies for the SAME employee so the read-check-
@@ -224,7 +252,9 @@ async function apply(session, input = {}) {
       const entitlement = await cfg.getInt(co, 'leave.entitlement.default', 21, c);
       // Round to match the balance card (round1); an unrounded float would
       // falsely reject an exact-integer request at a fractional-carry boundary.
-      const available = round1(entitlement + (await openCarry(c, empId)) - (await takenOf(c, empId, 'annual')));
+      // Consumption cycle-scoped (#1) — the same window balance() reports.
+      const since = cycleStartFor(emp.joined, todayIso());
+      const available = round1(entitlement + (await openCarry(c, empId)) - (await takenOf(c, empId, 'annual', since)));
       if (d > available) throw new HttpError(409, 'insufficient annual balance');
     }
     // sick: separate bucket (LR-7 limits [TBC], not enforced here) — never annual.
