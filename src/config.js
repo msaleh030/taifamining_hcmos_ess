@@ -280,7 +280,8 @@ const DEFAULT_CONFIG = {
 // the seeded defaults. R05 removed at the app layer (v1.6 — absorbed by R06);
 // its row stays only so historical R05 rows keep a defined scope.
 const SITE_SCOPE = {
-  R01: true,  R02: true,  R03: true,  R04: true,  R05: true,  R06: true,
+  R01: true,  R02: true,  R03: true,  R05: true,
+  R04: false, R06: false, // HR Manager + SHEQ Manager — 'All sites' (Kira 2026-07-12)
   R07: false, R11: false, R12: false, R13: false,
   R15: false, R16: false, // finance roles — central (v1.5)
   R14: false, // CEO/Executive — org-wide oversight, never site-scoped (v1.5)

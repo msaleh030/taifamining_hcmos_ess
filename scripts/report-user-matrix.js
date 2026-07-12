@@ -130,7 +130,7 @@ async function main() {
     // SCOPE MAPPING: 'All sites'/'Unscoped' -> central (valid only for central
     // roles); named canonical sites -> user_site_scope rows; 'one site
     // (confirm)' -> the site is UNNAMED, blocked until named.
-    const CENTRAL = new Set(['R07', 'R11', 'R12', 'R14', 'R15', 'R16']);
+    const CENTRAL = new Set(['R04', 'R06', 'R07', 'R11', 'R12', 'R14', 'R15', 'R16']); // R04/R06 central per Kira 2026-07-12
     const scopeCentral = /^(all\s*sites?|unscoped|central|company\s*wide)\b/i.test(site);
     const scopeUnnamed = /confirm|tbc|tbd/i.test(site) || (!site && !scopeCentral);
     if (scopeCentral && role && !CENTRAL.has(role))

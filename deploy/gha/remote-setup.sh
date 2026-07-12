@@ -146,7 +146,15 @@ if [ -n "$WRONG" ]; then
 else
   echo "CLEANUP CHECK: no alvera.salvator@ account exists (the 4th officer was HELD, never provisioned) — nothing to remove."
 fi
-echo "PENDING NAMES (provision when Taifa HR confirms): 2x R04, maurice.<surname> R06, richard.<surname> R14"
+# Confirmed matrix accounts (Kira 2026-07-12): R04 x2 + R06 + R14, all central
+# ('All sites' by role, migration 029) — HQ is only the employee-record anchor.
+prov baraka.nsemwa@taifamining.tz     'Baraka Nsemwa'     R04 "$HQ_SITE"
+prov poonam.divecha@taifamining.tz    'Poonam Divecha'    R04 "$HQ_SITE"
+prov maurice.mwendabai@taifamining.tz 'Maurice Mwendabai' R06 "$HQ_SITE"
+prov richard.tainton@taifamining.tz   'Richard Tainton'   R14 "$HQ_SITE"
+# Matrix name note (reported, NOT changed): the matrix writes 'Alvera Salvator'
+# for advera.speratus@ — the account keeps the name Kira corrected earlier
+# (Advera Speratus); her scope is BOTH North Mara projects, as provisioned.
 # hcmos-run sources the service's EnvironmentFile first — a bare `node`
 # invocation misses PG_OWNER_PW and fails Postgres auth.
 if ! grep -q 'hcmos-run node scripts/provision-super-admin.js' "$CREDS" 2>/dev/null; then

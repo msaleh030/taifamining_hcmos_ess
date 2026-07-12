@@ -54,7 +54,9 @@ test('H2: suspended user cannot field-login even with a valid device + PIN', asy
 
 // ── H3: disciplinary issuer cannot target an out-of-site employee ────────────
 test('H3: site-bound disciplinary issuer is 404 for an out-of-site subject', async () => {
-  const issuer = { company_id: A, user_id: F.USERS.DISS_A.id, role_code: 'R06' }; // Ivy @ A1 (site-scoped)
+  // R06 went CENTRAL (Kira 2026-07-12, migration 029) — the site gate is
+  // pinned through R02 (Supervisor), which stays site-bound and is an issuer.
+  const issuer = { company_id: A, user_id: F.USERS.SUP_A.id, role_code: 'R02' }; // @ A1 (site-scoped)
   await assert.rejects(
     disc.issueAction(issuer, { employeeId: F.EMP.DAVE, actionType: 'written', detail: 'x', approverUserId: F.USERS.DCHK_A.id }),
     /employee not found/, 'out-of-site subject 404s before any read/write');
