@@ -26,3 +26,4 @@ run: smarter ingestion (header auto-detect + variant mapping, fail-closed on amb
 run: Kira-authorized NM scaffold purge + national_id HR tier + Omid login/directory verification 2026-07-09T11:20:59Z
 run: remaining-NM breakdown (identify the 103 protected numeric-PF rows) 2026-07-09T11:24:23Z
 run: employee-master enrich-by-PF (identity-verified) for the 103 pre-existing balance rows 2026-07-09T11:49:53Z
+run: bughunt-B port merged (PR #4, d71539e) — rank lattice, cycle-scoped leave, 11 more pinned fixes 2026-07-12T13:47:49Z
