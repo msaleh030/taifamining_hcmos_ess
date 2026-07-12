@@ -154,31 +154,41 @@ done
 [ -n "$IP" ] || { echo "FATAL: VM never reached running/IP (last state: ${STATE:-unknown})"; exit 1; }
 echo "VM running at $IP"
 
-# ── 4. Firewall via API (deny-all inbound; SSH only; tunnel dials out) ───────
+# ── 4. Firewall via API — NO CHURN (runs 32/35 post-mortem) ──────────────────
+# Duplicate hcmos-uat-fw groups accumulated (create-by-name during the token
+# outage) and every run re-ACTIVATED one, switching the VM between groups —
+# Hostinger applies the switch asynchronously and SSH times out mid-swap. The
+# rule now: if the VM's CURRENT group already accepts TCP/22, TOUCH NOTHING.
+# Only when the current group is missing/SSH-less do we pick (or create) an
+# SSH-ok group, activate it, and WAIT for the switch to be applied.
 say "4. firewall: SSH only, everything else denied (Cloudflare tunnel = zero inbound 443)"
-FW_ID="$(hapi GET /vps/v1/firewall | jq -r 'try ([.[] | select(.name == "hcmos-uat-fw")][0].id // empty) catch empty')"
-if [ -z "$FW_ID" ]; then
-  FW_ID="$(hapi POST /vps/v1/firewall '{"name": "hcmos-uat-fw"}' | jq -r '.id // empty')"
-  [ -n "$FW_ID" ] && hapi POST "/vps/v1/firewall/$FW_ID/rules" \
-    '{"protocol": "TCP", "port": "22", "source": "any", "source_detail": "any", "action": "accept"}' >/dev/null || true
-fi
-if [ -n "$FW_ID" ]; then
-  hapi POST "/vps/v1/firewall/$FW_ID/activate/$VM_ID" >/dev/null \
-    && echo "firewall hcmos-uat-fw active on VM (tighten SSH source to RailGrid IPs in the panel)" \
-    || echo "WARN: firewall activation call failed — UFW on the box still enforces the same policy"
-  # EVIDENCE for SSH-reachability failures (run 32: timeout minutes after a
-  # panel session rotated the API token): print the group's CURRENT rules —
-  # protocols/ports/sources only, nothing sensitive. A panel edit that drops or
-  # narrows the TCP/22 accept locks the GitHub runner out; diagnose it here
-  # rather than guessing from a bare "connection timed out".
-  RULES="$(hapi GET "/vps/v1/firewall/$FW_ID" | jq -c 'try .rules catch empty')"
-  echo "firewall rules (group $FW_ID): ${RULES:-<unreadable>}"
-  if [ -n "$RULES" ] && ! echo "$RULES" | jq -e '.[] | select((.protocol=="TCP" or .protocol=="any") and (.port=="22" or .port=="any") and .action=="accept")' >/dev/null 2>&1; then
-    echo "WARN: NO TCP/22 accept rule in the active group — SSH from this runner will time out."
-    echo "      Restore an SSH accept rule (or allowlist the runner) in the Hostinger panel; NOT auto-fixed (a tightened rule may be deliberate)."
-  fi
+ssh_ok() { hapi GET "/vps/v1/firewall/$1" | jq -e \
+  '.rules[]? | select((.protocol=="TCP" or .protocol=="any") and (.port=="22" or .port=="any") and .action=="accept")' >/dev/null 2>&1; }
+FW_ALL="$(hapi GET /vps/v1/firewall | jq -r 'try ([.[] | select(.name == "hcmos-uat-fw") | .id] | join(" ")) catch empty')"
+[ "$(echo "$FW_ALL" | wc -w)" -gt 1 ] && echo "NOTE: duplicate hcmos-uat-fw groups exist ($FW_ALL) — panel cleanup recommended (created during the API-token outage)"
+CUR_FW="$(hapi GET "/vps/v1/virtual-machines/$VM_ID" | jq -r '.firewall_group_id // empty')"
+if [ -n "$CUR_FW" ] && ssh_ok "$CUR_FW"; then
+  echo "firewall: VM already behind group $CUR_FW with a TCP/22 accept — left UNTOUCHED (no churn)"
 else
-  echo "WARN: API firewall unavailable — UFW on the box still enforces deny-all+SSH"
+  echo "firewall: current group '${CUR_FW:-none}' lacks an SSH accept — resolving an SSH-ok hcmos-uat-fw group"
+  PICK=""
+  for id in $FW_ALL; do if ssh_ok "$id"; then PICK="$id"; break; fi; done
+  if [ -z "$PICK" ]; then
+    PICK="$(hapi POST /vps/v1/firewall '{"name": "hcmos-uat-fw"}' | jq -r '.id // empty')"
+    [ -n "$PICK" ] && hapi POST "/vps/v1/firewall/$PICK/rules" \
+      '{"protocol": "TCP", "port": "22", "source": "any", "source_detail": "any", "action": "accept"}' >/dev/null
+    [ -n "$PICK" ] && ssh_ok "$PICK" || { echo "WARN: could not build an SSH-ok group — UFW on the box still enforces deny-all+SSH"; PICK=""; }
+  fi
+  if [ -n "$PICK" ]; then
+    hapi POST "/vps/v1/firewall/$PICK/activate/$VM_ID" >/dev/null || true
+    # WAIT for the switch to actually apply (async on Hostinger's side).
+    for i in $(seq 1 24); do
+      CUR_FW="$(hapi GET "/vps/v1/virtual-machines/$VM_ID" | jq -r '.firewall_group_id // empty')"
+      [ "$CUR_FW" = "$PICK" ] && break
+      sleep 5
+    done
+    echo "firewall: activated group $PICK (applied: $([ "$CUR_FW" = "$PICK" ] && echo yes || echo 'NOT CONFIRMED — proceeding to the SSH wait loop anyway'))"
+  fi
 fi
 
 # ── 5. Ship source (with enforced dist) + run remote setup ───────────────────
