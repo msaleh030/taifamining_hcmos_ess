@@ -42,6 +42,10 @@ const DEFAULT_CONFIG = {
   // [TBC] permitted owners for credential operations (role lists)
   'password.reset.owner':       'R03,R12', // HR Officer, System Admin
   'pin.reset.owner':            'R03,R12', // [TBC] device-enrolment/PIN owner
+  // Role rank lattice (bughunt-B #3): a credential reset may only TARGET a role
+  // at or below the actor's rank — an R03 HR Officer must never take over an
+  // R12 System Administrator / executive account. Registry-overridable.
+  'auth.role.rank': 'R01:10,R13:10,R08:20,R09:20,R10:20,R02:30,R03:30,R05:30,R04:50,R06:50,R07:50,R11:70,R14:70,R15:70,R16:70,R12:90',
   'device.reenrolment.owner':   'R12',     // [TBC] new phone / replaced kiosk
 
   // default role for a field session when the device's employee has no app_user
@@ -302,7 +306,11 @@ async function getConfig(companyId, key, fallback = null, exec = null) {
 
 async function getInt(companyId, key, fallback, exec = null) {
   const v = await getConfig(companyId, key, null, exec);
-  return v === null ? fallback : parseInt(v, 10);
+  if (v === null) return fallback;
+  const n = parseInt(v, 10);
+  // bughunt-B #13: '' / [TBC] / garbage must yield the FALLBACK, never NaN — a
+  // NaN here silently disables numeric gates (e.g. the lockout counter).
+  return Number.isFinite(n) ? n : fallback;
 }
 
 // Parse a comma-separated role list from config.
@@ -334,6 +342,17 @@ async function getRequiredInt(companyId, key, exec = null) {
   return parseInt(await getRequired(companyId, key, exec), 10);
 }
 
+// Required POSITIVE integer — 409 on zero/negative/non-numeric (bughunt-B #9).
+// Guards divide-by values (payroll.daily_rate.divisor): a 0 must BLOCK the
+// computation, never produce Infinity in pay math.
+async function getRequiredPositiveInt(companyId, key, exec = null) {
+  const n = await getRequiredInt(companyId, key, exec);
+  if (!Number.isFinite(n) || n <= 0) {
+    throw new HttpError(409, `${key} is not a positive integer — computation blocked`, { key, value: n });
+  }
+  return n;
+}
+
 // Required comma-separated set (blocks on PENDING/missing).
 async function getRequiredSet(companyId, key, exec = null) {
   const v = await getRequired(companyId, key, exec);
@@ -343,5 +362,5 @@ async function getRequiredSet(companyId, key, exec = null) {
 module.exports = {
   DEFAULT_CONFIG, SITE_SCOPE, PENDING, isPending,
   getConfig, getInt, getOwnerRoles, getRoleSet,
-  getRequired, getRequiredInt, getRequiredSet,
+  getRequired, getRequiredInt, getRequiredPositiveInt, getRequiredSet,
 };

@@ -81,5 +81,36 @@ test('UNI-01 an offline punch with an idempotency key syncs once; a duplicate do
   const after = Number((await owner(`SELECT count(*)::int n FROM attendance WHERE employee_id=$1`, [F.EMP.FIELDA])).rows[0].n);
   assert.equal(after, before + 1, 'recorded exactly once');
 
-  await owner(`DELETE FROM idempotency WHERE key=$1`, [key]);
+  // Stored keys are employee-scoped (att:<employee>:<raw>) — clean by pattern.
+  await owner(`DELETE FROM idempotency WHERE key LIKE 'att:%:' || $1`, [key]);
+});
+
+// ── bughunt-B #12: the stored key is EMPLOYEE-scoped — two employees whose
+// devices generate the SAME raw key must each record their own punch; the
+// second must never be handed the first's stored response. #16 rides along:
+// the claim + punch are one atomic transaction (same-employee replay still
+// dedupes; a lost race records nothing). ─────────────────────────────────────
+test('UNI-02 two employees using the same raw idempotency key each record their own punch', async () => {
+  const tsf = await zone('NM TSF');
+  const key = 'f5-shared-raw-key';
+  const field = await tok(F.USERS.FIELD_A); // → EMP.FIELDA (site A1)
+  const emp = await tok(F.USERS.EMP_A);     // → EMP.ALICE  (site A1)
+  const countOf = async (id) => Number((await owner(
+    `SELECT count(*)::int n FROM attendance WHERE employee_id=$1`, [id])).rows[0].n);
+  const b1 = await countOf(F.EMP.FIELDA), b2 = await countOf(F.EMP.ALICE);
+
+  const r1 = await clock(field, { lat: tsf.lat, lng: tsf.lng, accuracy: 5, idempotency_key: key });
+  const r2 = await clock(emp, { lat: tsf.lat, lng: tsf.lng, accuracy: 5, idempotency_key: key });
+  assert.equal(r1.body.deduped, false);
+  assert.equal(r2.body.deduped, false, 'employee 2 is NOT swallowed by employee 1\'s key');
+  assert.notEqual(r1.body.attendance_id, r2.body.attendance_id, 'two distinct punches');
+  assert.equal(await countOf(F.EMP.FIELDA), b1 + 1, 'employee 1 recorded their own punch');
+  assert.equal(await countOf(F.EMP.ALICE), b2 + 1, 'employee 2 recorded their own punch');
+
+  // Same-employee replay still dedupes (the scoping never broke idempotency).
+  const replay = await clock(emp, { lat: tsf.lat, lng: tsf.lng, accuracy: 5, idempotency_key: key });
+  assert.equal(replay.body.deduped, true, 'the same employee replaying the key gets the stored punch');
+  assert.equal(await countOf(F.EMP.ALICE), b2 + 1, 'no second record on replay');
+
+  await owner(`DELETE FROM idempotency WHERE key LIKE 'att:%:' || $1`, [key]);
 });

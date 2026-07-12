@@ -62,8 +62,14 @@ function verifyTotp(token, secretB32, atMs = Date.now()) {
 // drift; a code from the FUTURE (step+1) is never accepted.
 function verifyTotpStep(token, secretB32, atMs = Date.now(), minStep = -1) {
   if (!secretB32 || !token) return -1;
+  // bughunt-B #14b: only 1-6 DIGITS may proceed (a client may strip a leading
+  // zero, hence 1-6 then re-pad). Anything else — letters, multibyte characters
+  // — must fail verification, never reach timingSafeEqual, whose length check
+  // would THROW on a multibyte token and turn bad input into a 500.
+  const raw = String(token).trim();
+  if (!/^\d{1,6}$/.test(raw)) return -1;
   const step = Math.floor(atMs / 1000 / 30);
-  const t = Buffer.from(String(token).trim().padStart(6, '0').slice(-6));
+  const t = Buffer.from(raw.padStart(6, '0'));
   for (const c of [step - 1, step]) {
     if (c <= minStep) continue; // already consumed — replay refused
     if (crypto.timingSafeEqual(Buffer.from(totpAt(secretB32, c)), t)) return c;

@@ -148,6 +148,26 @@ test('AUTH-05 password reset by a permitted owner rotates the credential', async
   assert.equal(withOld.status, 401);
 });
 
+// ── bughunt-B #3: the rank lattice — a reset may only TARGET a role at or
+// below the actor's rank. Being in password.reset.owner (R03 is) must never let
+// an HR Officer rotate a System Administrator's credential and take the account. ─
+test('AUTH-05b rank lattice: R03 → R12 reset is REFUSED (privilege escalation); downward reset still works', async () => {
+  const hr = await H.loginConsole(F.USERS.HR_A); // R03 ∈ password.reset.owner
+  const up = await H.req('POST', '/auth/reset/password', {
+    token: hr.body.token, body: { target_user: F.USERS.ADMIN_A.id, new_password: 'Escalate!99x' } });
+  assert.equal(up.status, 403, 'R03 cannot reset an R12 — rank lattice refuses upward resets');
+  assert.match(String(up.body.error), /higher-ranked/);
+  // The admin credential is untouched — the original password still logs in.
+  assert.equal((await H.loginConsole(F.USERS.ADMIN_A)).status, 200, 'R12 credential not rotated');
+
+  // Downward stays permitted: R12 (rank 90) resets an R01 (rank 10).
+  const admin = await H.loginConsole(F.USERS.ADMIN_A);
+  const down = await H.req('POST', '/auth/reset/password', {
+    token: admin.body.token, body: { target_user: F.USERS.RESET_A.id, new_password: 'AdminSet!99x' } });
+  assert.equal(down.status, 200, 'R12 → R01 reset permitted (at-or-below rank)');
+  assert.equal((await H.loginConsole(F.USERS.RESET_A, { password: 'AdminSet!99x' })).status, 200);
+});
+
 // ── A3: confidential fields enforced server-side; forbidden fields ABSENT ───
 // (Profile reads now share the Slice 2 assembler over the normalised tables.)
 test('A3 payroll role (R07) sees pay/bank + disciplinary but not medical', async () => {

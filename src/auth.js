@@ -146,8 +146,22 @@ async function resetPassword(session, { target_user, new_password }) {
 
   // Target must be in the actor's tenant — RLS makes other tenants invisible.
   const exists = await db.withTenant(session.company_id, (c) =>
-    c.query('SELECT 1 FROM app_user WHERE id=$1', [target_user]));
+    c.query('SELECT role_code FROM app_user WHERE id=$1', [target_user]));
   if (exists.rows.length === 0) throw new HttpError(404, 'not found');
+
+  // bughunt-B #3 (rank lattice): a reset may only TARGET a role at or below the
+  // actor's rank. Being in password.reset.owner opens the door; it must NEVER
+  // let an R03 HR Officer rotate an R12 System Administrator's / super-admin's
+  // credential and take the account over. Fail closed: a role absent from the
+  // lattice outranks everyone as a target.
+  const ranks = new Map();
+  for (const part of String(await cfg.getConfig(session.company_id, 'auth.role.rank', '') || '').split(',')) {
+    const [role, n] = part.split(':').map((s) => s.trim());
+    if (role && Number.isFinite(Number(n))) ranks.set(role, Number(n));
+  }
+  const actorRank = ranks.get(session.role_code) ?? 0;
+  const targetRank = ranks.get(exists.rows[0].role_code) ?? Infinity;
+  if (targetRank > actorRank) throw new HttpError(403, 'cannot reset a higher-ranked account (rank lattice)');
 
   const actor = await actorEmail(session);
   const res = await db.query('SELECT * FROM auth_reset_password($1,$2,$3,$4)',

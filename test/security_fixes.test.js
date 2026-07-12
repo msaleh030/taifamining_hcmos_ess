@@ -220,3 +220,35 @@ test('L5: provision-uat-user is atomic — a dup email rolls back the employee',
     await owner(`DELETE FROM app_user WHERE company_id=$1 AND email=$2`, [A, email]);
   }
 });
+
+// ── bughunt-B #13: getInt returns the FALLBACK for ''/[TBC]/garbage — never NaN.
+// A NaN silently disables every numeric gate that reads it (lockout counters,
+// page sizes): NaN comparisons are all false.
+test('SEC-B13 getInt yields the fallback (never NaN) when the stored value is [TBC], empty or garbage', async () => {
+  const cfgm = require('../src/config');
+  const A = F.TENANT_A;
+  const set = (v) => db.withOwner((c) =>
+    c.query(`UPDATE config SET value=$1 WHERE company_id=$2 AND key='employees.page_size'`, [v, A]));
+  try {
+    for (const bad of ['__TBC__', '', 'abc']) {
+      await set(bad);
+      const got = await cfgm.getInt(A, 'employees.page_size', 50);
+      assert.equal(got, 50, `"${bad}" → fallback 50, not NaN`);
+      assert.ok(Number.isFinite(got));
+    }
+  } finally {
+    await set('50');
+  }
+});
+
+// ── bughunt-B #14b: a malformed / multibyte TOTP token FAILS verification — it
+// must never reach timingSafeEqual, whose length check throws on multibyte
+// input and turns a bad login attempt into a 500.
+test('SEC-B14b malformed and multibyte TOTP tokens fail closed (no throw); valid codes still verify', () => {
+  const secret = 'JBSWY3DPEHPK3PXP';
+  assert.equal(C.verifyTotp('①②③④⑤⑥', secret), false, 'multibyte digits: false, not a thrown 500');
+  assert.equal(C.verifyTotp('abcdef', secret), false, 'letters: false');
+  assert.equal(C.verifyTotp('12345678', secret), false, 'too long: false');
+  assert.equal(C.verifyTotp('', secret), false, 'empty: false');
+  assert.equal(C.verifyTotp(C.currentTotp(secret), secret), true, 'a genuine 6-digit code still verifies');
+});

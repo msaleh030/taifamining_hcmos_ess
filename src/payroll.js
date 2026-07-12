@@ -12,12 +12,11 @@
 const cfg = require('./config');
 const { HttpError } = require('./errors');
 
-// PC-1 — daily rate = monthly amount / registry divisor.
+// PC-1 — daily rate = monthly amount / registry divisor. The positivity guard
+// is the shared cfg.getRequiredPositiveInt (one implementation, used by
+// liability.js too — bughunt-B #9).
 async function dailyRate(companyId, monthlyAmount, exec = null) {
-  const divisor = await cfg.getRequiredInt(companyId, 'payroll.daily_rate.divisor', exec);
-  if (!Number.isFinite(divisor) || divisor <= 0) {
-    throw new HttpError(409, 'payroll.daily_rate.divisor is not a positive integer');
-  }
+  const divisor = await cfg.getRequiredPositiveInt(companyId, 'payroll.daily_rate.divisor', exec);
   return Number(monthlyAmount) / divisor;
 }
 

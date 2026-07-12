@@ -79,3 +79,51 @@ test('LIAB-02 / LVR-02 batch liability covers ACTIVE staff only; leavers exclude
     });
   }
 });
+
+// ── bughunt-B #6: an employee matched by MORE THAN ONE Exact row counts ONCE ──
+// openLeaveDays() returns the WHOLE outstanding balance, so each duplicate row
+// re-added the full liability to the register (double-counted totals).
+test('LIAB-04 duplicate matched rows for one employee do not double-count the liability', async () => {
+  const cells = baseCells();
+  const setup = await db.withOwner(async (c) => {
+    const b = (await c.query(
+      `INSERT INTO exact_batch(company_id,period,file_hash,version,status,row_count)
+       VALUES ($1,'2026-06-dup','liab-hash-dup','v1.2','staged',2) RETURNING id`, [A])).rows[0];
+    const row = (no) => c.query(
+      `INSERT INTO exact_row(company_id,batch_id,row_no,employee_id_raw,full_name,cells,matched_employee,match_status)
+       VALUES ($1,$2,$3,'E-A-0005','',$4,$5,'matched')`, [A, b.id, no, JSON.stringify(cells), F.EMP.DAVE]);
+    await row(1); await row(2); // the SAME employee, twice
+    const cy = (await c.query(
+      `INSERT INTO leave_carry(company_id,employee_id,days,carried_for_year) VALUES ($1,$2,10,2026) RETURNING id`,
+      [A, F.EMP.DAVE])).rows[0];
+    return { batchId: b.id, carryId: cy.id };
+  });
+  try {
+    const res = await liab.batchLiability(session, setup.batchId);
+    assert.equal(res.total, 1000, 'liability counted ONCE (10 days × 100), not doubled to 2000');
+    assert.deepEqual(res.available.map((a) => a.employee_id), [F.EMP.DAVE], 'one entry for the employee');
+    assert.deepEqual(res.excluded, [{ employee_id: F.EMP.DAVE, status: 'duplicate-row' }],
+      'the duplicate row is reported, never silently re-added');
+  } finally {
+    await db.withOwner(async (c) => {
+      await c.query('DELETE FROM leave_carry WHERE id=$1', [setup.carryId]);
+      await c.query('DELETE FROM exact_batch WHERE id=$1', [setup.batchId]);
+    });
+  }
+});
+
+// ── bughunt-B #9: a zero/garbage divisor must 409-block, never divide ─────────
+test('LIAB-05 payroll.daily_rate.divisor of 0 blocks the computation with 409 (never Infinity)', async () => {
+  const set = (v) => db.withOwner((c) =>
+    c.query(`UPDATE config SET value=$1 WHERE company_id=$2 AND key='payroll.daily_rate.divisor'`, [v, A]));
+  await set('0');
+  try {
+    await assert.rejects(liab.dailyRate(session, baseCells()), (e) => {
+      assert.equal(e.status, 409);
+      assert.match(e.message, /not a positive integer/);
+      return true;
+    });
+  } finally {
+    await set('30'); // restore the PC-1 value
+  }
+});

@@ -72,6 +72,40 @@ test('a negative opening balance persists and NETS against entitlement (not clam
   }
 });
 
+// ── CR-6 (bughunt-B #1/#2): entitlement renews per cycle; NO double charge ───
+// The double charge: a leave taken BEFORE the anniversary was (a) subtracted
+// from the balance (lifetime sum) AND (b) not credited against forfeiture (the
+// sweep counts only post-anniversary use) — charged twice. With consumption
+// cycle-scoped, balance() and the sweep share ONE window. B's repro: 21 vs 16.
+test('CR-6 entitlement renews per cycle; prior-cycle leave is never double-charged at forfeit (21, not 16)', async () => {
+  // Joined 2020-06-01 → anniversary 2026-06-01; grace end 2026-09-01.
+  const emp = await mkEmployee('Carry NoDouble', '2020-06-01');
+  const uid = (await owner(
+    `INSERT INTO app_user(id, company_id, employee_id, email, password_hash, mfa_secret, role_code, status)
+     VALUES (gen_random_uuid(),$1,$2,'cr6.nodouble@a.example','x','x','R01','active') RETURNING id`, [A, emp])).rows[0].id;
+  const sess = { company_id: A, user_id: uid, role_code: 'R01' };
+  try {
+    await addCarry(emp, 10, 2025);
+    // 5 days taken in the PRIOR cycle (before the 2026-06-01 anniversary).
+    await owner(`INSERT INTO leave_request(company_id, employee_id, leave_type, days, status, applied_at)
+                 VALUES ($1,$2,'annual',5,'applied','2026-05-01T00:00:00Z')`, [A, emp]);
+
+    const before = await leave.balance(sess);
+    assert.equal(before.annual.taken, 0, '#1 renews: the prior-cycle 5 days are not in this cycle\'s consumption');
+    assert.equal(before.annual.available, 31, '21 entitlement + 10 carry — prior-cycle use not deducted');
+
+    // Grace end passes with the carry unused THIS cycle → all 10 forfeited.
+    await leave.carrySweep(A, '2026-09-05');
+    const after = await leave.balance(sess);
+    assert.equal(after.annual.carried, 0, 'unused carry fully forfeited at anniversary+3mo');
+    assert.equal(after.annual.available, 21,
+      '#2 NO DOUBLE CHARGE: forfeiting the carry must not ALSO deduct the prior-cycle 5 (the bug landed at 16)');
+  } finally {
+    await owner(`DELETE FROM app_user WHERE id=$1`, [uid]);
+    await purge(emp);
+  }
+});
+
 // ── CR-1..CR-5 through a full anniversary cycle ──────────────────────────────
 test('CR-1..CR-5: cap at anniversary, forfeit unused at +3mo, opening exempt, idempotent, audited', async () => {
   // Joined 2020-01-10 → anniversary (cycle 2026) = 2026-01-10; grace end 2026-04-10.
