@@ -27,3 +27,4 @@ run: Kira-authorized NM scaffold purge + national_id HR tier + Omid login/direct
 run: remaining-NM breakdown (identify the 103 protected numeric-PF rows) 2026-07-09T11:24:23Z
 run: employee-master enrich-by-PF (identity-verified) for the 103 pre-existing balance rows 2026-07-09T11:49:53Z
 run: bughunt-B port merged (PR #4, d71539e) — rank lattice, cycle-scoped leave, 11 more pinned fixes 2026-07-12T13:47:49Z
+run: six-site canonical model + per-site purge + xlsx master pipeline (awaits the 6-file drop) 2026-07-12T14:45:00Z
