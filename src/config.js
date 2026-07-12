@@ -227,6 +227,11 @@ const DEFAULT_CONFIG = {
   // The bulk ingest pipeline (R15 maker / R16 checker, control-totalled) is
   // the ONE sanctioned load path and is not an interactive CRUD surface.
   'expat.crud.roles':                'R11',
+  // The CHECKER for an R11-raised expatriate change is the CEO/Executive
+  // (Kira, 2026-07-12): Omid (R11) raises, Richard (R14) decides. This set
+  // REPLACES the generic field_change checkers for is_expat subjects, so SoD
+  // never dead-ends on the single R11 account.
+  'expat.checker.roles':             'R14',
   // Support ticket channels (ES-5).
   'support.channels':         'in_app,email',
   // ── F7 guards (Slice 9 modules exposed over HTTP). All four are APPLIED,

@@ -633,20 +633,25 @@ const change = (tok, body) => fetch(`http://127.0.0.1:3000/employees/${process.e
   signal: T(), body: JSON.stringify(body) });
 (async () => {
   const r04 = await login('baraka.nsemwa@taifamining.tz');   // central HR Manager — a maker role
-  const r11 = await login('omid.karambeck@taifamining.tz');  // Head of HR
+  const r11 = await login('omid.karambeck@taifamining.tz');  // Head of HR — the ONLY expat maker
+  const r14 = await login('richard.tainton@taifamining.tz'); // CEO/Executive — the ONLY expat checker
   const refused = await change(r04, { field: 'phone', value: '0700000000' });
   const refusedBody = await refused.json();
   const allowed = await change(r11, { field: 'phone', value: '0700000000' });
   const allowedBody = await allowed.json();
-  let cleanup = 'no pending change to clean';
+  let r11DecideStatus = 'n/a', cleanup = 'no pending change to clean';
   if (allowed.status === 200 && allowedBody.id) {
-    const d = await fetch(`http://127.0.0.1:3000/field-change/${allowedBody.id}/decline`, {
-      method: 'POST', headers: { authorization: `Bearer ${r11}` }, signal: T() });
-    cleanup = `pending change declined (${d.status})`;
+    const decide = (tok) => fetch(`http://127.0.0.1:3000/field-change/${allowedBody.id}/decline`, {
+      method: 'POST', headers: { authorization: `Bearer ${tok}` }, signal: T() });
+    r11DecideStatus = (await decide(r11)).status;             // Kira: R14 decides, not R11
+    const d = await decide(r14);                              // Richard declines — zero residue
+    cleanup = `declined by R14 (${d.status})`;
   }
-  const pass = refused.status === 403 && /Head of HR/.test(refusedBody.error || '') && allowed.status === 200;
+  const pass = refused.status === 403 && /Head of HR/.test(refusedBody.error || '')
+    && allowed.status === 200 && r11DecideStatus === 403 && /\(200\)/.test(cleanup);
   console.log(`R04 change on expat: ${refused.status} (want 403) — "${refusedBody.error || ''}"`);
-  console.log(`R11 change on expat: ${allowed.status} (want 200, pending) — ${cleanup}`);
+  console.log(`R11 change on expat: ${allowed.status} (want 200, pending)`);
+  console.log(`R11 deciding it    : ${r11DecideStatus} (want 403 — Omid raises, Richard decides) — ${cleanup}`);
   console.log(pass ? 'EXPAT CRUD GATE PROBE PASS' : 'EXPAT CRUD GATE PROBE FAIL');
   process.exit(pass ? 0 : 1);
 })().catch((e) => { console.error('PROBE ERROR:', e.message); process.exit(1); });

@@ -159,11 +159,12 @@ were supplied — that catches conversion/load drift, NOT source truth.
   non-R11 can neither raise nor decide a field change on an `is_expat`
   employee, and an expat's permit documents are R11-only in the document
   list (DA-2's R11-only leg extended). R11 joined the maker tier for this
-  (migration 031 amends existing tenant config). SoD holds inside the tier —
-  approving an expat change needs a SECOND Head-of-HR-tier account; with the
-  single R11 (Omid) an expat change stays pending until one exists (or Kira
-  rules an alternate checker). Bulk ingest (R15/R16, control-totalled) is the
-  one sanctioned load path and is unchanged. Live probe fails the deploy.
+  (migration 031 amends existing tenant config). SoD (Kira): **the checker
+  for an R11-raised expat change is R14** (`expat.checker.roles`) — Omid
+  raises, Richard decides; the CEO set REPLACES the generic checkers for
+  is_expat subjects (and R14 stays a NON-checker for locals). Bulk ingest
+  (R15/R16, control-totalled) is the one sanctioned load path and is
+  unchanged. Live probe fails the deploy.
 
 ### 7b. Opening balances — now ATTACH to the master by PF
 Drop the **opening balances + permit files** (CSV) on the box, prepare a

@@ -208,10 +208,18 @@ async function decide(session, changeId, approve) {
     if (fc.status !== 'pending') throw new HttpError(409, 'already decided');
     if (!EDITABLE_FIELDS.has(fc.field)) throw new HttpError(400, 'field not editable');
     const subj = await client.query('SELECT is_expat FROM employee WHERE id=$1', [fc.employee_id]);
-    await assertExpatCrud(client, session, subj.rows[0] && subj.rows[0].is_expat);
-
-    const checkers = await rolesFor(session.company_id, 'checkers', fc.field);
-    if (!checkers.has(session.role_code)) throw new HttpError(403, 'forbidden');
+    if (subj.rows[0] && subj.rows[0].is_expat) {
+      // Kira 2026-07-12: an expatriate change is DECIDED by the CEO/Executive
+      // tier — this REPLACES the generic checker set for is_expat subjects
+      // (Omid R11 raises, Richard R14 decides; SoD never dead-ends on the
+      // single Head of HR account). Fail-closed for everyone else, R11 included.
+      const chk = await cfg.getRoleSet(session.company_id, 'expat.checker.roles', 'R14', client);
+      if (!chk.has(session.role_code))
+        throw new HttpError(403, 'expatriate changes are decided by the CEO/Executive (R14) only');
+    } else {
+      const checkers = await rolesFor(session.company_id, 'checkers', fc.field);
+      if (!checkers.has(session.role_code)) throw new HttpError(403, 'forbidden');
+    }
 
     const checker = await actorEmail(client, session);
     if (!checker) throw new HttpError(403, 'forbidden');

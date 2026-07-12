@@ -42,49 +42,51 @@ test('central-scope ruling: R04/R07/R12/R14/R15/R16 are scoped=false in site_sco
   assert.equal(byRole.R03, true, 'R03 stays site-bound (the multi-site SET is user_site_scope rows, not central scope)');
 });
 
-test('expat CRUD gate: non-R11 refused on submit AND decide; R11 raises; a second R11 approves (SoD intact)', async () => {
+test('expat CRUD gate: only R11 raises; only R14 decides (Kira: Omid raises, Richard decides); locals unchanged', async () => {
   await withExpat(async () => {
     const r03 = await tok(F.USERS.HR_A);        // site A1 HR Officer — maker for locals
     const r04 = await tok(F.USERS.HR2_A);       // central HR Manager — maker for locals
-    const r11 = await tok(F.USERS.DIRECTOR_A);  // Head of HR
+    const r11 = await tok(F.USERS.DIRECTOR_A);  // Head of HR — the ONLY expat maker
+    const r14 = await tok(F.USERS.CEO_A);       // CEO/Executive — the ONLY expat checker
 
-    // Non-R11 makers are refused — R03 in-site and R04 central alike.
+    // Non-R11 makers are refused — R03 in-site and R04 central reach the expat
+    // gate (they ARE makers); R14 falls at the generic maker check first.
     for (const [who, t] of [['R03', r03], ['R04', r04]]) {
       const res = await H.req('POST', `/employees/${XPAT}/change`, { token: t, body: { field: 'phone', value: '0711111111' } });
-      assert.equal(res.status, 403, `${who} must be refused`);
+      assert.equal(res.status, 403, `${who} must be refused as maker`);
       assert.match(res.body.error, /Head of HR/, `${who} refusal names the ruling`);
     }
+    const ceoMake = await H.req('POST', `/employees/${XPAT}/change`, { token: r14, body: { field: 'phone', value: '0711111111' } });
+    assert.equal(ceoMake.status, 403, 'R14 is a checker for expats, never a maker');
 
     // R11 raises the change (R11 is a maker since this ruling).
     const sub = await H.req('POST', `/employees/${XPAT}/change`, { token: r11, body: { field: 'phone', value: '0711111111' } });
     assert.equal(sub.status, 200, JSON.stringify(sub.body));
     assert.equal(sub.body.pending, true);
 
-    // A non-R11 checker cannot DECIDE it (approve or decline).
-    const r04Decide = await H.req('POST', `/field-change/${sub.body.id}/approve`, { token: r04 });
-    assert.equal(r04Decide.status, 403);
-    assert.match(r04Decide.body.error, /Head of HR/);
-
-    // SoD holds INSIDE the R11 tier: the maker cannot approve their own change.
-    const self = await H.req('POST', `/field-change/${sub.body.id}/approve`, { token: r11 });
-    assert.equal(self.status, 403, 'maker cannot self-approve even as R11');
-
-    // A SECOND Head-of-HR account approves — R11-only CRUD with SoD intact.
-    await owner(`UPDATE app_user SET role_code='R11' WHERE id=$1`, [F.USERS.HR2_A.id]);
-    try {
-      const r11b = await tok(F.USERS.HR2_A);
-      const ok = await H.req('POST', `/field-change/${sub.body.id}/approve`, { token: r11b });
-      assert.equal(ok.status, 200, JSON.stringify(ok.body));
-      assert.equal(ok.body.applied, true);
-    } finally {
-      await owner(`UPDATE app_user SET role_code='R04' WHERE id=$1`, [F.USERS.HR2_A.id]);
+    // Only R14 decides an expat change: R04 (a generic checker) and even the
+    // R11 maker tier are refused — the CEO set REPLACES the generic checkers.
+    for (const [who, t] of [['R04', r04], ['R11', r11]]) {
+      const res = await H.req('POST', `/field-change/${sub.body.id}/approve`, { token: t });
+      assert.equal(res.status, 403, `${who} must be refused as expat checker`);
+      assert.match(res.body.error, /CEO\/Executive/, `${who} refusal names the checker ruling`);
     }
-    const phone = await owner(`SELECT phone FROM employee WHERE id=$1`, [XPAT]);
-    assert.equal(phone.rows[0].phone, '0711111111', 'the R11-approved change applied');
 
-    // Locals are untouched by the gate: the same R03 maker still raises changes.
+    // R14 approves — Omid raises, Richard decides.
+    const ok = await H.req('POST', `/field-change/${sub.body.id}/approve`, { token: r14 });
+    assert.equal(ok.status, 200, JSON.stringify(ok.body));
+    assert.equal(ok.body.applied, true);
+    const phone = await owner(`SELECT phone FROM employee WHERE id=$1`, [XPAT]);
+    assert.equal(phone.rows[0].phone, '0711111111', 'the R14-approved change applied');
+
+    // Locals are untouched by BOTH sides of the gate: R03 raises, R04 approves,
+    // and R14 stays refused (he is the EXPAT checker, not a generic one).
     const local = await H.req('POST', `/employees/${F.EMP.CAROL}/change`, { token: r03, body: { field: 'phone', value: '0700000002' } });
     assert.equal(local.status, 200, 'local employee CRUD unchanged');
+    const localCeo = await H.req('POST', `/field-change/${local.body.id}/approve`, { token: r14 });
+    assert.equal(localCeo.status, 403, 'R14 is not a checker for LOCAL changes');
+    const localOk = await H.req('POST', `/field-change/${local.body.id}/approve`, { token: r04 });
+    assert.equal(localOk.status, 200, 'generic checker path unchanged for locals');
   });
 });
 
