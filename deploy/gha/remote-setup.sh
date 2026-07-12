@@ -127,54 +127,57 @@ echo "SUPER ADMINS (interactive, hidden password — Kira runs on this box):"
 echo "  UAT_COMPANY=$UAT_CO hcmos-run node scripts/provision-super-admin.js mohammed@railgrid.tz"
 echo "  UAT_COMPANY=$UAT_CO hcmos-run node scripts/provision-super-admin.js admin@taifamining.tz"
 
-# ── scaffold purge: North-Mara-ONLY, Kira-authorized 2026-07-09 ───────────────
-# Clears the SYNTHETIC seed rows so the real master IS the directory. Strictly
-# scoped + fail-closed (see scripts/purge-nm-scaffold.js): only North Mara rows
-# with position NULL, a non-numeric/absent legacy_id (seed 'E00001' style — every
-# real load carries a numeric PF), and NO app_user link. One transaction, row-set
-# re-verified before any delete, audited on the hash-chain. Idempotent: a re-run
-# finds 0 candidates.
-say "scaffold purge (North-Mara-only synthetic seed rows — Kira-authorized)"
-UAT_COMPANY=$UAT_CO hcmos-run node scripts/purge-nm-scaffold.js \
-  || { echo "PURGE REFUSED — nothing deleted (fail-closed); see the reason above"; }
-# Breakdown of what REMAINS at North Mara (counts + PF ranges only — no names/
-# PII in this public log). Anything numeric-PF was PROTECTED as real-shaped
-# data; this identifies the cohort so the 285 reconciliation is honest.
-echo "-- remaining North Mara rows, by protection reason:"
-sudo -u postgres psql -d hcmos -Atc "
-  SELECT 'app_user-linked (kept): ' ||
-         count(*) FILTER (WHERE EXISTS (SELECT 1 FROM app_user u WHERE u.employee_id=e.id)) ||
-         ' · numeric-PF (kept, real-shaped): ' ||
-         count(*) FILTER (WHERE e.legacy_id ~ '^[0-9]+\$') ||
-         ' (PF range ' || coalesce(min(e.legacy_id) FILTER (WHERE e.legacy_id ~ '^[0-9]+\$'),'-') ||
-         '..' || coalesce(max(e.legacy_id) FILTER (WHERE e.legacy_id ~ '^[0-9]+\$'),'-') || ')' ||
-         ' · with position set: ' || count(*) FILTER (WHERE e.position IS NOT NULL) ||
-         ' · total remaining: ' || count(*)
-    FROM employee e JOIN site s ON s.id=e.site_id
-   WHERE e.company_id='$UAT_CO' AND s.name='North Mara'"
+# ── CANONICAL SIX-SITE MODEL (Kira 2026-07-12) ────────────────────────────────
+# North Mara is TWO sites (L&H/Airstrip + TSF Lift 10) with independent HR
+# scoping; Nyanzaga carries its project name; Dar Yard is new. Legacy names are
+# renamed IN PLACE (site ids — and so every scope/zone reference — survive).
+say "canonical six-site model (rename legacy, create missing)"
+apt-get install -y -qq unzip >/dev/null 2>&1 || true
+UAT_COMPANY=$UAT_CO hcmos-run node scripts/canonical-sites.js
 
-# ── employee master: POPULATE the North Mara directory (285 real employees) ───
-# Identity-only load through the SAME audited maker-checker ingest (maker = Omar
-# R15, checker = Viswa R16). The CSV carries national_id/tin/bank (PII) so it
-# lives ONLY under /root/uat-data — NEVER the repo; this public log prints counts
-# only. Directory-visible: name/position/department/site. Confidential
-# (pay-gated): national_id/tin/bank. Idempotent: a re-run finds the PFs already
-# loaded (exceptions) and changes nothing.
-say "employee master load (North Mara directory: 285 real employees)"
-NM_MASTER=/root/uat-data/northmara-employee-master.csv
-if [ -f "$NM_MASTER" ]; then
-  # Independent control total (from Baraka's source document, NOT derived from
-  # the file): 285 North Mara headcount. A mismatch hard-blocks the commit.
-  echo '[{"site":"North Mara","count":285}]' > /root/uat-data/northmara-employee-master.control.json
-  UAT_COMPANY=$UAT_CO hcmos-run node scripts/load-ingest.js employee-master \
-    "$NM_MASTER" /root/uat-data/northmara-employee-master.control.json \
+# ── scaffold purge: per-site, Kira-authorized (NM 2026-07-09; all sites 07-12) ─
+# Clears SYNTHETIC seed rows so the real masters ARE the directory. Fail-closed
+# per scripts/purge-nm-scaffold.js: only position-NULL rows with a non-numeric/
+# absent legacy_id and NO app_user link; one transaction; audited; idempotent.
+say "scaffold purge (per-site synthetic seed rows — Kira-authorized)"
+while IFS= read -r SITE_NAME; do
+  PURGE_SITE="$SITE_NAME" UAT_COMPANY=$UAT_CO hcmos-run node scripts/purge-nm-scaffold.js \
+    || echo "PURGE REFUSED for '$SITE_NAME' — nothing deleted (fail-closed)"
+done <<'SITES'
+Head Office
+Mwadui
+North Mara - L&H and Airstrip Project
+North Mara - TSF Lift 10 Project
+Nyanzaga - Sotta Mining Project
+Dar Yard
+SITES
+
+# ── employee masters: SIX sites from the original .xlsx files ─────────────────
+# Kira drops the six ORIGINAL xlsx files into /root/uat-data (PII — NEVER the
+# repo). Each converts on-box to the canonical template CSV (scripts/
+# xlsx-to-master.js: header auto-detect, variant mapping, serial→ISO dates,
+# shared-mailbox emails blanked) and loads through the audited maker-checker
+# ingest (maker Omar R15 / checker Viswa R16). Canonical per-site control totals
+# with allow_shortfall (Kira: known-bad rows carry as flagged EXCEPTIONS, the
+# gap is REPORTED; an OVERSHOOT still hard-blocks). Idempotent re-runs enrich.
+say "employee masters (six sites; canonical 1,044: 50/374/173/94/282/71)"
+load_site() { # xlsx-file site-name canonical-count
+  local XLSX="/root/uat-data/$1" SITE="$2" COUNT="$3"
+  if [ ! -f "$XLSX" ]; then echo "AWAITING: $1 (drop into /root/uat-data — PII, never the repo)"; return 0; fi
+  local CSV="${XLSX%.xlsx}.master.csv" CTL="${XLSX%.xlsx}.control.json"
+  hcmos-run node scripts/xlsx-to-master.js "$XLSX" "$CSV" --site "$SITE" || { echo "CONVERT FAILED: $1"; return 0; }
+  printf '[{"site":"%s","count":%s,"allow_shortfall":true}]\n' "$SITE" "$COUNT" > "$CTL"
+  UAT_COMPANY=$UAT_CO hcmos-run node scripts/load-ingest.js employee-master "$CSV" "$CTL" \
     omar.omar@taifamining.tz viswa.medhuru@taifamining.tz --commit \
-    | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{const r=JSON.parse(s.slice(s.indexOf("{")));console.log(`master load: header_row=${r.mapping.header_row} rows=${r.rows} clean=${r.clean} flagged(punch-list)=${r.warned} exceptions=${r.exceptions} control_ok=${r.control_ok} committed=${r.committed} loaded=${r.loaded||0}`);}catch(e){console.log(s);}})' \
-    || echo "MASTER LOAD FAILED — see the exception report next to the CSV (northmara-employee-master.csv.exceptions.json)"
-else
-  echo "AWAITING CSV: drop northmara-employee-master.csv into /root/uat-data (NEVER the repo — it carries national_id/tin/bank PII)."
-  echo "Then re-run this deploy. Directory-visible: name/position/department/site; confidential (pay-gated): national_id/tin/bank."
-fi
+    | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{const r=JSON.parse(s.slice(s.indexOf("{")));const sf=(r.mismatches&&0)||0;console.log(`  loaded=${r.loaded||0} clean=${r.clean} exceptions=${r.exceptions} flagged=${r.warned} control_ok=${r.control_ok}`);}catch(e){console.log(s);}})' \
+    || echo "  LOAD FAILED for $SITE — see ${CSV}.exceptions.json on the box"
+}
+load_site "Employee_Master_File_HO.xlsx"              "Head Office"                            50
+load_site "Employee_Master_File_Mwadui.xlsx"          "Mwadui"                                374
+load_site "Employee_Master_File_North_Mara.xlsx"      "North Mara - L&H and Airstrip Project" 173
+load_site "North_Mara_TSF_Employee_Masterfile.xlsx"   "North Mara - TSF Lift 10 Project"       94
+load_site "Employee_Master_File_Nyanzaga.xlsx"        "Nyanzaga - Sotta Mining Project"       282
+load_site "Master_File_Dar_Yard.xlsx"                 "Dar Yard"                               71
 
 # ── re-attach leave: opening balances now MATCH the master by PF ───────────────
 # Once the master is loaded, an opening-balance load ATTACHES each balance to the
@@ -197,10 +200,11 @@ fi
 # paging the actual /employees endpoint (R11 = Head of HR, central, all sites).
 # It also reports his login state on every run (Kira: confirm he can
 # authenticate BEFORE we rely on "Omid sees the directory").
-say "Omid's directory (login as omid.karambeck@ + page /employees for North Mara)"
-NM_SITE_ID=$(sudo -u postgres psql -d hcmos -Atc \
-  "SELECT id FROM site WHERE company_id='$UAT_CO' AND name='North Mara' LIMIT 1")
-NM_SITE_ID=$NM_SITE_ID node - <<'EOF'
+say "Omid's directory (login as omid.karambeck@ + page /employees, per canonical site)"
+SITE_MAP=$(sudo -u postgres psql -d hcmos -Atc \
+  "SELECT json_agg(json_build_object('name', name, 'id', id) ORDER BY name)
+     FROM site WHERE company_id='$UAT_CO'")
+SITE_MAP=$SITE_MAP node - <<'EOF'
 const fs = require('fs');
 const creds = fs.readFileSync('/root/uat-credentials.txt', 'utf8');
 // Newest password per email (the matrix accumulates across deploys).
@@ -221,15 +225,23 @@ const T = () => AbortSignal.timeout(10000);
   }
   console.log('OMID LOGIN: OK (email+password, MFA off in setup phase)');
   const token = (await login.json()).token;
-  let cursor = null, total = 0, withPosition = 0;
-  do {
-    const url = `http://127.0.0.1:3000/employees?limit=200&site=${process.env.NM_SITE_ID}` +
-      (cursor ? `&cursor=${encodeURIComponent(cursor)}` : '');
-    const page = await (await fetch(url, { headers: { authorization: 'Bearer ' + token }, signal: T() })).json();
-    for (const r of page.rows) { total++; if (r.position) withPosition++; }
-    cursor = page.next_cursor;
-  } while (cursor);
-  console.log(`OMID SEES: ${total} North Mara directory rows (${withPosition} with position = master-loaded)`);
+  // Per-site directory counts across the CANONICAL six-site model — what the
+  // central R11 actually sees through the real API, per site.
+  const sites = JSON.parse(process.env.SITE_MAP); // [{name,id}]
+  let grandTotal = 0, grandMaster = 0;
+  for (const s of sites) {
+    let cursor = null, total = 0, withPosition = 0;
+    do {
+      const url = `http://127.0.0.1:3000/employees?limit=200&site=${s.id}` +
+        (cursor ? `&cursor=${encodeURIComponent(cursor)}` : '');
+      const page = await (await fetch(url, { headers: { authorization: 'Bearer ' + token }, signal: T() })).json();
+      for (const r of page.rows) { total++; if (r.position) withPosition++; }
+      cursor = page.next_cursor;
+    } while (cursor);
+    grandTotal += total; grandMaster += withPosition;
+    console.log(`OMID SEES: ${s.name.padEnd(40)} total ${String(total).padStart(5)} · master-loaded ${String(withPosition).padStart(4)}`);
+  }
+  console.log(`OMID SEES TOTAL: ${grandTotal} directory rows · ${grandMaster} master-loaded (canonical 1,044)`);
 })().catch((e) => { console.error('OMID PROBE ERROR:', e.message); process.exit(1); });
 EOF
 

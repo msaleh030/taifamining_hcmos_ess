@@ -30,6 +30,7 @@ async function purge(pfs, batchIds = []) {
       await owner(`DELETE FROM leave_carry WHERE employee_id=$1`, [e.id]);
       await owner(`DELETE FROM employee_document WHERE employee_id=$1`, [e.id]);
       await owner(`DELETE FROM employee_pay WHERE employee_id=$1`, [e.id]);
+      await owner(`UPDATE employee SET manager_id=NULL WHERE manager_id=$1`, [e.id]);
       await owner(`DELETE FROM employee WHERE id=$1`, [e.id]);
     }
   }
@@ -445,5 +446,114 @@ test('permits: PF-matched loads to employee_document; unmatched goes to the exce
   } finally {
     await owner(`DELETE FROM employee_document WHERE employee_id=$1 AND name='Confined Space'`, [F.EMP.ALICE]);
     await owner(`DELETE FROM ingest_batch WHERE id=$1`, [batchId]);
+  }
+});
+
+// ── Six-site model (Kira 2026-07-12): rich fields, tiering, site correction,
+// reporting split, shortfall-tolerant controls ────────────────────────────────
+test('EM-6 rich fields land in their tiers; a BARE row is site-corrected; a MASTERED row never moves', async () => {
+  const maker = await tok(F.USERS.FINMGR_A);
+  const checker = await tok(F.USERS.CFC_A);
+  const site2 = (await owner(`INSERT INTO site(company_id,name) VALUES ($1,'Zz Project Site') RETURNING id`, [F.TENANT_A])).rows[0].id;
+  // A bare row (balances-load shape: no position) at North Mara.
+  const bare = (await owner(
+    `INSERT INTO employee(company_id, site_id, full_name, legacy_id, role_code, status)
+     VALUES ($1,$2,'Zz Sitefix Person','95050001','R01','active') RETURNING id`, [F.TENANT_A, F.SITE.A1])).rows[0].id;
+  const rows = [
+    // Enrich + MOVE the bare row to the project site, with the full rich set.
+    { pf: '95050001', first_name: 'Zz', middle_name: 'Sitefix', surname: 'Person', site: 'Zz Project Site',
+      position: 'Rigger', department: 'Production', level: 'Grade 2', employment_type: 'Specific Task',
+      hire_date: '2024-05-01', email: 'zz.sitefix@taifamining.co.tz', phone: '0755000111',
+      reports_to_title: 'Workshop Manager', national_id: '19900101141010000121', tin: '123456789',
+      date_of_birth: '1990-01-01', gender: 'Male', bank_name: 'CRDB', bank_account: '0150999',
+      passport_number: 'AB123456', citizenship: 'Tanzanian', nssf_number: 'NSSF-9', full_address: 'PO Box 9',
+      nok_relationship: 'Spouse', nok_name: 'Zz Kin', nok_contact: '0755000112' },
+  ];
+  const ct = [{ site: 'Zz Project Site', count: 1 }];
+  const sub = await post(maker, EMC, { rows, control_totals: ct });
+  try {
+    assert.equal(sub.body.clean_count, 1, 'bare row at another site is clean (site-correct), not an exception');
+    await post(checker, EMC, { batch_id: sub.body.batch_id });
+    const e = (await owner(`SELECT site_id, position, level, employment_type, reports_to_title, email FROM employee WHERE id=$1`, [bare])).rows[0];
+    assert.equal(e.site_id, site2, 'BARE row moved to the master\'s authoritative site');
+    assert.equal(e.position, 'Rigger');
+    assert.equal(e.level, 'Grade 2');
+    assert.equal(e.employment_type, 'Specific Task');
+    assert.equal(e.reports_to_title, 'Workshop Manager', 'reporting title stored as TEXT — no fabricated person link');
+    assert.equal(e.email, 'zz.sitefix@taifamining.co.tz');
+    const manager = (await owner(`SELECT manager_id FROM employee WHERE id=$1`, [bare])).rows[0];
+    assert.equal(manager.manager_id, null, 'no manager link from a title');
+    const pii = (await owner(`SELECT dob::text, gender, passport_number, nssf_number, nok_name FROM employee_pay WHERE employee_id=$1`, [bare])).rows[0];
+    assert.equal(pii.dob, '1990-01-01');
+    assert.equal(pii.passport_number, 'AB123456');
+    assert.equal(pii.nok_name, 'Zz Kin');
+    // Tier check: R03 (HR) profile shows the directory tier + national_id, NEVER the PII block.
+    const asHr = await get(await tok(F.USERS.HR_A), `/employees/${bare}`);
+    assert.equal(asHr.status, 404, 'R03 is site-scoped to A1; the moved employee is out of scope (fail closed)');
+    const asPay = await get(await tok(F.USERS.PAYROLL_A), `/employees/${bare}`);
+    assert.equal(asPay.body.passport_number, 'AB123456', 'pay/PII gate sees passport');
+    assert.equal(asPay.body.nok_contact, '0755000112', 'pay/PII gate sees next-of-kin');
+    assert.equal(asPay.body.reports_to_title, 'Workshop Manager', 'directory tier present');
+
+    // A MASTERED row (position now set) must NOT move on a second file's claim.
+    const again = await post(maker, EMP, {
+      rows: [{ pf: '95050001', first_name: 'Zz', middle_name: 'Sitefix', surname: 'Person', site: 'North Mara', position: 'X' }],
+      control_totals: [{ site: 'North Mara', count: 0 }] });
+    assert.equal(again.body.exception_count, 1);
+    assert.ok(again.body.exceptions[0].exceptions.join().includes('DIFFERENT site'), 'cross-site claim on a mastered row = exception, never a move');
+  } finally {
+    await purge(['95050001'], [sub.body.batch_id]);
+    await owner(`DELETE FROM site WHERE id=$1`, [site2]);
+  }
+});
+
+test('EM-7 allow_shortfall: a canonical headcount above the clean count is REPORTED, not blocking; overshoot still blocks', async () => {
+  const maker = await tok(F.USERS.FINMGR_A);
+  const checker = await tok(F.USERS.CFC_A);
+  const rows = [
+    { pf: '95060001', name: 'Zz Short One', site: 'North Mara', position: 'A', department: 'P', hire_date: '2024-01-01' },
+    { pf: 'BADPF', name: 'Zz Short Bad', site: 'North Mara', position: 'B', department: 'P', hire_date: '2024-01-01' }, // exception
+  ];
+  // Canonical count 3, clean will be 1 → shortfall 2, allowed explicitly.
+  const sub = await post(maker, EMC, { rows, control_totals: [{ site: 'North Mara', count: 3, allow_shortfall: true }] });
+  try {
+    assert.equal(sub.body.clean_count, 1);
+    assert.deepEqual(sub.body.control.shortfalls, [{ site: 'NORTH MARA', expected: 3, loaded: 1, shortfall: 2 }],
+      'the gap is REPORTED with the canonical number, never silently absorbed');
+    const appr = await post(checker, EMC, { batch_id: sub.body.batch_id });
+    assert.equal(appr.body.loaded, 1, 'the commit proceeds under an explicit allow_shortfall');
+    // Overshoot: clean 1 > canonical 0 → hard block even with allow_shortfall.
+    const over = await post(maker, EMC, {
+      rows: [{ pf: '95060002', name: 'Zz Over One', site: 'North Mara', position: 'A', department: 'P', hire_date: '2024-01-01' }],
+      control_totals: [{ site: 'North Mara', count: 0, allow_shortfall: true }] });
+    assert.equal(over.body.control.ok, false, 'MORE clean rows than canonical still hard-blocks (catches dupes/wrong-site)');
+  } finally {
+    await purge(['95060001', '95060002'], [sub.body.batch_id]);
+  }
+});
+
+test('EM-8 reporting_to_pf must RESOLVE: in-batch links set manager_id; unresolvable is an exception', async () => {
+  const maker = await tok(F.USERS.FINMGR_A);
+  const checker = await tok(F.USERS.CFC_A);
+  const rows = [
+    { pf: '95070001', name: 'Zz Boss', site: 'North Mara', position: 'Superintendent', department: 'P', hire_date: '2020-01-01' },
+    { pf: '95070002', name: 'Zz Report', site: 'North Mara', position: 'Operator', department: 'P', hire_date: '2021-01-01',
+      reporting_to_pf: '95070001' },                                    // resolves in-batch → links
+    { pf: '95070003', name: 'Zz Orphan', site: 'North Mara', position: 'Operator', department: 'P', hire_date: '2021-01-01',
+      reporting_to_pf: '99999999' },                                    // resolves to NOBODY → exception
+  ];
+  const sub = await post(maker, EMC, { rows, control_totals: [{ site: 'North Mara', count: 2, allow_shortfall: false }] });
+  try {
+    assert.equal(sub.body.clean_count, 2);
+    assert.ok(sub.body.control.ok);
+    await post(checker, EMC, { batch_id: sub.body.batch_id });
+    const boss = await empByPf('95070001');
+    const rep = (await owner(`SELECT manager_id FROM employee WHERE legacy_id='95070002'`)).rows[0];
+    assert.equal(rep.manager_id, boss.id, 'a RESOLVED reporting_to_pf becomes a real manager link');
+    const rp = await get(maker, `/ingest/batch/${sub.body.batch_id}/exceptions`);
+    assert.ok(rp.body.exceptions.some((e) => e.reasons.join().includes('does not resolve')),
+      'an unresolvable manager PF is an exception — no fabricated link');
+  } finally {
+    await purge(['95070001', '95070002', '95070003'], [sub.body.batch_id]);
   }
 });

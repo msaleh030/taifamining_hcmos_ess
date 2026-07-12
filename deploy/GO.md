@@ -92,44 +92,27 @@ Follow `deploy/cloudflare-edge.md`:
 
 ## 7. Real data  (→ I-5 full)
 
-### 7a. Employee master — populate the directory FIRST
-The directory/leave/overview screens read the `employee` table; load the real
-master **before** balances so leave attaches to real records. Drop
-`northmara-employee-master.csv` (headers `pf,name,site,position,department,
-hire_date,national_id,tin,bank`) into `/root/uat-data` — **PII (national_id/tin/
-bank), NEVER the repo.** The deploy auto-loads it when present (maker Omar R15 /
-checker Viswa R16, independent control = 285 North Mara headcount) and prints
-counts only. By hand:
-```
-echo '[{"site":"North Mara","count":285}]' > /root/uat-data/northmara-employee-master.control.json
-UAT_COMPANY=11111111-1111-1111-1111-111111111111 hcmos-run node scripts/load-ingest.js \
-  employee-master /root/uat-data/northmara-employee-master.csv \
-  /root/uat-data/northmara-employee-master.control.json \
-  omar.omar@taifamining.tz viswa.medhuru@taifamining.tz --commit
-```
-Directory-visible: **name / position / department / site**. **national_id is
-HR-visible** (Kira 2026-07-09: core HR identifier, not financial — profile-level
-for `a3.national_id.roles`, default R03/R04/R07/R11). Pay-gated (R07/R11/R15/R16
-only): **tin / bank / pay**. Blank national_id (45 rows) + blank position (1 row)
-load anyway as a completeness punch-list (warnings, not blocks). A PF that already exists (e.g. an earlier balance load created it bare) is ENRICHED in place after a name+site identity check — never duplicated; a PF match with a DIFFERENT name/site is an exception, not an overwrite.
+### 7a. Employee masters — the CANONICAL SIX-SITE model (Kira 2026-07-12)
+North Mara is TWO sites (projects) with independent HR scoping; the canonical
+set + headcounts (total **1,044**):
+| Site | Canonical | File to drop |
+|---|---|---|
+| Head Office | 50 | `Employee_Master_File_HO.xlsx` |
+| Mwadui | 374 | `Employee_Master_File_Mwadui.xlsx` |
+| North Mara - L&H and Airstrip Project | 173 | `Employee_Master_File_North_Mara.xlsx` |
+| North Mara - TSF Lift 10 Project | 94 | `North_Mara_TSF_Employee_Masterfile.xlsx` |
+| Nyanzaga - Sotta Mining Project | 282 | `Employee_Master_File_Nyanzaga.xlsx` |
+| Dar Yard | 71 | `Master_File_Dar_Yard.xlsx` |
 
-**Scaffold purge (Kira-authorized 2026-07-09):** before the master loads, the
-deploy runs a North-Mara-ONLY, audited purge of the synthetic seed rows
-(`scripts/purge-nm-scaffold.js`) so the real 285 ARE the directory. Fail-closed:
-only position-NULL rows with a non-numeric/absent legacy_id and NO app_user
-link; one transaction, re-verified row-by-row, on the audit hash-chain;
-idempotent (re-runs delete nothing).
-
-**Smart parsing (intelligent on format, uncompromising on truth):** the loader
-auto-detects the header row (even buried under merged title rows) and maps
-common header variants (EMPLOYEE ID / Payroll No → pf, FULL NAME → name, DATE
-ENGAGED → hire_date, NIDA NO → national_id, …) — no manual column mapping. It
-**fails closed on genuine ambiguity**: two columns claiming one field, or a
-required column it cannot find, refuse with a report — never a guess. Format
-anomalies (TIN not 9 digits, NIDA not 20 digits, future hire dates, one NIDA/TIN
-shared by two rows) are **flagged on the punch-list and loaded verbatim** —
-values are never "corrected". Duplicate PFs and unknown sites remain hard
-exceptions.
+Drop the six ORIGINAL .xlsx files into `/root/uat-data` (**PII — NEVER the
+repo**) and re-fire the deploy. Each converts on-box to the canonical template
+CSV (`scripts/xlsx-to-master.js`) and loads through the audited maker-checker
+ingest (Omar R15 / Viswa R16) with per-site canonical control totals.
+`allow_shortfall` is set per Kira: known-bad rows (Mwadui's 9 PF="HO", the 19
+cross-site PF collisions, Dar Yard's 4 contractor codes, within-file dups)
+carry as FLAGGED EXCEPTIONS and the gap is reported; an overshoot still
+hard-blocks. Reporting is SPLIT: `reports_to_title` free text; `manager_id`
+links only when a `reporting_to_pf` resolves to a real employee.
 
 ### 7b. Opening balances — now ATTACH to the master by PF
 Drop the **opening balances + permit files** (CSV) on the box, prepare a

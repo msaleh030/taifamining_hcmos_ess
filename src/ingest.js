@@ -47,8 +47,8 @@ async function existingByPf(exec, pfs) {
   const map = new Map();
   if (!uniq.length) return map;
   const ph = uniq.map((_, i) => `$${i + 1}`).join(',');
-  const r = await exec.query(`SELECT id, legacy_id, full_name, site_id FROM employee WHERE legacy_id IN (${ph})`, uniq);
-  for (const row of r.rows) map.set(row.legacy_id, { id: row.id, full_name: row.full_name, site_id: row.site_id });
+  const r = await exec.query(`SELECT id, legacy_id, full_name, site_id, position FROM employee WHERE legacy_id IN (${ph})`, uniq);
+  for (const row of r.rows) map.set(row.legacy_id, { id: row.id, full_name: row.full_name, site_id: row.site_id, position: row.position });
   return map;
 }
 // Name comparison for PF-match verification: case/spacing-insensitive, verbatim
@@ -99,10 +99,29 @@ function validateOpening(raw, ctx) {
 // an exception (never a silent duplicate). Missing national_id / position are a
 // completeness punch-list (WARN, load anyway), not a block.
 function validateEmployee(raw, ctx) {
-  const pf = norm(raw.pf), name = norm(raw.name), site = norm(raw.site);
+  const pf = norm(raw.pf), site = norm(raw.site);
+  // Canonical template splits the name; a joined `name` column still works.
+  const name = norm(raw.name) ||
+    [raw.first_name, raw.middle_name, raw.surname].map(norm).filter(Boolean).join(' ');
   const position = norm(raw.position), dept = norm(raw.department || raw.dept);
   const hire_date = asDate(raw.hire_date || raw.joined_at);
   const national_id = idstr(raw.national_id), tin = idstr(raw.tin), bank = norm(raw.bank);
+  // Directory-tier extras (Kira 2026-07-12).
+  const level = norm(raw.level), employment_type = norm(raw.employment_type);
+  const email = norm(raw.email).toLowerCase(), phone = norm(raw.phone);
+  // Reporting SPLIT: a PF that must resolve, or free-text title — never both
+  // fabricated into a person link.
+  const reporting_to_pf = norm(raw.reporting_to_pf), reports_to_title = norm(raw.reports_to_title);
+  // PII tier.
+  const pii = {
+    dob: asDate(raw.date_of_birth), gender: norm(raw.gender),
+    bank_account: idstr(raw.bank_account), bank_branch: norm(raw.bank_branch), account_name: norm(raw.account_name),
+    passport_number: idstr(raw.passport_number), citizenship: norm(raw.citizenship),
+    work_permit_number: idstr(raw.work_permit_number), work_permit_validity: asDate(raw.work_permit_validity),
+    nssf_number: idstr(raw.nssf_number), personal_email: norm(raw.personal_email).toLowerCase(),
+    full_address: norm(raw.full_address),
+    nok_relationship: norm(raw.nok_relationship), nok_name: norm(raw.nok_name), nok_contact: norm(raw.nok_contact),
+  };
   const site_id = ctx.sites.get(site.toUpperCase()) || null;
   const exceptions = [], warnings = [];
 
@@ -112,22 +131,40 @@ function validateEmployee(raw, ctx) {
   // master ENRICHES that record instead of duplicating or refusing. But only
   // when the identity checks out: a different NAME or a different SITE on the
   // same PF is genuine ambiguity → exception, never an overwrite.
-  let matched = null;
+  let matched = null, correctSite = false;
   const prior = pf ? ctx.existing.get(pf) : undefined;
   if (!/^\d+$/.test(pf)) exceptions.push('PF not numeric');
   else if ((ctx.pfCount.get(pf) || 0) > 1) exceptions.push('duplicate PF within batch');
   else if (prior) {
     if (!sameName(prior.full_name, name))
       exceptions.push(`PF already loaded with a DIFFERENT name ("${prior.full_name}" vs "${name}") — verify identity, refusing to overwrite`);
-    else if (site_id && prior.site_id && prior.site_id !== site_id)
+    else if (site_id && prior.site_id && prior.site_id !== site_id && prior.position != null)
+      // A MASTERED record (position set) never moves site — the cross-site PF
+      // collision case (same PF listed by two site files): flagged, not moved.
       exceptions.push('PF already loaded at a DIFFERENT site — verify, refusing to move');
     else {
       matched = prior.id;
+      if (site_id && prior.site_id && prior.site_id !== site_id) {
+        // A BARE record (created identity-less by a balances load, possibly at
+        // the legacy coarse site) accepts the master's authoritative site —
+        // e.g. legacy 'North Mara' splitting into the two project sites.
+        correctSite = true;
+        warnings.push('site corrected to the master file\'s site (previous record was identity-less at a legacy/coarse site)');
+      }
       warnings.push('enriching an existing employee (matched by PF, name verified) — identity fields filled in, leave kept');
     }
   }
   if (!name) exceptions.push('name missing');
   if (!site_id) exceptions.push(`unknown site "${site}"`);
+  // reporting_to_pf must resolve to a REAL employee — in this batch or already
+  // loaded. Unresolvable → exception (no fabricated manager links, Kira ruling).
+  if (reporting_to_pf) {
+    const inBatch = (ctx.pfCount.get(reporting_to_pf) || 0) > 0;
+    if (!inBatch && !ctx.existing.has(reporting_to_pf))
+      exceptions.push(`reporting_to_pf "${reporting_to_pf}" does not resolve to a loaded employee`);
+  }
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
+    warnings.push(`email "${email}" is not a valid address — stored for review, NOT usable as an ESS login`);
   if (norm(raw.hire_date || raw.joined_at) && !hire_date) warnings.push(`unparseable hire_date "${norm(raw.hire_date)}" — loaded without a join date`);
   if (!position) warnings.push('position (job title) missing — completeness punch-list');
   if (!national_id) warnings.push('national_id missing — completeness punch-list');
@@ -150,7 +187,9 @@ function validateEmployee(raw, ctx) {
     warnings.push('tin shared by more than one row in this batch — verify identity');
 
   return { pf, site_id, matched_employee: matched,
-    normalized: { pf, name, site, site_id, position, dept, hire_date, national_id, tin, bank },
+    normalized: { pf, name, site, site_id, position, dept, hire_date, national_id, tin, bank,
+      level, employment_type, email, phone, reporting_to_pf, reports_to_title,
+      correct_site: correctSite, pii },
     exceptions, warnings, status: exceptions.length ? 'exception' : 'clean' };
 }
 
@@ -189,27 +228,42 @@ function computeControl(kind, cleanRows) {
   return by;
 }
 
-// Normalise a caller's supplied control totals ([{site,count[,sum_balance]}] or
-// the permit {count}) into the same shape computeControl produces.
+// Normalise a caller's supplied control totals ([{site,count[,sum_balance]
+// [,allow_shortfall]}] or the permit {count}) into the same shape
+// computeControl produces.
 function normSupplied(kind, supplied) {
   if (kind === 'permit') return { ALL: { count: Number((supplied && supplied.count) || 0) } };
   const by = {};
-  for (const s of supplied || []) by[norm(s.site).toUpperCase()] = { count: Number(s.count || 0), sum_balance: round2(Number(s.sum_balance || 0)) };
+  for (const s of supplied || []) {
+    by[norm(s.site).toUpperCase()] = { count: Number(s.count || 0), sum_balance: round2(Number(s.sum_balance || 0)),
+      ...(s.allow_shortfall ? { allow_shortfall: true } : {}) };
+  }
   return by;
 }
 
 function reconcile(kind, supplied, computed) {
-  const mismatches = [];
+  const mismatches = [], shortfalls = [];
   const keys = new Set([...Object.keys(supplied), ...Object.keys(computed)]);
   for (const k of keys) {
     const s = supplied[k], c = computed[k];
     if (!s) { mismatches.push({ site: k, reason: 'not in expected totals', computed: c }); continue; }
     if (!c) { mismatches.push({ site: k, reason: 'no clean rows for expected site', expected: s }); continue; }
-    if (s.count !== c.count) mismatches.push({ site: k, field: 'count', expected: s.count, computed: c.count });
+    if (s.count !== c.count) {
+      // Kira 2026-07-12: a control entry may EXPLICITLY allow a shortfall — the
+      // canonical headcount stands, known-bad rows carry as flagged exceptions
+      // and the gap is REPORTED, not silently absorbed. Only a shortfall is
+      // tolerated: MORE clean rows than the canonical count still hard-blocks
+      // (that catches duplicates and wrong-site rows).
+      if (s.allow_shortfall && c.count < s.count) {
+        shortfalls.push({ site: k, expected: s.count, loaded: c.count, shortfall: s.count - c.count });
+      } else {
+        mismatches.push({ site: k, field: 'count', expected: s.count, computed: c.count });
+      }
+    }
     if (kind === 'opening_balance' && round2(s.sum_balance) !== round2(c.sum_balance))
       mismatches.push({ site: k, field: 'sum_balance', expected: s.sum_balance, computed: c.sum_balance });
   }
-  return { ok: mismatches.length === 0, mismatches };
+  return { ok: mismatches.length === 0, mismatches, ...(shortfalls.length ? { shortfalls } : {}) };
 }
 
 // Validate a whole batch (shared by preview + submit). Returns per-row results.
@@ -336,34 +390,72 @@ async function approve(session, kind, body, opts = {}) {
         if (empId) {
           // ENRICH the PF-matched (identity-verified at validation) record: an
           // earlier balances-only load created it with identity fields missing.
-          // Site/status/leave are untouched; the master fills in what it owns.
+          // Status/leave are untouched; the master fills in what it owns. A BARE
+          // record additionally accepts the master's authoritative site
+          // (correct_site — e.g. legacy 'North Mara' splitting into projects).
           await c.query(
             `UPDATE employee SET emp_no = coalesce(emp_no, $2), position = $3, dept = $4,
-                    joined_at = coalesce($5::date, joined_at)
+                    joined_at = coalesce($5::date, joined_at),
+                    level = $6, employment_type = $7, reports_to_title = $8,
+                    email = coalesce($9, email), phone = coalesce($10, phone)
+                    ${nzd.correct_site ? ', site_id = $11' : ''}
               WHERE id = $1`,
-            [empId, nzd.pf, nzd.position || null, nzd.dept || null, nzd.hire_date]);
+            [empId, nzd.pf, nzd.position || null, nzd.dept || null, nzd.hire_date,
+             nzd.level || null, nzd.employment_type || null, nzd.reports_to_title || null,
+             nzd.email || null, nzd.phone || null,
+             ...(nzd.correct_site ? [r.site_id] : [])]);
         } else {
           // EM: create the employee through the application path (site-scoped,
           // directory-visible). PF is the legacy number AND emp_no.
           empId = await employees.create(c, session.company_id, {
             legacy_id: nzd.pf, emp_no: nzd.pf, full_name: nzd.name, site_id: r.site_id,
             dept: nzd.dept, position: nzd.position, joined_at: nzd.hire_date,
-            role_code: 'R01', status: 'active',
+            role_code: 'R01', status: 'active', email: nzd.email || null, phone: nzd.phone || null,
           });
+          if (nzd.level || nzd.employment_type || nzd.reports_to_title) {
+            await c.query(
+              `UPDATE employee SET level=$2, employment_type=$3, reports_to_title=$4 WHERE id=$1`,
+              [empId, nzd.level || null, nzd.employment_type || null, nzd.reports_to_title || null]);
+          }
         }
-        // Confidential identity (national_id / tin / bank) → employee_pay, behind
-        // the pay gate. Only write the row when there is something to protect, so
-        // "no confidential data" stays "no row" (C5: absent, not null-flagged).
-        // Upsert: an enriched employee may already carry a pay row.
-        if (nzd.national_id || nzd.tin || nzd.bank) {
+        // Confidential identity/PII → employee_pay, behind the pay gate. Only
+        // write when there is something to protect ("no row", never null-flag).
+        // Upsert with coalesce: enrich never blanks an existing value.
+        const p = nzd.pii || {};
+        const hasPii = nzd.national_id || nzd.tin || nzd.bank ||
+          Object.values(p).some((v) => v);
+        if (hasPii) {
           await c.query(
-            `INSERT INTO employee_pay (employee_id, company_id, bank_name, national_id, tin)
-             VALUES ($1,$2,$3,$4,$5)
-             ON CONFLICT (employee_id) DO UPDATE
-               SET bank_name = coalesce(EXCLUDED.bank_name, employee_pay.bank_name),
-                   national_id = coalesce(EXCLUDED.national_id, employee_pay.national_id),
-                   tin = coalesce(EXCLUDED.tin, employee_pay.tin)`,
-            [empId, session.company_id, nzd.bank || null, nzd.national_id || null, nzd.tin || null]);
+            `INSERT INTO employee_pay (employee_id, company_id, bank_name, national_id, tin,
+                    dob, gender, bank_account, bank_branch, account_name, passport_number,
+                    citizenship, work_permit_number, work_permit_validity, nssf_number,
+                    personal_email, full_address, nok_relationship, nok_name, nok_contact)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
+             ON CONFLICT (employee_id) DO UPDATE SET
+               bank_name = coalesce(EXCLUDED.bank_name, employee_pay.bank_name),
+               national_id = coalesce(EXCLUDED.national_id, employee_pay.national_id),
+               tin = coalesce(EXCLUDED.tin, employee_pay.tin),
+               dob = coalesce(EXCLUDED.dob, employee_pay.dob),
+               gender = coalesce(EXCLUDED.gender, employee_pay.gender),
+               bank_account = coalesce(EXCLUDED.bank_account, employee_pay.bank_account),
+               bank_branch = coalesce(EXCLUDED.bank_branch, employee_pay.bank_branch),
+               account_name = coalesce(EXCLUDED.account_name, employee_pay.account_name),
+               passport_number = coalesce(EXCLUDED.passport_number, employee_pay.passport_number),
+               citizenship = coalesce(EXCLUDED.citizenship, employee_pay.citizenship),
+               work_permit_number = coalesce(EXCLUDED.work_permit_number, employee_pay.work_permit_number),
+               work_permit_validity = coalesce(EXCLUDED.work_permit_validity, employee_pay.work_permit_validity),
+               nssf_number = coalesce(EXCLUDED.nssf_number, employee_pay.nssf_number),
+               personal_email = coalesce(EXCLUDED.personal_email, employee_pay.personal_email),
+               full_address = coalesce(EXCLUDED.full_address, employee_pay.full_address),
+               nok_relationship = coalesce(EXCLUDED.nok_relationship, employee_pay.nok_relationship),
+               nok_name = coalesce(EXCLUDED.nok_name, employee_pay.nok_name),
+               nok_contact = coalesce(EXCLUDED.nok_contact, employee_pay.nok_contact)`,
+            [empId, session.company_id, nzd.bank || null, nzd.national_id || null, nzd.tin || null,
+             p.dob || null, p.gender || null, p.bank_account || null, p.bank_branch || null,
+             p.account_name || null, p.passport_number || null, p.citizenship || null,
+             p.work_permit_number || null, p.work_permit_validity || null, p.nssf_number || null,
+             p.personal_email || null, p.full_address || null, p.nok_relationship || null,
+             p.nok_name || null, p.nok_contact || null]);
         }
       } else if (kind === 'opening_balance') {
         // ATTACH-BY-PF (re-attach leave to the master): if the employee already
@@ -394,6 +486,20 @@ async function approve(session, kind, body, opts = {}) {
            VALUES ($1,$2,'permit',$3,$4)`, [session.company_id, r.matched_employee, nzd.permit, nzd.expiry]);
       }
       loaded += 1;
+    }
+    // Manager linking (second pass, employee_master only): a reporting_to_pf was
+    // validated to resolve; link manager_id now that every row exists. Only real
+    // resolutions link — a title never fabricates a person edge (Kira ruling).
+    if (kind === 'employee_master') {
+      for (const r of cleanRows) {
+        const mgrPf = r.normalized.reporting_to_pf;
+        if (!mgrPf) continue;
+        await c.query(
+          `UPDATE employee SET manager_id = m.id
+             FROM employee m
+            WHERE employee.legacy_id = $1 AND m.legacy_id = $2 AND m.id <> employee.id`,
+          [r.normalized.pf, mgrPf]);
+      }
     }
     await c.query(`UPDATE ingest_batch SET status='committed', committed_by=$2, committed_at=now() WHERE id=$1`,
       [body.batch_id, session.user_id || null]);

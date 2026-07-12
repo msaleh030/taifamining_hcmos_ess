@@ -58,20 +58,49 @@ const KIND_SYNONYMS = {
   },
   employee_master: {
     ...COMMON_SYNONYMS,
-    position:    ['position', 'job title', 'title', 'designation'],
+    // Split names (the real files + the canonical template carry these).
+    first_name:  ['first name'],
+    middle_name: ['middle name'],
+    surname:     ['surname', 'last name'],
+    position:    ['position', 'position title', 'job title', 'title', 'designation'],
     department:  ['department', 'dept', 'section'],
+    level:       ['level', 'grade'],
+    employment_type: ['employment type', 'type of employment', 'employment contract', 'contract type'],
     hire_date:   ['hire date', 'hired', 'date engaged', 'engagement date', 'date of employment',
-                  'employment date', 'start date', 'joined', 'join date', 'date joined', 'joined at'],
+                  'employment date', 'start date', 'joined', 'join date', 'date joined', 'joined at',
+                  'joining date', 'joining date dd mm yyyy'],
+    email:       ['email', 'company email', 'company email id'],
+    phone:       ['phone', 'contact number', 'mobile', 'phone number'],
+    // Reporting is SPLIT (Kira 2026-07-12): a PF that must resolve, or a free-
+    // text title — never a fabricated person link.
+    reporting_to_pf:  ['reporting to pf', 'manager pf', 'supervisor pf'],
+    reports_to_title: ['reports to title', 'reporting to', 'reports to'],
     national_id: ['national id', 'national id no', 'nida', 'nida no', 'nida number', 'nin'],
+    date_of_birth: ['date of birth', 'dob', 'date of birth dd mm yyyy'],
+    gender:      ['gender', 'sex'],
     tin:         ['tin', 'tin no', 'tin number'],
-    bank:        ['bank', 'bank name', 'bank branch'],
+    bank:        ['bank', 'bank name'],
+    bank_account: ['bank account', 'account number', 'account no'],
+    bank_branch: ['bank branch', 'branch'],
+    account_name: ['account name'],
+    passport_number: ['passport number', 'passport no', 'passport'],
+    citizenship: ['citizenship', 'nationality'],
+    work_permit_number:   ['work permit number', 'work permit no'],
+    work_permit_validity: ['work permit validity', 'work permit expiry', 'permit validity'],
+    nssf_number: ['nssf number', 'nssf no', 'nssf'],
+    personal_email: ['personal email', 'personal email id'],
+    full_address: ['full address', 'address'],
+    nok_relationship: ['next of kin relationship', 'nok relationship'],
+    nok_name:    ['next of kin name', 'nok name'],
+    nok_contact: ['next of kin contact', 'nok contact', 'contact no'],
   },
 };
 // A row only counts as THE header when every required field is present on it.
+// An inner array means ANY-OF (e.g. a joined `name` column OR a split surname).
 const REQUIRED = {
   opening_balance: ['pf', 'name', 'site', 'balance'],
   permit: ['pf', 'name', 'permit', 'expiry'],
-  employee_master: ['pf', 'name', 'site'],
+  employee_master: ['pf', 'site', ['name', 'surname']],
 };
 const HEADER_SCAN_ROWS = 30; // merged-title preambles are shallow; scan the top of the sheet
 
@@ -110,12 +139,16 @@ function tryHeaderRow(row, lookup) {
 function detectHeader(grid, kind) {
   const lookup = variantMap(kind);
   const required = REQUIRED[kind];
+  // An inner array is ANY-OF: satisfied when at least one alternative mapped.
+  const missingOf = (attempt) => required
+    .filter((f) => (Array.isArray(f) ? !f.some((alt) => attempt.byField.has(alt)) : !attempt.byField.has(f)))
+    .map((f) => (Array.isArray(f) ? f.join('|') : f));
   let best = null;
   const limit = Math.min(grid.length, HEADER_SCAN_ROWS);
   for (let r = 0; r < limit; r++) {
     const attempt = tryHeaderRow(grid[r], lookup);
     if (!best || attempt.matched > best.attempt.matched) best = { row: r, attempt };
-    const missing = required.filter((f) => !attempt.byField.has(f));
+    const missing = missingOf(attempt);
     if (missing.length === 0) {
       // FAIL-CLOSED on ambiguity: two source columns claiming one field is a
       // question only the data owner can answer.
@@ -128,9 +161,10 @@ function detectHeader(grid, kind) {
   }
   const near = best
     ? ` Closest candidate: row ${best.row + 1} (matched: ${[...best.attempt.byField.keys()].join(', ') || 'none'}; ` +
-      `missing required: ${required.filter((f) => !best.attempt.byField.has(f)).join(', ')}).`
+      `missing required: ${missingOf(best.attempt).join(', ')}).`
     : '';
-  throw new Error(`no usable header row found in the first ${limit} rows — need columns for: ${required.join(', ')}.${near} ` +
+  const req = required.map((f) => (Array.isArray(f) ? f.join('|') : f)).join(', ');
+  throw new Error(`no usable header row found in the first ${limit} rows — need columns for: ${req}.${near} ` +
     `Recognised variants exist for each (e.g. EMPLOYEE ID/Payroll No → pf; FULL NAME → name); rename the headers or extend the mapping.`);
 }
 

@@ -9,10 +9,12 @@
 const cfg = require('./config');
 
 // Non-confidential directory/profile fields — always present. `position` (job
-// title) is directory-visible identity, like dept/site.
+// title), level, employment_type and the reporting split are directory-visible
+// identity, like dept/site (Kira tiering, 2026-07-12).
 const BASE_FIELDS = [
   'id', 'emp_no', 'full_name', 'role_code', 'site_id', 'dept', 'position', 'status',
   'phone', 'email', 'home_address', 'joined_at',
+  'level', 'employment_type', 'reports_to_title', 'manager_id',
 ];
 
 async function permittedSets(companyId) {
@@ -36,12 +38,19 @@ async function assembleProfile(client, session, emp) {
   for (const f of BASE_FIELDS) if (f in emp) out[f] = emp[f];
 
   if (sets.pay.has(role)) {
-    // TIN + bank stay with pay data behind the pay gate (Kira 2026-07-09).
+    // TIN + bank + the PII block stay behind the pay gate (Kira 2026-07-12:
+    // tin/bank/passport/nssf/dob/address/next-of-kin = pay/PII-gated).
     const r = await client.query(
-      'SELECT basic_pay, bank_name, bank_account, tin FROM employee_pay WHERE employee_id=$1', [emp.id]);
-    const row = r.rows[0] || { basic_pay: null, bank_name: null, bank_account: null, tin: null };
-    out.basic_pay = row.basic_pay; out.bank_name = row.bank_name; out.bank_account = row.bank_account;
-    out.tin = row.tin;
+      `SELECT basic_pay, bank_name, bank_account, tin, dob, gender, bank_branch, account_name,
+              passport_number, citizenship, work_permit_number, work_permit_validity, nssf_number,
+              personal_email, full_address, nok_relationship, nok_name, nok_contact
+         FROM employee_pay WHERE employee_id=$1`, [emp.id]);
+    const row = r.rows[0] || {};
+    for (const k of ['basic_pay', 'bank_name', 'bank_account', 'tin', 'dob', 'gender', 'bank_branch',
+      'account_name', 'passport_number', 'citizenship', 'work_permit_number', 'work_permit_validity',
+      'nssf_number', 'personal_email', 'full_address', 'nok_relationship', 'nok_name', 'nok_contact']) {
+      out[k] = row[k] != null ? row[k] : null;
+    }
   }
 
   // national_id: HR-visible tier (its OWN role set, wider than pay). Stored in

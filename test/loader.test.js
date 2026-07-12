@@ -90,7 +90,7 @@ test('FAIL-CLOSED: a required column that cannot be found is refused with a repo
   ]);
   assert.throws(() => parseFile('employee_master', p), (e) => {
     assert.match(e.message, /no usable header row found/);
-    assert.match(e.message, /missing required: name, site/, 'names exactly what could not be found');
+    assert.match(e.message, /missing required: site, name\|surname/, 'names exactly what could not be found (| = any-of)');
     assert.match(e.message, /matched: pf, position, department/, 'and what WAS recognised');
     return true;
   });
