@@ -265,6 +265,13 @@ say "payroll master (North Mara — BOTH projects; behind the pay gate, maker-ch
 # rows had no PF at L&H — the TSF people). Convert + load once per project
 # site: each row's identity check (PF at site + name) decides which pass it
 # belongs to; the other pass reports it as an exception, never a wrong write.
+# Geometry probe first (header labels + fill %, never values): locates the
+# REAL amount columns in the two-tier summary (run 37: BASIC SALARY header
+# mapped but 0% filled — the values live under different labels).
+hcmos-run node scripts/xlsx-to-master.js /root/uat-data/Payroll_Master_File_North_Mara.xlsx \
+  /tmp/payroll-geometry-probe.csv --site "North Mara - L&H and Airstrip Project" --kind payroll --geometry \
+  2>/dev/null | tail -1 || true
+rm -f /tmp/payroll-geometry-probe.csv
 load_file "Payroll_Master_File_North_Mara.xlsx" "North Mara - L&H and Airstrip Project" payroll payroll-master
 if [ -f /root/uat-data/Payroll_Master_File_North_Mara.xlsx ]; then
   cp -f /root/uat-data/Payroll_Master_File_North_Mara.xlsx /root/uat-data/Payroll_NM_TSF_pass.xlsx
@@ -305,12 +312,16 @@ fi
 # source files retain the data either way.
 say "bare cross-site orphans (report only — Kira ruling needed)"
 sudo -u postgres psql -d hcmos -c "
-  SELECT s.name AS site, count(*) AS bare_cross_site_orphans
+  SELECT s.name AS site,
+         count(*) FILTER (WHERE EXISTS (SELECT 1 FROM employee m WHERE m.company_id=e.company_id
+                    AND m.legacy_id=e.legacy_id AND m.site_id<>e.site_id AND m.position IS NOT NULL)) AS twin_mastered_elsewhere,
+         count(*) FILTER (WHERE NOT EXISTS (SELECT 1 FROM employee m WHERE m.company_id=e.company_id
+                    AND m.legacy_id=e.legacy_id AND m.site_id<>e.site_id AND m.position IS NOT NULL)) AS twin_bare_only
     FROM employee e JOIN site s ON s.id = e.site_id
    WHERE e.company_id='$UAT_CO' AND e.position IS NULL
      AND NOT EXISTS (SELECT 1 FROM app_user u WHERE u.employee_id = e.id)
      AND EXISTS (SELECT 1 FROM employee m WHERE m.company_id = e.company_id
-                   AND m.legacy_id = e.legacy_id AND m.site_id <> e.site_id AND m.position IS NOT NULL)
+                   AND m.legacy_id = e.legacy_id AND m.site_id <> e.site_id)
    GROUP BY s.name ORDER BY s.name"
 
 # ── ingest provenance: every batch ever committed on this box (counts only) ──

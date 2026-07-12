@@ -254,6 +254,26 @@ function main() {
   console.log(JSON.stringify({ kind: kindName, site, header_row: hi + 1, records: records.length,
     ...(kindName === 'master' ? { emails_blanked_shared_or_invalid: blanked } : {}),
     fill_pct: fill, unmapped_columns: unmapped }));
+  // COLUMN GEOMETRY (--geometry): for every source column that is ≥80% numeric
+  // in the data rows, print its header pair (row above + header row) and fill —
+  // header labels and percentages ONLY, never cell values. This is how a
+  // mapped-but-empty amount column (run 37's payroll BASIC SALARY, 0% filled)
+  // gets located without eyes on the PII sheet.
+  if (process.argv.includes('--geometry')) {
+    const data = grid.slice(hi + 1).filter((r) => r.some((c) => String(c).trim() !== ''));
+    const width = Math.max(...grid.slice(0, hi + 1).map((r) => r.length), ...data.slice(0, 5).map((r) => r.length));
+    const geo = [];
+    for (let iCol = 0; iCol < width; iCol++) {
+      const vals = data.map((r) => String(r[iCol] ?? '').trim()).filter(Boolean);
+      const numeric = vals.filter((v) => /^-?[\d,]+(\.\d+)?$/.test(v)).length;
+      if (vals.length >= data.length * 0.5 && numeric >= vals.length * 0.8) {
+        geo.push({ col: iCol, above: String((grid[hi - 1] || [])[iCol] || '').trim() || null,
+          header: String(grid[hi][iCol] || '').trim() || null,
+          filled_pct: Math.round((vals.length * 100) / data.length) });
+      }
+    }
+    console.log(JSON.stringify({ numeric_column_geometry: geo }));
+  }
 }
 
 if (require.main === module) main();
