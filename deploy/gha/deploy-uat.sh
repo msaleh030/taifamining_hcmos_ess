@@ -164,7 +164,10 @@ echo "VM running at $IP"
 say "4. firewall: SSH only, everything else denied (Cloudflare tunnel = zero inbound 443)"
 ssh_ok() { hapi GET "/vps/v1/firewall/$1" | jq -e \
   '.rules[]? | select((.protocol=="TCP" or .protocol=="any") and (.port=="22" or .port=="any") and .action=="accept")' >/dev/null 2>&1; }
-FW_ALL="$(hapi GET /vps/v1/firewall | jq -r 'try ([.[] | select(.name == "hcmos-uat-fw") | .id] | join(" ")) catch empty')"
+# The list endpoint wraps results in a pagination envelope ({data: [...]});
+# tolerate both shapes — a silent parse miss here is what created the
+# duplicate outage-era groups (existing ones were never seen by the picker).
+FW_ALL="$(hapi GET /vps/v1/firewall | jq -r 'try ([(.data // .)[] | select(.name == "hcmos-uat-fw") | .id] | join(" ")) catch empty')"
 [ "$(echo "$FW_ALL" | wc -w)" -gt 1 ] && echo "NOTE: duplicate hcmos-uat-fw groups exist ($FW_ALL) — panel cleanup recommended (created during the API-token outage)"
 CUR_FW="$(hapi GET "/vps/v1/virtual-machines/$VM_ID" | jq -r '.firewall_group_id // empty')"
 if [ -n "$CUR_FW" ] && ssh_ok "$CUR_FW"; then
@@ -199,7 +202,7 @@ for vid in $(hapi GET /vps/v1/virtual-machines | jq -r 'try (.[].id) catch empty
   [ "$vid" = "$VM_ID" ] && continue
   echo "OTHER VM (not targeted): $(hapi GET "/vps/v1/virtual-machines/$vid" | jq -c '{id, hostname, state, plan, created_at, data_center_id, ipv4: (try ([.ipv4[].address]) catch [])}' 2>/dev/null)"
 done
-echo "firewall groups: $(hapi GET /vps/v1/firewall | jq -c 'try ([.[] | {id, name}]) catch empty' 2>/dev/null)"
+echo "firewall groups: $(hapi GET /vps/v1/firewall | jq -c 'try ([(.data // .)[] | {id, name}]) catch "UNPARSEABLE (raw shape unexpected)"' 2>/dev/null)"
 
 # ── 5. Ship source (with enforced dist) + run remote setup ───────────────────
 say "5. ship enforced build + run remote setup"
