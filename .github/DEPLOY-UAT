@@ -34,3 +34,4 @@ run: RESTART FIX — the running process now serves the deploy (health.build che
 run: Kira rulings — site-level PF (load the 19 flagged), draft-email list + collision count, title organogram, leave/permits/payroll wave 2026-07-12T17:16:13Z
 run: RETRY of a51c904 — Hostinger API returned Unauthenticated on the region assert (transient?) 2026-07-12T17:17:20Z
 run: token rotated — full re-fire: rulings + second wave + post-restart security re-verification + stale-window evidence 2026-07-12T17:25:46Z
+run: RETRY with firewall-rule evidence — run 32 SSH timed out right after the panel session (token rotation + new VM 1798564) 2026-07-12T17:40:48Z
