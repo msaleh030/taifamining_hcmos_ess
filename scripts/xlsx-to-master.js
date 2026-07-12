@@ -120,12 +120,14 @@ function readSheet(path) {
   const xml = part('xl/worksheets/sheet1.xml');
   const colIdx = (ref) => { let n = 0; for (const ch of ref.match(/^[A-Z]+/)[0]) n = n * 26 + (ch.charCodeAt(0) - 64); return n - 1; };
   const rows = [];
-  for (const rm of xml.matchAll(/<row[^>]*>([\s\S]*?)<\/row>/g)) {
+  for (const rm of xml.matchAll(/<row([^>]*)>([\s\S]*?)<\/row>/g)) {
+    const rAttr = /r="(\d+)"/.exec(rm[1]);
+    const body = rm[2];
     const cells = {};
     // A styled EMPTY cell is SELF-CLOSING (<c r="B4" s="10"/>) — the alternation
     // must consume it as empty, or it would lazily swallow the NEXT cell's value
     // and shift every column after it (the PF lands under Employee ID).
-    for (const cm of rm[1].matchAll(/<c r="([A-Z]+\d+)"([^>]*?)(?:\/>|>([\s\S]*?)<\/c>)/g)) {
+    for (const cm of body.matchAll(/<c r="([A-Z]+\d+)"([^>]*?)(?:\/>|>([\s\S]*?)<\/c>)/g)) {
       const [, ref, attrs, inner = ''] = cm;
       const v = /<v>([\s\S]*?)<\/v>/.exec(inner);
       const is = /<is>[\s\S]*?<\/is>/.exec(inner);
@@ -136,8 +138,22 @@ function readSheet(path) {
       cells[colIdx(ref)] = val;
     }
     const max = Math.max(-1, ...Object.keys(cells).map(Number));
-    rows.push(Array.from({ length: max + 1 }, (_, i) => cells[i] ?? ''));
+    const arr = Array.from({ length: max + 1 }, (_, i) => cells[i] ?? '');
+    // DENSE by the sheet's r attribute: Excel omits empty rows from the XML,
+    // and the merge ranges below are sheet-row-addressed — gaps become [].
+    if (rAttr) {
+      const at = Number(rAttr[1]) - 1;
+      while (rows.length < at) rows.push([]);
+      rows[at] = arr;
+    } else rows.push(arr);
   }
+  // MERGED cells: a header label anchored at S5 with <mergeCell ref="S5:U5"/>
+  // applies to columns S..U — the values often live under the merge's tail
+  // columns (the payroll summary, run 38's geometry probe). Attach the ranges
+  // so header mapping can expand labels across their span. Row/col 0-based.
+  rows.merges = [...xml.matchAll(/<mergeCell ref="([A-Z]+)(\d+):([A-Z]+)(\d+)"\/?>/g)].map((m) => ({
+    r1: Number(m[2]) - 1, c1: colIdx(m[1] + m[2]), r2: Number(m[4]) - 1, c2: colIdx(m[3] + m[4]),
+  }));
   return rows;
 }
 
@@ -176,9 +192,20 @@ function main() {
   // Header row: the first carrying the kind's required source fields plus a
   // name (split OR joined). Fail-closed: no such row → REFUSE, listing every
   // header actually seen so the mapping can be extended deliberately.
+  const preMerges = grid.merges || [];
+  const expandedRow = (ri) => {
+    const base = [...(grid[ri] || [])];
+    for (const m of preMerges) {
+      if (m.r1 !== ri || m.r2 !== ri) continue;
+      const label = String(base[m.c1] || '').trim();
+      if (!label) continue;
+      for (let c = m.c1; c <= m.c2; c++) { while (base.length <= c) base.push(''); if (!String(base[c] || '').trim()) base[c] = label; }
+    }
+    return base;
+  };
   let hi = -1;
   for (let i = 0; i < Math.min(grid.length, 10); i++) {
-    const mapped = new Set(grid[i].map((h) => MAP.get(normHdr(h))).filter(Boolean));
+    const mapped = new Set(expandedRow(i).map((h) => MAP.get(normHdr(h))).filter(Boolean));
     const hasName = mapped.has('first_name') || mapped.has('surname') || mapped.has('name');
     if (hasName && K.requires.every((f) => mapped.has(f))) { hi = i; break; }
   }
@@ -189,21 +216,40 @@ function main() {
     process.exit(1);
   }
 
-  const colMap = new Map(); // out column ← source index
+  // MERGE-EXPANDED header row: a label anchored on the first cell of a
+  // horizontal merge applies to EVERY column in its span (the payroll summary
+  // anchors 'BASIC SALARY' left of the values). Deterministic — read from the
+  // workbook's own mergeCells ranges, never guessed from data.
+  const merges = grid.merges || [];
+  const headerAt = (ri) => {
+    const base = [...(grid[ri] || [])];
+    for (const m of merges) {
+      if (m.r1 !== ri || m.r2 !== ri) continue; // horizontal merges on this row only
+      const label = String(base[m.c1] || '').trim();
+      if (!label) continue;
+      for (let c = m.c1; c <= m.c2; c++) {
+        while (base.length <= c) base.push('');
+        if (!String(base[c] || '').trim()) base[c] = label;
+      }
+    }
+    return base;
+  };
+  const hdr = headerAt(hi);
+  const colMap = new Map(); // out column ← CANDIDATE source indices (merge spans)
   const unmapped = [];
-  grid[hi].forEach((h, i) => {
+  hdr.forEach((h, i) => {
     const canon = MAP.get(normHdr(h));
-    if (canon && !colMap.has(canon)) colMap.set(canon, i);
-    else if (String(h).trim() && !canon) unmapped.push(String(h).trim());
+    if (canon) { const a = colMap.get(canon) || []; a.push(i); colMap.set(canon, a); }
+    else if (String(h).trim() && !unmapped.includes(String(h).trim())) unmapped.push(String(h).trim());
   });
-  // TWO-TIER headers (the payroll tabular summary): a leaf label on the row
-  // ABOVE the detected header row claims columns the header row leaves blank.
-  // Gap-filling only — a mapping from the detected row is never overridden.
+  // TWO-TIER headers: a leaf label on the row ABOVE the detected header row
+  // claims columns the header row leaves blank. Gap-filling only.
   if (hi > 0) {
-    const claimed = new Set(colMap.values());
-    grid[hi - 1].forEach((h, i) => {
+    const above = headerAt(hi - 1);
+    const claimed = new Set([].concat(...colMap.values()));
+    above.forEach((h, i) => {
       const canon = MAP.get(normHdr(h));
-      if (canon && !colMap.has(canon) && !claimed.has(i) && !String(grid[hi][i] || '').trim()) colMap.set(canon, i);
+      if (canon && !colMap.has(canon) && !claimed.has(i) && !String(hdr[i] || '').trim()) colMap.set(canon, [i]);
     });
   }
 
@@ -211,7 +257,13 @@ function main() {
   const records = [];
   const emailCount = new Map();
   for (const row of grid.slice(hi + 1)) {
-    const g = (c) => { const i = colMap.get(c); return i != null && i < row.length ? String(row[i]).trim() : ''; };
+    const g = (c) => {
+      for (const i of colMap.get(c) || []) {
+        const v = i < row.length ? String(row[i]).trim() : '';
+        if (v !== '') return v;
+      }
+      return '';
+    };
     if (!g('pf') && !g('first_name') && !g('surname') && !g('name')) continue; // blank line
     const rec = {};
     for (const c of OUT_COLS) {
