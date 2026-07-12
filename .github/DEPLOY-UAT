@@ -38,3 +38,4 @@ run: RETRY with firewall-rule evidence — run 32 SSH timed out right after the 
 run: second-wave retry with real-header mappings + matrix re-read + provenance 2026-07-12T17:49:58Z
 run: run-34 fixes — idempotent flagged-dup re-run, no fabricated cross-site persons, control-mismatch detail 2026-07-12T17:58:57Z
 run: firewall no-churn fix + Taifa_User_Accounts audit + run-34 ingest fixes 2026-07-12T18:14:14Z
+run: run-36 data-shape fixes — Nyanzaga leave blank-amount, payroll two-tier headers + both NM passes 2026-07-12T18:23:41Z
