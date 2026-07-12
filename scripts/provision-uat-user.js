@@ -57,7 +57,20 @@ async function main() {
         `INSERT INTO app_user(id,company_id,employee_id,email,password_hash,mfa_secret,role_code,status)
          VALUES ($1,$2,$3,$4,$5,$6,$7,'active')`,
         [userId, company, empId, email, C.hashSecret(password), secret, role]);
+      // MULTI-SITE scope (Kira 2026-07-12): UAT_SCOPE_SITES='Site A;Site B'
+      // writes the user's visibility SET — each a DISTINCT site, never merged.
+      // The employee record stays anchored at UAT_SITE. Every named site must
+      // exist (fail-closed: a typo aborts the whole provision, nothing lands).
+      const scopeNames = (process.env.UAT_SCOPE_SITES || '').split(';').map((x) => x.trim()).filter(Boolean);
+      for (const sn of scopeNames) {
+        const sc = (await c.query('SELECT id FROM site WHERE company_id=$1 AND lower(name)=lower($2)', [company, sn])).rows[0];
+        if (!sc) throw new Error(`scope site "${sn}" not found — refusing to provision with a broken scope`);
+        await c.query(
+          `INSERT INTO user_site_scope(company_id, user_id, site_id) VALUES ($1,$2,$3)
+           ON CONFLICT DO NOTHING`, [company, userId, sc.id]);
+      }
       await c.query('COMMIT');
+      if (scopeNames.length) console.log('scope    :', scopeNames.join(' + '), '(multi-site set)');
     } catch (e) {
       try { await c.query('ROLLBACK'); } catch { /* ignore */ }
       throw e;

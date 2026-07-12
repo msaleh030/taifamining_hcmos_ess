@@ -35,6 +35,19 @@ async function requesterSite(exec, session) {
   return r.rows[0] ? r.rows[0].site_id : null;
 }
 
+// The requester's SITE SET (Kira 2026-07-12: the North Mara HR Officer sees
+// BOTH NM projects — two distinct sites, never merged). user_site_scope rows,
+// when present, ARE the set; otherwise the employee record's single site (the
+// one-officer-one-site default, unchanged for everyone else).
+async function requesterSites(exec, session) {
+  if (!session.user_id) return [];
+  const scoped = await exec.query(
+    'SELECT site_id FROM user_site_scope WHERE user_id=$1', [session.user_id]);
+  if (scoped.rows.length) return scoped.rows.map((r) => r.site_id);
+  const one = await requesterSite(exec, session);
+  return one ? [one] : [];
+}
+
 // bughunt-B #11: the explicit three-state scope. A bare null used to mean BOTH
 // "central — no filter" AND "site-bound but unresolved", so a consumer applying
 // "filter only when non-null" would hand a site-bound role with an unknown site
@@ -44,18 +57,28 @@ async function requesterSite(exec, session) {
 //   { mode: 'none' }           site-bound, UNRESOLVED — deny (fail closed)
 async function scopeSiteMode(exec, session) {
   if (!(await isScoped(exec, session.role_code))) return { mode: 'all' };
-  const siteId = await requesterSite(exec, session);
-  return siteId ? { mode: 'site', siteId } : { mode: 'none' };
+  const siteIds = await requesterSites(exec, session);
+  if (!siteIds.length) return { mode: 'none' };
+  return { mode: 'sites', siteIds, siteId: siteIds[0] };
 }
 
-// Convenience: the site a site-bound role must be restricted to, or null when the
-// role is central (unscoped). A consumer applies `WHERE site_id = <this>` when
-// non-null. FAIL-CLOSED: a site-bound role whose site cannot be resolved is
-// DENIED here — never handed the org-wide view a bare null would imply.
-async function scopeSite(exec, session) {
+// THE gate every per-site consumer uses: null for a central role (no filter),
+// or the ARRAY of site ids a site-bound role is restricted to. FAIL-CLOSED: a
+// site-bound role whose set resolves EMPTY is DENIED here (403) — never handed
+// the org-wide view a bare null would imply (#11).
+async function scopeSites(exec, session) {
   const s = await scopeSiteMode(exec, session);
   if (s.mode === 'none') throw new HttpError(403, 'site scope unresolved — a site-bound role with no site sees nothing');
-  return s.mode === 'site' ? s.siteId : null;
+  return s.mode === 'sites' ? s.siteIds : null;
 }
 
-module.exports = { isScoped, requesterSite, scopeSite, scopeSiteMode };
+// Back-compat single-site view of the scope (consumers that need "the
+// requester's own site"). Multi-site scopes resolve to the FULL set via
+// scopeSites — this returns the anchor (first) site and exists only for the
+// single-site call sites; new consumers use scopeSites.
+async function scopeSite(exec, session) {
+  const sites = await scopeSites(exec, session);
+  return sites ? sites[0] : null;
+}
+
+module.exports = { isScoped, requesterSite, requesterSites, scopeSite, scopeSites, scopeSiteMode };

@@ -209,8 +209,8 @@ async function readProfile(session, employeeId) {
     // Site check BEFORE any confidential assembly (Section 17.2): an out-of-site
     // request 404s exactly as the directory does.
     if (await sitescope.isScoped(c, session.role_code)) {
-      const mySite = await sitescope.requesterSite(c, session);
-      if (!mySite || r.rows[0].site_id !== mySite) throw new HttpError(404, 'not found');
+      const mySites = await sitescope.requesterSites(c, session);
+      if (!mySites.length || !mySites.includes(r.rows[0].site_id)) throw new HttpError(404, 'not found');
     }
     return a3.assembleProfile(c, session, r.rows[0]);
   });

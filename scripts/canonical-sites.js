@@ -37,6 +37,16 @@ async function run(companyId) {
       await c.query('INSERT INTO site (company_id, name) VALUES ($1,$2)', [companyId, name]);
       out.created.push(name);
     }
+    // Kira 2026-07-12: the six-site model is FINAL — anything else (Buzwagi,
+    // Buly Yard, JNIA, ...) is RETIRED. Report extras loudly; never auto-delete
+    // (a site may still anchor employees — retiring data is a Kira call).
+    const ph = CANONICAL.map((_, i) => `$${i + 2}`).join(',');
+    const extras = (await c.query(
+      `SELECT s.name, count(e.id)::int AS employees FROM site s
+         LEFT JOIN employee e ON e.site_id = s.id
+        WHERE s.company_id=$1 AND s.name NOT IN (${ph})
+        GROUP BY s.name ORDER BY s.name`, [companyId, ...CANONICAL])).rows;
+    out.non_canonical = extras; // [] when the model is exactly the six
     return out;
   });
 }

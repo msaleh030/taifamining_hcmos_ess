@@ -81,14 +81,15 @@ ANY_SITE=$(sudo -u postgres psql -d hcmos -Atc "SELECT name FROM site WHERE comp
 ANY_SITE=${ANY_SITE:-$HQ_SITE}
 echo "sites: HQ='$HQ_SITE' probe-site='$ANY_SITE'"
 
-prov() { # email name role site
-  local email="$1" name="$2" role="$3" site="$4"
+prov() { # email name role site [scope-sites 'A;B' for a multi-site set]
+  local email="$1" name="$2" role="$3" site="$4" scope="${5:-}"
   if sudo -u postgres psql -d hcmos -Atc "SELECT 1 FROM app_user WHERE company_id='$UAT_CO' AND lower(email)=lower('$email')" | grep -q 1; then
     echo "exists: $email ($role)"; return 0
   fi
   UAT_COMPANY="$UAT_CO" UAT_EMAIL="$email" UAT_NAME="$name" UAT_ROLE="$role" UAT_SITE="$site" \
+    UAT_SCOPE_SITES="$scope" \
     node scripts/provision-uat-user.js >> "$CREDS" 2>&1 \
-    && echo "provisioned: $email ($role, $site)" || { echo "FAILED: $email ($role)"; return 1; }
+    && echo "provisioned: $email ($role, ${scope:-$site})" || { echo "FAILED: $email ($role)"; return 1; }
 }
 
 # REVISED v1.6 roster (Kira): SoD on two dedicated people, NO +alias accounts —
@@ -110,10 +111,25 @@ prov uat.probe.r03@taifamining.tz   'UAT Probe (HR Officer)' R03 "$ANY_SITE"
 prov yusuph.kabeza@taifamining.tz   'Yusuph Kabeza'    R03 "Mwadui"
 prov ali.mbarouk@taifamining.tz     'Ali Mbarouk'      R03 "$HQ_SITE"       # Head Office
 prov ramadhan.mchomvu@taifamining.tz 'Ramadhan Mchomvu' R03 "Nyanzaga"
-# 4th R03 (North Mara) is HELD: name discrepancy — Baraka 'Advera Speratus' vs
-# roster 'Alvera Salvator' (alvera.salvator@). NOT provisioned until Kira
-# confirms name+email (a wrong name = wrong email = broken login).
-echo "HELD (name discrepancy, Kira to confirm): 4th R03 North Mara — 'Advera Speratus' vs 'Alvera Salvator'"
+# 4th R03 CONFIRMED (Kira 2026-07-12): Advera Speratus (the roster's 'Alvera
+# Salvator' was WRONG). MULTI-SITE scope: BOTH North Mara projects — two
+# DISTINCT sites, per user_site_scope (never merged). Anchor = L&H.
+prov advera.speratus@taifamining.tz 'Advera Speratus' R03 "North Mara - L&H and Airstrip Project" \
+  'North Mara - L&H and Airstrip Project;North Mara - TSF Lift 10 Project'
+# CLEANUP (Kira): if an account was ever created for the WRONG name, remove it —
+# no orphan R03 with site scope for a person who does not exist. Expected: none
+# (the 4th officer was HELD, never provisioned) — verify and report either way.
+WRONG=$(sudo -u postgres psql -d hcmos -Atc \
+  "SELECT id FROM app_user WHERE company_id='$UAT_CO' AND lower(email)='alvera.salvator@taifamining.tz'")
+if [ -n "$WRONG" ]; then
+  sudo -u postgres psql -d hcmos -c "
+    DELETE FROM session WHERE user_id='$WRONG';
+    DELETE FROM user_site_scope WHERE user_id='$WRONG';
+    DELETE FROM app_user WHERE id='$WRONG';" >/dev/null
+  echo "CLEANUP: alvera.salvator@ account EXISTED — removed (sessions + scope + account)."
+else
+  echo "CLEANUP CHECK: no alvera.salvator@ account exists (the 4th officer was HELD, never provisioned) — nothing to remove."
+fi
 echo "PENDING NAMES (provision when Taifa HR confirms): 2x R04, maurice.<surname> R06, richard.<surname> R14"
 # hcmos-run sources the service's EnvironmentFile first — a bare `node`
 # invocation misses PG_OWNER_PW and fails Postgres auth.

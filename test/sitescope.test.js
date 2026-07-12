@@ -31,8 +31,11 @@ test('site-scope gate: site-bound roles are scoped to their own site; central ro
     const paySession = { company_id: A, user_id: F.USERS.PAYROLL_A.id, role_code: 'R07' };
     assert.equal(await sitescope.scopeSite(c, paySession), null, 'central role → no site restriction');
 
-    // bughunt-B #11: the explicit three-state contract, unambiguous by mode.
-    assert.deepEqual(await sitescope.scopeSiteMode(c, supSession), { mode: 'site', siteId: F.SITE.A1 });
+    // bughunt-B #11 + multi-site: the explicit three-state contract by mode —
+    // 'all' (central), 'sites' (the scope SET, single-site = a one-element set),
+    // 'none' (unresolved → deny).
+    assert.deepEqual(await sitescope.scopeSiteMode(c, supSession),
+      { mode: 'sites', siteIds: [F.SITE.A1], siteId: F.SITE.A1 });
     assert.deepEqual(await sitescope.scopeSiteMode(c, paySession), { mode: 'all' });
   });
 });
@@ -47,4 +50,43 @@ test('site-scope gate: a site-bound role with no resolvable site is denied, not 
     await assert.rejects(() => sitescope.scopeSite(c, orphan), /site scope unresolved/,
       'scopeSite throws (403) instead of returning a null a consumer would read as "no filter"');
   });
+});
+
+// ── Multi-site scope (Kira 2026-07-12): the North Mara HR Officer sees BOTH
+// NM projects — a SET of sites per user (user_site_scope), never a merge. No
+// rows → the employee record's single site (everyone else unchanged). ────────
+test('multi-site scope: a user with user_site_scope rows resolves the SET; sees exactly those sites', async () => {
+  const employees = require('../src/employees');
+  const addScope = (siteId) => db.withOwner((c) => c.query(
+    `INSERT INTO user_site_scope(company_id, user_id, site_id) VALUES ($1,$2,$3)`,
+    [A, F.USERS.SUP_A.id, siteId]));
+  const supSession = { company_id: A, user_id: F.USERS.SUP_A.id, role_code: 'R02' };
+  try {
+    // Baseline (no rows): single-site default from the employee record.
+    await db.withTenant(A, async (c) => {
+      assert.deepEqual(await sitescope.requesterSites(c, supSession), [F.SITE.A1], 'no rows → employee-record site');
+    });
+    // Two-scope set: BOTH sites resolve; both remain distinct.
+    await addScope(F.SITE.A1);
+    await addScope(F.SITE.A2);
+    await db.withTenant(A, async (c) => {
+      const mode = await sitescope.scopeSiteMode(c, supSession);
+      assert.equal(mode.mode, 'sites');
+      assert.deepEqual([...mode.siteIds].sort(), [F.SITE.A1, F.SITE.A2].sort(), 'the scope is the SET');
+      const sites = await sitescope.scopeSites(c, supSession);
+      assert.equal(sites.length, 2);
+    });
+    // The directory: she sees employees at BOTH her sites, and NOT a third.
+    const dir = await employees.list(supSession, { limit: 200, q: 'E-A-000' });
+    const bySite = new Set(dir.rows.map((r) => r.site_id));
+    assert.ok(bySite.has(F.SITE.A1) && bySite.has(F.SITE.A2), 'both scoped sites visible');
+    assert.ok(!bySite.has(F.SITE.HO), 'a site OUTSIDE the set is never visible');
+    // Fail-closed unchanged (#11): a site-bound role with NO resolvable scope denies.
+    await db.withTenant(A, async (c) => {
+      const orphan = { company_id: A, user_id: null, role_code: 'R02' };
+      await assert.rejects(() => sitescope.scopeSites(c, orphan), /site scope unresolved/);
+    });
+  } finally {
+    await db.withOwner((c) => c.query(`DELETE FROM user_site_scope WHERE user_id=$1`, [F.USERS.SUP_A.id]));
+  }
 });

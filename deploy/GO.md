@@ -39,8 +39,8 @@ printed password on first sign-in.
 |---|---|---|---|
 | 1 | Yusuph Kabeza | R03 (site-scoped → **Mwadui**) | `yusuph.kabeza@taifamining.tz` |
 | 2 | Ali Mbarouk | R03 (site-scoped → **Head Office**) | `ali.mbarouk@taifamining.tz` |
-| 3 | Ramadhan Mchomvu | R03 (site-scoped → **Nyanzaga**) | `ramadhan.mchomvu@taifamining.tz` |
-| 4 | **HELD — name discrepancy** (North Mara): Baraka 'Advera Speratus' vs roster 'Alvera Salvator'. Kira to confirm name+email before provisioning | R03 (site-scoped → North Mara) | `alvera.salvator@…?` **do not provision yet** |
+| 3 | Ramadhan Mchomvu | R03 (site-scoped → **Nyanzaga - Sotta Mining Project**) | `ramadhan.mchomvu@taifamining.tz` |
+| 4 | **Advera Speratus** (CONFIRMED — roster's 'Alvera Salvator' was wrong) | R03 **MULTI-SITE**: North Mara L&H/Airstrip **+** North Mara TSF Lift 10 (two distinct sites, `user_site_scope`) | `advera.speratus@taifamining.tz` |
 | 5-6 | HR Managers ×2 (names from Taifa HR) | R04 | `<first.last>@taifamining.tz` |
 | 7 | Omid Karambeck | **R11 Head of HR** | `omid.karambeck@taifamining.tz` |
 | 8 | Maurice `<surname>` | **R06 SHEQ Manager** (absorbs HSE Officer — no R05 account, v1.6) | `maurice.<surname>@taifamining.tz` |

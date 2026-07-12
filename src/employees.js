@@ -25,9 +25,10 @@ async function directoryDenied(companyId, role) {
 }
 
 // Site-scope is the shared gate (src/sitescope.js) — the SAME rule every per-site
-// endpoint must use (directory here; C11 Performance when built).
+// endpoint must use (directory here; C11 Performance when built). Scope is a SET
+// of sites (a multi-site officer sees each of hers, and only those).
 const isScoped = sitescope.isScoped;
-const requesterSite = sitescope.requesterSite;
+const requesterSites = sitescope.requesterSites;
 
 async function actorEmail(client, session) {
   if (!session.user_id) return null;
@@ -58,20 +59,25 @@ async function list(session, params = {}) {
 
   return db.withTenant(session.company_id, async (client) => {
     const scoped = await isScoped(client, session.role_code);
-    let forcedSite = null;
+    let forcedSites = null;
     if (scoped) {
-      forcedSite = await requesterSite(client, session);
-      // A scoped viewer with no site sees nothing (fail safe, not fail open).
-      if (!forcedSite) return { rows: [], next_cursor: null, page_size: limit };
+      forcedSites = await requesterSites(client, session);
+      // A scoped viewer with no resolvable site sees nothing (fail safe, not fail open).
+      if (!forcedSites.length) return { rows: [], next_cursor: null, page_size: limit };
     }
 
     const where = ['TRUE'];
     const args = [];
     const add = (v) => { args.push(v); return `$${args.length}`; };
 
-    // Site filter is forced for scoped roles (in SQL, not after fetch).
-    if (forcedSite) where.push(`site_id = ${add(forcedSite)}`);
-    else if (params.site && isUuid(params.site)) where.push(`site_id = ${add(params.site)}`);
+    // Site filter is forced for scoped roles (in SQL, not after fetch). A
+    // multi-site officer may narrow to ONE of her sites via ?site=; a site
+    // outside her set is ignored (the full set stays forced — never widened).
+    if (forcedSites) {
+      const chosen = params.site && isUuid(params.site) && forcedSites.includes(params.site)
+        ? [params.site] : forcedSites;
+      where.push(`site_id IN (${chosen.map((s) => add(s)).join(',')})`);
+    } else if (params.site && isUuid(params.site)) where.push(`site_id = ${add(params.site)}`);
 
     if (params.status) where.push(`status = ${add(params.status)}`);
     if (params.dept) where.push(`dept = ${add(params.dept)}`);
@@ -113,8 +119,8 @@ async function get(session, id) {
     // Site check FIRST — an out-of-site request must 404 before any confidential
     // table is touched (Section 17.2).
     if (await isScoped(client, session.role_code)) {
-      const mySite = await requesterSite(client, session);
-      if (!mySite || emp.site_id !== mySite) throw new HttpError(404, 'not found');
+      const mySites = await requesterSites(client, session);
+      if (!mySites.length || !mySites.includes(emp.site_id)) throw new HttpError(404, 'not found');
     }
     return a3.assembleProfile(client, session, emp);
   });
@@ -142,8 +148,8 @@ async function submitChange(session, id, body) {
     const emp = r.rows[0];
     if (!emp) throw new HttpError(404, 'not found');
     if (await isScoped(client, session.role_code)) {
-      const mySite = await requesterSite(client, session);
-      if (!mySite || emp.site_id !== mySite) throw new HttpError(404, 'not found');
+      const mySites = await requesterSites(client, session);
+      if (!mySites.length || !mySites.includes(emp.site_id)) throw new HttpError(404, 'not found');
     }
 
     const maker = await actorEmail(client, session);
@@ -231,8 +237,8 @@ async function documents(session, id) {
     const emp = r.rows[0];
     if (!emp) throw new HttpError(404, 'not found');
     if (await isScoped(client, session.role_code)) {
-      const mySite = await requesterSite(client, session);
-      if (!mySite || emp.site_id !== mySite) throw new HttpError(404, 'not found');
+      const mySites = await requesterSites(client, session);
+      if (!mySites.length || !mySites.includes(emp.site_id)) throw new HttpError(404, 'not found');
     }
     const medSet = await cfg.getRoleSet(session.company_id, 'a3.medical.roles', 'R03,R06');
     const canMedical = medSet.has(session.role_code);

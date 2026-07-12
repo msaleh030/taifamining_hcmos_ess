@@ -317,7 +317,8 @@ async function coverageOf(c, co, reqRow) {
 async function queue(session) {
   const co = session.company_id;
   return db.withTenant(co, async (c) => {
-    const site = await sitescope.scopeSite(c, session);
+    const sites = await sitescope.scopeSites(c, session); // null = central; array = the scope SET
+    const siteFilter = sites ? `AND e.site_id IN (${sites.map((_, i) => `$${i + 1}`).join(',')})` : '';
     const rows = (await c.query(
       `SELECT lr.id, lr.employee_id, e.full_name, e.emp_no, e.role_code, e.site_id, s.name AS site,
               lr.leave_type, lr.days::float8 AS days, lr.from_date::text AS from_date,
@@ -325,8 +326,8 @@ async function queue(session) {
          FROM leave_request lr
          JOIN employee e ON e.id = lr.employee_id
          LEFT JOIN site s ON s.id = e.site_id
-        WHERE lr.status = 'applied' ${site ? 'AND e.site_id = $1' : ''}
-        ORDER BY lr.applied_at`, site ? [site] : [])).rows;
+        WHERE lr.status = 'applied' ${siteFilter}
+        ORDER BY lr.applied_at`, sites || [])).rows;
     const pending = [];
     for (const r of rows) pending.push({ ...r, coverage: await coverageOf(c, co, r) });
     return { pending };
@@ -347,11 +348,11 @@ async function decide(session, requestId, input = {}) {
     const own = await employeeOf(c, session);
     if (own && own === req.employee_id) throw new HttpError(403, 'cannot decide own leave (SOD-01)');
 
-    // A site-bound approver decides only their own site's requests.
-    const site = await sitescope.scopeSite(c, session);
-    if (site) {
+    // A site-bound approver decides only requests inside their scope SET.
+    const sites = await sitescope.scopeSites(c, session);
+    if (sites) {
       const emp = (await c.query('SELECT site_id FROM employee WHERE id=$1', [req.employee_id])).rows[0];
-      if (!emp || emp.site_id !== site) throw new HttpError(403, 'request outside your site');
+      if (!emp || !sites.includes(emp.site_id)) throw new HttpError(403, 'request outside your site');
     }
 
     // LR-6 on approval: warn-not-block — a coverage gap needs the acknowledged

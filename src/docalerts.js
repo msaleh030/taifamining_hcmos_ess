@@ -147,7 +147,7 @@ async function listOpen(session) {
          FROM doc_alert a JOIN employee_document d ON d.id = a.document_id
         WHERE a.status='open' ORDER BY a.due_date`)).rows;
     const role = session.role_code;
-    const mySite = await sitescope.requesterSite(c, session);
+    const mySites = await sitescope.requesterSites(c, session);
     const open = rows.filter((r) => {
       if (r.kind === 'permit' && (r.unclassified || r.permit_type === 'expat')) return role === r.notify_role;
       if (r.kind === 'medical' || r.kind === 'contract') {
@@ -157,7 +157,7 @@ async function listOpen(session) {
         // a null notify_site is a data gap (employee with no site) — it must
         // FAIL CLOSED, not fan out to every HR Officer in the tenant.
         if (r.notify_site == null) return role === r.notify_role && role === 'R11';
-        return role === r.notify_role && mySite != null && r.notify_site === mySite;
+        return role === r.notify_role && mySites.includes(r.notify_site);
       }
       return true;
     });

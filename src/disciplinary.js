@@ -56,8 +56,8 @@ async function issueAction(issuer, input = {}, opts = {}) {
     // loading full_name/site_id, read — employees at their OWN site. Same 404
     // the directory gives for an out-of-site id (Section 17.2).
     if (await sitescope.isScoped(c, issuer.role_code)) {
-      const mySite = await sitescope.requesterSite(c, issuer);
-      if (!mySite || subj.site_id !== mySite) throw new HttpError(404, 'employee not found');
+      const mySites = await sitescope.requesterSites(c, issuer);
+      if (!mySites.length || !mySites.includes(subj.site_id)) throw new HttpError(404, 'employee not found');
     }
 
     const issuerU  = await resolveUser(c, issuer.user_id);
