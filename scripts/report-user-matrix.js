@@ -172,7 +172,7 @@ async function main() {
   const siteValues = distinct('site');
   if (siteValues.length) console.log(`site/scope values as written: ${siteValues.join(' | ')}`);
   console.log(`per-row detail (names/emails): ${reportPath} (600, on-box only)`);
-  console.log('PROVISIONED: NOTHING — awaiting Kira\'s confirmation of the dual-credential plan.');
+  console.log('PROVISIONING (Kira A1 confirmed): console accounts via the named-users checkpoint; ESS devices via the ESS checkpoint — this audit itself writes nothing.');
   await db.close();
 }
 

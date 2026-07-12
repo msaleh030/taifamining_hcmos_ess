@@ -631,7 +631,14 @@ async function approve(session, kind, body, opts = {}) {
            Number.isFinite(nzd.basic) ? nzd.basic : null, Number.isFinite(nzd.gross) ? nzd.gross : null,
            nzd.currency || null, nzd.bank || null, nzd.bank_account || null]);
       } else {
-        await c.query(
+        // IDEMPOTENT: one CURRENT document per (person, permit name) — a re-run
+        // updates the expiry instead of stacking duplicates (permits now load
+        // on every deploy alongside the other masters).
+        const upd = await c.query(
+          `UPDATE employee_document SET valid_until=$4
+            WHERE company_id=$1 AND employee_id=$2 AND kind='permit' AND name=$3`,
+          [session.company_id, r.matched_employee, nzd.permit, nzd.expiry]);
+        if (!upd.rowCount) await c.query(
           `INSERT INTO employee_document (company_id, employee_id, kind, name, valid_until)
            VALUES ($1,$2,'permit',$3,$4)`, [session.company_id, r.matched_employee, nzd.permit, nzd.expiry]);
       }

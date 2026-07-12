@@ -257,15 +257,27 @@ load_file "Leave_Master_File_Nyanzaga.xlsx"         "Nyanzaga - Sotta Mining Pro
 echo "GAP (report to Kira): no leave master for 'North Mara - L&H and Airstrip Project' — only the earlier northmara-leave balances exist there"
 echo "GAP (report to Kira): no leave master for 'Dar Yard' — no opening balances loaded for that site"
 
-say "expat permits master (keyed on PF — replaces the 3-of-61 name matching)"
-# Company-wide file: NO site stamp — a site column in the file passes through
-# and disambiguates any cross-site PF; without one an ambiguous PF excepts.
-load_file "Expat_Permits_Master_File.xlsx" "" permits permits
-if [ -f "/root/uat-data/Expat_Permits_Master_File.permits.csv" ]; then
-  echo "-- expat classification, PF-keyed from the permits master:"
-  UAT_COMPANY=$UAT_CO hcmos-run node scripts/classify-expats.js \
-    /root/uat-data/Expat_Permits_Master_File.permits.csv /root/expat-classification-report.txt \
-    || echo "classification FAILED (non-fatal; permits themselves are loaded)"
+say "expat permits (Kira A3: match by NAME against the loaded masters; TWO docs/person; fail closed)"
+if [ -f /root/uat-data/Expat_Permits_Master_File.xlsx ]; then
+  hcmos-run node scripts/expat-permits-convert.js /root/uat-data/Expat_Permits_Master_File.xlsx \
+    /root/uat-data/Expat_Permits_Master_File.permits.csv /root/uat-data/Expat_Permits_Master_File.classify.csv \
+    || echo "CONVERT FAILED: Expat_Permits_Master_File.xlsx"
+  if [ -f /root/uat-data/Expat_Permits_Master_File.permits.csv ]; then
+    hcmos-run node scripts/derive-control.js permits /root/uat-data/Expat_Permits_Master_File.permits.csv \
+      > /root/uat-data/Expat_Permits_Master_File.permits.control.json
+    echo "  controls DERIVED from the file (no independent totals) — catches conversion/load drift, NOT source truth"
+    UAT_COMPANY=$UAT_CO hcmos-run node scripts/load-ingest.js permits \
+      /root/uat-data/Expat_Permits_Master_File.permits.csv /root/uat-data/Expat_Permits_Master_File.permits.control.json \
+      omar.omar@taifamining.tz viswa.medhuru@taifamining.tz --commit \
+      | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{const r=JSON.parse(s.slice(s.indexOf("{")));console.log(`  loaded=${r.loaded||0} clean=${r.clean} exceptions=${r.exceptions} flagged=${r.warned} control_ok=${r.control_ok}`);for(const[k,n]of Object.entries(r.exception_kinds||{}))console.log(`    EXC ${String(n).padStart(4)}x ${k}`);for(const[k,n]of Object.entries(r.warning_kinds||{}))console.log(`    warn ${String(n).padStart(4)}x ${k}`);}catch(e){console.log(s);}})' \
+      || echo "  PERMIT LOAD FAILED — see the exceptions report next to the CSV"
+    echo "-- expat classification (is_expat + permit_type), same name-matching:"
+    UAT_COMPANY=$UAT_CO hcmos-run node scripts/classify-expats.js \
+      /root/uat-data/Expat_Permits_Master_File.classify.csv /root/expat-classification-report.txt \
+      || echo "classification FAILED (non-fatal; documents themselves are loaded)"
+  fi
+else
+  echo "AWAITING: Expat_Permits_Master_File.xlsx (drop into /root/uat-data — PII, never the repo)"
 fi
 
 say "payroll master (North Mara — BOTH projects; behind the pay gate, maker-checker)"
@@ -313,6 +325,27 @@ if [ -n "$NM_LEAVE" ] && [ -f "/root/uat-data/northmara-leave.control.json" ]; t
     || echo "LEAVE LOAD FAILED — see the exception report next to the CSV"
 fi
 
+# ── ESS devices (Kira A1): every matrix person gets a SEPARATE device + PIN —
+# console password and ESS PIN are two credentials on two surfaces, never one.
+# Super Admin row skipped (Kira's interactive step); unresolvable rows flagged.
+say "ESS device + PIN registration (matrix people; PINs -> credentials file, 600)"
+UAM2=$(ls /root/uat-data/Taifa_User_Accounts.xlsx /root/uat-data/User_Accounts_Matrix.xlsx 2>/dev/null | head -1 || true)
+if [ -n "$UAM2" ]; then
+  UAT_COMPANY=$UAT_CO hcmos-run node scripts/provision-ess-devices.js "$UAM2" "$CREDS" \
+    || echo "ESS device provisioning FAILED (non-fatal)"
+else
+  echo "AWAITING: user accounts matrix"
+fi
+
+# ── stale submitted batches (B3): run 35's aborted approves left 'submitted'
+# staging rows. They can never commit silently (approve is an explicit checker
+# action) but they clutter the history — mark them aborted after an hour.
+say "stale submitted ingest batches -> aborted (housekeeping)"
+sudo -u postgres psql -d hcmos -c "
+  UPDATE ingest_batch SET status='aborted'
+   WHERE company_id='$UAT_CO' AND status='submitted'
+     AND created_at < now() - interval '1 hour'" | head -1
+
 # ── bare cross-site orphans: identity-less rows whose PF is MASTERED at a
 # different site (run 34's leave load created 16 such at TSF before the
 # validator was tightened). REPORT ONLY — deleting or re-siting a person is a
@@ -331,6 +364,22 @@ sudo -u postgres psql -d hcmos -c "
      AND EXISTS (SELECT 1 FROM employee m WHERE m.company_id = e.company_id
                    AND m.legacy_id = e.legacy_id AND m.site_id <> e.site_id)
    GROUP BY s.name ORDER BY s.name"
+# Full exception LIST for Kira/Baraka to work through during UAT (names/PFs —
+# PII, so a 600 on-box file; this log carries only the counts above).
+sudo -u postgres psql -d hcmos -Atc "
+  SELECT e.legacy_id || ',' || s.name || ',' || e.full_name || ',' ||
+         coalesce((SELECT string_agg(s2.name || ':' || CASE WHEN m.position IS NULL THEN 'bare' ELSE 'mastered' END, ' | ')
+            FROM employee m JOIN site s2 ON s2.id = m.site_id
+           WHERE m.company_id = e.company_id AND m.legacy_id = e.legacy_id AND m.id <> e.id), '')
+    FROM employee e JOIN site s ON s.id = e.site_id
+   WHERE e.company_id='$UAT_CO' AND e.position IS NULL
+     AND NOT EXISTS (SELECT 1 FROM app_user u WHERE u.employee_id = e.id)
+     AND EXISTS (SELECT 1 FROM employee m WHERE m.company_id = e.company_id
+                   AND m.legacy_id = e.legacy_id AND m.site_id <> e.site_id)
+   ORDER BY s.name, e.legacy_id" > /root/orphan-exceptions.csv
+sed -i '1i pf,site,full_name,twins' /root/orphan-exceptions.csv
+chmod 600 /root/orphan-exceptions.csv
+echo "orphan exception list (names/PFs): /root/orphan-exceptions.csv (600, on-box only)"
 
 # ── ingest provenance: every batch ever committed on this box (counts only) ──
 # Answers "where did these balances come from" definitively — e.g. opening

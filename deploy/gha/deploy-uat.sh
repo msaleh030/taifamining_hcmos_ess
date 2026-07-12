@@ -191,6 +191,16 @@ else
   fi
 fi
 
+# ── housekeeping report (B1/B2, read-only): other VMs + firewall groups ──────
+# Kira suspects VM 1798564 is stale (double billing). REPORT ONLY — deploys
+# stay pinned to UAT_VM_ID; deletion is Kira's panel action.
+say "housekeeping report: other VMs + firewall groups (read-only)"
+for vid in $(hapi GET /vps/v1/virtual-machines | jq -r 'try (.[].id) catch empty' 2>/dev/null); do
+  [ "$vid" = "$VM_ID" ] && continue
+  echo "OTHER VM (not targeted): $(hapi GET "/vps/v1/virtual-machines/$vid" | jq -c '{id, hostname, state, plan, created_at, data_center_id, ipv4: (try ([.ipv4[].address]) catch [])}' 2>/dev/null)"
+done
+echo "firewall groups: $(hapi GET /vps/v1/firewall | jq -c 'try ([.[] | {id, name}]) catch empty' 2>/dev/null)"
+
 # ── 5. Ship source (with enforced dist) + run remote setup ───────────────────
 say "5. ship enforced build + run remote setup"
 # ServerAliveInterval/CountMax makes a stalled connection drop after ~60s
