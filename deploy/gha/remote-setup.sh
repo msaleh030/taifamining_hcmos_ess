@@ -449,6 +449,24 @@ async function login(u) {
 })().catch((e) => { console.error('PROBE ERROR:', e.message); process.exit(1); });
 EOF
 
+# ── post-restart security re-verification (Kira 2026-07-12) ──────────────────
+# Everything "verified live" before the stale-serving fix may have been checked
+# against old code. These probes hit the RUNNING process over HTTP and FAIL the
+# deploy on any regression: rank lattice (R03 -> R12 reset refused), leave
+# cycle-scoping (prior-cycle taken never double-charges), MFA toggle (field
+# visibility AND enforcement from the one key).
+say "post-restart security re-verification (rank lattice / leave cycle / MFA toggle — live process)"
+MFA_SETUP_PHASE=${MFA_SETUP_PHASE:-1} UAT_COMPANY=$UAT_CO hcmos-run node scripts/probe-security.js
+
+# ── stale-serving window: when did the hcmos process (re)start historically? ──
+# `enable --now` never bounced a running service before run 29's fix, so the
+# journal's start/stop history IS the record of what code was actually serving
+# and since when. Timestamps only — nothing sensitive.
+say "hcmos process start/stop history (stale-serving window evidence)"
+journalctl -u hcmos --no-pager -o short-iso 2>/dev/null \
+  | grep -E 'Started|Stopping|Stopped|Deactivated' | tail -20 \
+  || echo "journal history unavailable (rotated?)"
+
 # ── activation summary: every provisioned account logs in on EMAIL+PASSWORD ──
 # During setup MFA is off, so console login is email+password only. Parse the
 # 600-mode matrix, attempt each account, report X of N. Counts only — no
