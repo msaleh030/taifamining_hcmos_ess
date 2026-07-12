@@ -266,6 +266,20 @@ say "payroll master (North Mara L&H — behind the pay gate, maker-checker)"
 # site and every row excepts — fail-closed, self-reporting.
 load_file "Payroll_Master_File_North_Mara.xlsx" "North Mara - L&H and Airstrip Project" payroll payroll-master
 
+# ── User_Accounts_Matrix: READ AND REPORT ONLY (Kira 2026-07-12) ─────────────
+# "READ IT FIRST AND REPORT BEFORE PROVISIONING ANYTHING." This step provisions
+# NOTHING: it reports accounts/roles/sites/surfaces and flags every row that
+# would violate the auth split (console = email+password+MFA, ESS = device+PIN;
+# both surfaces = TWO credentials). Per-row detail (PII) → 600 on-box file.
+say "User_Accounts_Matrix.xlsx — read + report ONLY (no provisioning)"
+if [ -f /root/uat-data/User_Accounts_Matrix.xlsx ]; then
+  UAT_COMPANY=$UAT_CO hcmos-run node scripts/report-user-matrix.js \
+    /root/uat-data/User_Accounts_Matrix.xlsx /root/user-accounts-matrix-report.txt \
+    || echo "matrix report FAILED (non-fatal — nothing was provisioned)"
+else
+  echo "AWAITING: User_Accounts_Matrix.xlsx (drop into /root/uat-data — PII, never the repo)"
+fi
+
 # ── legacy North Mara leave CSV (pre-master path) — kept for compatibility ────
 NM_LEAVE=$(ls /root/uat-data/northmara-leave.csv /root/uat-data/northmara-opening-balance*.csv 2>/dev/null | head -1 || true)
 if [ -n "$NM_LEAVE" ] && [ -f "/root/uat-data/northmara-leave.control.json" ]; then

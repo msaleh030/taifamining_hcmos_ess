@@ -236,4 +236,5 @@ function main() {
     unmapped_columns: unmapped }));
 }
 
-main();
+if (require.main === module) main();
+module.exports = { readSheet, toDate, normHdr };
