@@ -291,6 +291,17 @@ if [ -n "$NM_LEAVE" ] && [ -f "/root/uat-data/northmara-leave.control.json" ]; t
     || echo "LEAVE LOAD FAILED — see the exception report next to the CSV"
 fi
 
+# ── ingest provenance: every batch ever committed on this box (counts only) ──
+# Answers "where did these balances come from" definitively — e.g. opening
+# buckets exist for sites our pipeline never loaded (Kira's on-box loads).
+say "ingest batch history (provenance, counts only)"
+sudo -u postgres psql -d hcmos -c "
+  SELECT kind, status, clean_count, exception_count,
+         to_char(created_at, 'MM-DD HH24:MI') AS created,
+         to_char(committed_at, 'MM-DD HH24:MI') AS committed
+    FROM ingest_batch WHERE company_id='$UAT_CO'
+   ORDER BY created_at" | tail -40
+
 # ── field completeness: what the loads ACTUALLY populated, straight from the DB
 # Counts only (no PII in this log). This is the honest tally the Omid probe's
 # "master-loaded" is checked against — if these are populated and the API shows

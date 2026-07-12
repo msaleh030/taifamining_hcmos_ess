@@ -24,6 +24,7 @@ const MAP = new Map(Object.entries({
   'name': 'name', 'full name': 'name', 'employee name': 'name', 'user name': 'name', 'account name': 'name',
   'first name': 'first_name', 'middle name': 'middle_name', 'surname': 'surname',
   'email': 'email', 'email id': 'email', 'company email': 'email', 'company email id': 'email',
+  'login email': 'email', 'login email id': 'email',
   'login': 'login', 'username': 'login', 'user id': 'login',
   'role': 'role', 'role code': 'role', 'user role': 'role', 'access role': 'role', 'access level': 'role',
   'site': 'site', 'sites': 'site', 'location': 'site', 'project': 'site', 'site scope': 'site',
@@ -94,6 +95,9 @@ async function main() {
     if (role) byRole.set(role || '?', (byRole.get(role) || 0) + 1);
     for (const s of site.split(/[;,/]/).map((x) => x.trim()).filter(Boolean)) {
       bySite.set(s, (bySite.get(s) || 0) + 1);
+      // 'All sites' / 'Unscoped' style values are SCOPE descriptors, not site
+      // names — report them as scope, never as an unknown-site flag.
+      if (/^(all\s*sites?|unscoped|central|company\s*wide|hq)\b/i.test(s)) continue;
       if (!sites.has(s.toUpperCase())) rowFlags.push(`site "${s}" is not one of the canonical six`);
     }
     if (wantsHcm && !email) rowFlags.push('console access requested but NO email (console needs email+password+MFA)');
@@ -125,6 +129,11 @@ async function main() {
   console.log(`by role: ${[...byRole.entries()].sort().map(([k, n]) => `${k}=${n}`).join(' ') || '(no role column resolved)'}`);
   console.log(`by site: ${[...bySite.entries()].sort().map(([k, n]) => `${k}=${n}`).join(' · ') || '(no site column resolved)'}`);
   for (const [k, n] of [...flags.entries()].sort((a, b) => b[1] - a[1])) console.log(`  FLAG ${String(n).padStart(3)}x ${k}`);
+  const distinct = (c) => [...new Set(rows.map((r) => g(r, c)).filter(Boolean))];
+  const unknownRoles = distinct('role').filter((v) => !(v.match(/R\d{2}/i)));
+  if (unknownRoles.length) console.log(`role values needing a mapping ruling: ${unknownRoles.join(' | ')}`);
+  const siteValues = distinct('site');
+  if (siteValues.length) console.log(`site/scope values as written: ${siteValues.join(' | ')}`);
   console.log(`per-row detail (names/emails): ${reportPath} (600, on-box only)`);
   console.log('PROVISIONED: NOTHING — awaiting Kira\'s confirmation of the dual-credential plan.');
   await db.close();

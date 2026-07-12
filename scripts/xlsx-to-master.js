@@ -49,7 +49,7 @@ const MASTER_MAP = {
   'contact no': 'nok_contact',
 };
 const NAME_MAP = { // split or joined names, shared by leave/permits/payroll
-  'payroll no': 'pf', 'payroll number': 'pf', 'pf': 'pf', 'pf no': 'pf',
+  'payroll no': 'pf', 'payroll number': 'pf', 'pf': 'pf', 'pf no': 'pf', 'payroll': 'pf',
   'first name': 'first_name', 'middle name': 'middle_name', 'surname': 'surname',
   'name': 'name', 'full name': 'name', 'employee name': 'name', 'names': 'name',
 };
@@ -69,10 +69,10 @@ const KINDS = {
       'accrued': 'accrued', 'accrued days': 'accrued', 'days accrued': 'accrued', 'leave accrued': 'accrued',
       'leave days accrued': 'accrued', 'earned': 'accrued', 'entitlement earned': 'accrued',
       'taken': 'taken', 'days taken': 'taken', 'leave taken': 'taken', 'leave days taken': 'taken',
-      'used': 'taken', 'utilised': 'taken', 'utilized': 'taken',
+      'leave taken days': 'taken', 'used': 'taken', 'utilised': 'taken', 'utilized': 'taken',
       'balance': 'balance', 'leave balance': 'balance', 'closing balance': 'balance',
       'balance days': 'balance', 'leave days balance': 'balance', 'opening balance': 'balance',
-      'balance c f': 'balance', 'balance cf': 'balance',
+      'current balance': 'balance', 'balance c f': 'balance', 'balance cf': 'balance',
       'year': 'year', 'leave year': 'year' },
     out: ['pf', 'name', 'site', 'accrued', 'taken', 'balance', 'year'],
     dates: [],
@@ -92,6 +92,7 @@ const KINDS = {
   },
   payroll: {
     map: { ...NAME_MAP,
+      'employee id': 'pf', // the payroll summary's id column IS the PF; each row is name-verified at load
       'basic salary': 'basic_salary', 'basic pay': 'basic_salary', 'monthly basic': 'basic_salary',
       'basic': 'basic_salary',
       'gross salary': 'gross_salary', 'gross pay': 'gross_salary', 'gross': 'gross_salary',
