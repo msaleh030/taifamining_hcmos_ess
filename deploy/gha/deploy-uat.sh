@@ -166,6 +166,17 @@ if [ -n "$FW_ID" ]; then
   hapi POST "/vps/v1/firewall/$FW_ID/activate/$VM_ID" >/dev/null \
     && echo "firewall hcmos-uat-fw active on VM (tighten SSH source to RailGrid IPs in the panel)" \
     || echo "WARN: firewall activation call failed — UFW on the box still enforces the same policy"
+  # EVIDENCE for SSH-reachability failures (run 32: timeout minutes after a
+  # panel session rotated the API token): print the group's CURRENT rules —
+  # protocols/ports/sources only, nothing sensitive. A panel edit that drops or
+  # narrows the TCP/22 accept locks the GitHub runner out; diagnose it here
+  # rather than guessing from a bare "connection timed out".
+  RULES="$(hapi GET "/vps/v1/firewall/$FW_ID" | jq -c 'try .rules catch empty')"
+  echo "firewall rules (group $FW_ID): ${RULES:-<unreadable>}"
+  if [ -n "$RULES" ] && ! echo "$RULES" | jq -e '.[] | select((.protocol=="TCP" or .protocol=="any") and (.port=="22" or .port=="any") and .action=="accept")' >/dev/null 2>&1; then
+    echo "WARN: NO TCP/22 accept rule in the active group — SSH from this runner will time out."
+    echo "      Restore an SSH accept rule (or allowlist the runner) in the Hostinger panel; NOT auto-fixed (a tightened rule may be deliberate)."
+  fi
 else
   echo "WARN: API firewall unavailable — UFW on the box still enforces deny-all+SSH"
 fi
