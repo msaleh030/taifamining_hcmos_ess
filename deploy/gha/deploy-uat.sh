@@ -242,7 +242,12 @@ fi
 # fails the deploy with a clear message instead of hanging to the job timeout.
 # Forward the setup-phase toggle into the remote shell ('bash -s' starts a
 # fresh env; runner vars don't cross SSH). Default '1' (setup) if unset.
-timeout 720 ssh "${SSH_OPTS[@]}" "root@$IP" "MFA_SETUP_PHASE='${MFA_SETUP_PHASE:-1}' bash -s" < deploy/gha/remote-setup.sh \
-  || { echo "FATAL: remote-setup did not finish within 12 min (see checkpoints above for where it stalled)."; exit 1; }
+rc=0
+timeout 720 ssh "${SSH_OPTS[@]}" "root@$IP" "MFA_SETUP_PHASE='${MFA_SETUP_PHASE:-1}' bash -s" < deploy/gha/remote-setup.sh || rc=$?
+if [ "$rc" -eq 124 ]; then
+  echo "FATAL: remote-setup did not finish within 12 min (see checkpoints above for where it stalled)."; exit 1
+elif [ "$rc" -ne 0 ]; then
+  echo "FATAL: remote-setup FAILED (exit $rc) — a box checkpoint above failed; this was NOT a timeout."; exit 1
+fi
 say "deploy script finished — see remote checkpoints above"
 echo "box: $IP · credentials file for Kira: /root/uat-credentials.txt (600, on-box only)"

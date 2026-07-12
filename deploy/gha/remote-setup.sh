@@ -520,14 +520,19 @@ const fs = require('fs');
 const C = require('/opt/hcmos/src/crypto');
 const creds = fs.readFileSync('/root/uat-credentials.txt', 'utf8');
 function grab(email) {
-  // LAST occurrence: earlier deploy runs re-seeded and re-provisioned, so the
-  // file can hold stale generations above the current one.
-  const i = creds.lastIndexOf(email);
-  if (i < 0) throw new Error('no creds for ' + email);
-  const chunk = creds.slice(i, i + 600);
-  const password = /password :\s*(\S+)/.exec(chunk)[1];
-  const secret = /TOTP\s+:\s*([A-Z2-7]+)/.exec(chunk)[1];
-  return { email, password, secret };
+  // NEWEST console block wins (earlier deploys re-provisioned, so the file
+  // holds stale generations above the current one) — but the email ALSO
+  // appears in ESS-device blocks now, which carry a PIN, not a password.
+  // Walk back until a chunk with console fields; never read past the next
+  // block marker (a 600-char window could bleed into a NEIGHBOUR's password).
+  for (let i = creds.lastIndexOf(email); i >= 0; i = creds.lastIndexOf(email, i - 1)) {
+    const next = creds.slice(i + 1).search(/=== UAT user provisioned ===|--- ESS DEVICE/);
+    const chunk = creds.slice(i, next < 0 ? i + 600 : Math.min(i + 600, i + 1 + next));
+    const password = /password :\s*(\S+)/.exec(chunk);
+    const secret = /TOTP\s+:\s*([A-Z2-7]+)/.exec(chunk);
+    if (password && secret) return { email, password: password[1], secret: secret[1] };
+  }
+  throw new Error('no console creds for ' + email);
 }
 // Every request is bounded (10s) so a wedged app fails the probe fast rather
 // than hanging the whole deploy on an unresponsive port.
