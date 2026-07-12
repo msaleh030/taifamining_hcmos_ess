@@ -33,6 +33,10 @@ test('/health is public and confirms DB connectivity (deploy liveness probe)', a
   const j = await r.json();
   assert.equal(j.ok, true);
   assert.equal(j.db, true);
+  // The serving-build stamp: in the contract (the deploy's staleness checkpoint
+  // compares it to BUILD_SHA); null in the sandbox where no stamp file exists.
+  assert.ok('build' in j, 'health carries the serving build stamp');
+  assert.equal(j.build, null, 'unstamped in the sandbox');
 });
 
 test('F0 auth: login issues a token; /me/landing returns the A2 module set', async () => {

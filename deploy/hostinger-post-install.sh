@@ -107,6 +107,11 @@ install -m 644 deploy/hcmos-backup.service /etc/systemd/system/hcmos-backup.serv
 install -m 644 deploy/hcmos-backup.timer   /etc/systemd/system/hcmos-backup.timer
 systemctl daemon-reload
 systemctl enable --now hcmos
+# enable --now STARTS a stopped service but does NOT bounce a running one — every
+# redeploy before this restart updated the disk while the old process kept serving
+# the code it booted with (caught live: run 28's directory had no `position`
+# column because the serving process predated it). The restart is the deploy.
+systemctl restart hcmos
 # Enable the nightly backup timer once BACKUP_TARGET is set (rclone remote):
 # systemctl enable --now hcmos-backup.timer
 

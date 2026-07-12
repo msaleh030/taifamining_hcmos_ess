@@ -221,8 +221,19 @@ async function runLoad({ kind: kindIn, csvPath, controlPath, makerEmail, checker
   // Rows that loaded clean but carry anomaly/punch-list warnings (format
   // anomalies, blank punch-list fields, deficits) — surfaced, never blocking.
   const warned = prev.clean.filter((r) => r.warnings && r.warnings.length).length;
+  // KIND histograms with raw values masked (quoted strings and digit runs) —
+  // some texts embed emails/TINs/names, and this summary flows to a CI log.
+  // The full texts stay in the on-box exception report / preview only.
+  const mask = (t) => String(t).replace(/"[^"]*"/g, '"…"').replace(/\d[\d./-]*/g, '#');
+  const histogram = (lists) => {
+    const h = {};
+    for (const items of lists) for (const t of items || []) { const k = mask(t); h[k] = (h[k] || 0) + 1; }
+    return h;
+  };
   const out = { kind, mapping, rows: rows.length, clean: prev.clean_count, warned,
+    warning_kinds: histogram(prev.clean.map((r) => r.warnings)),
     exceptions: prev.exception_count,
+    exception_kinds: histogram(prev.exceptions.map((e) => e.exceptions)),
     control_ok: prev.control.ok, mismatches: prev.control.mismatches, exception_report: excPath };
   if (!commit) return { ...out, mode: 'preview', committed: false };
   if (!prev.control.ok) throw new Error('control totals do not reconcile — refusing to commit (see mismatches in the preview output)');

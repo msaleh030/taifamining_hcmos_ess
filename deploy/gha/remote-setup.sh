@@ -28,6 +28,22 @@ say "post-install (Node LTS, Postgres 16, UFW, scram, systemd)"
 cd "$APP_DIR"
 LOCAL_SRC=1 bash deploy/hostinger-post-install.sh
 
+# ── the RUNNING process serves THIS deploy — never trust "systemd: active" ────
+# `systemctl enable --now` never bounced a running service, so before run 29 the
+# box could pass every checkpoint while SERVING WEEKS-OLD CODE (the disk and DB
+# were current; the process was not). /health now reports the build the process
+# read at startup; a mismatch here is a FAILED deploy, loudly.
+say "running process serves THIS deploy (health.build == BUILD_SHA)"
+WANT=$(cut -c1-12 "$APP_DIR/BUILD_SHA" 2>/dev/null || echo '')
+for _ in $(seq 1 30); do curl -fsS http://127.0.0.1:3000/health >/dev/null 2>&1 && break; sleep 1; done
+GOT=$(curl -fsS http://127.0.0.1:3000/health \
+  | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>console.log(JSON.parse(s).build||"unstamped"))')
+echo "serving build: $GOT · deployed: ${WANT:-unknown} · process started: $(systemctl show hcmos -p ExecMainStartTimestamp --value)"
+if [ -n "$WANT" ] && [ "$GOT" != "$WANT" ]; then
+  echo "FAIL: the RUNNING process does not serve this deploy — the restart did not take effect"
+  exit 1
+fi
+
 # hcmos-run: run any on-box command with the SAME environment the systemd
 # service gets (EnvironmentFile sourced) — a bare shell otherwise misses
 # PG_OWNER_PW and owner-role scripts fail scram auth.
@@ -185,7 +201,7 @@ load_site() { # xlsx-file site-name canonical-count
   printf '[{"site":"%s","count":%s,"allow_shortfall":true}]\n' "$SITE" "$COUNT" > "$CTL"
   UAT_COMPANY=$UAT_CO hcmos-run node scripts/load-ingest.js employee-master "$CSV" "$CTL" \
     omar.omar@taifamining.tz viswa.medhuru@taifamining.tz --commit \
-    | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{const r=JSON.parse(s.slice(s.indexOf("{")));const sf=(r.mismatches&&0)||0;console.log(`  loaded=${r.loaded||0} clean=${r.clean} exceptions=${r.exceptions} flagged=${r.warned} control_ok=${r.control_ok}`);}catch(e){console.log(s);}})' \
+    | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{const r=JSON.parse(s.slice(s.indexOf("{")));console.log(`  loaded=${r.loaded||0} clean=${r.clean} exceptions=${r.exceptions} flagged=${r.warned} control_ok=${r.control_ok}`);for(const[k,n]of Object.entries(r.exception_kinds||{}))console.log(`    EXC ${String(n).padStart(4)}x ${k}`);for(const[k,n]of Object.entries(r.warning_kinds||{}))console.log(`    warn ${String(n).padStart(4)}x ${k}`);}catch(e){console.log(s);}})' \
     || echo "  LOAD FAILED for $SITE — see ${CSV}.exceptions.json on the box"
 }
 load_site "Employee_Master_File_HO.xlsx"              "Head Office"                            50
@@ -194,6 +210,26 @@ load_site "Employee_Master_File_North_Mara.xlsx"      "North Mara - L&H and Airs
 load_site "North_Mara_TSF_Employee_Masterfile.xlsx"   "North Mara - TSF Lift 10 Project"       94
 load_site "Employee_Master_File_Nyanzaga.xlsx"        "Nyanzaga - Sotta Mining Project"       282
 load_site "Master_File_Dar_Yard.xlsx"                 "Dar Yard"                               71
+
+# ── field completeness: what the master ACTUALLY populated, straight from the DB
+# Counts only (no PII in this log). This is the honest tally the Omid probe's
+# "master-loaded" is checked against — if these are populated and the API shows
+# zero, the SERVING code is stale, not the data.
+say "master field completeness (per-site DB counts, no PII)"
+sudo -u postgres psql -d hcmos -c "
+  SELECT s.name                 AS site,
+         count(e.id)            AS employees,
+         count(e.position)      AS with_position,
+         count(e.email)         AS with_email,
+         count(e.joined_at)     AS with_join_date,
+         count(e.manager_id)    AS with_manager,
+         count(p.employee_id)   AS with_pay_row,
+         count(p.national_id)   AS with_national_id
+    FROM employee e
+    JOIN site s ON s.id = e.site_id
+    LEFT JOIN employee_pay p ON p.employee_id = e.id
+   WHERE e.company_id='$UAT_CO'
+   GROUP BY s.name ORDER BY s.name"
 
 # ── re-attach leave: opening balances now MATCH the master by PF ───────────────
 # Once the master is loaded, an opening-balance load ATTACHES each balance to the

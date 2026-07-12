@@ -36,6 +36,9 @@ const WEB_DIR = path.join(__dirname, '..', 'web');
 // /legacy (kept as the functional preview until every screen is baseline-
 // accepted); without a build, behaviour is unchanged (scaffold at root).
 const DIST_DIR = path.join(__dirname, '..', 'frontend', 'dist');
+// The code version this PROCESS is serving (see the /health route note).
+let BUILD = null;
+try { BUILD = fs.readFileSync(path.join(__dirname, '..', 'BUILD_SHA'), 'utf8').trim().slice(0, 12) || null; } catch { /* unstamped */ }
 
 function readJson(req) {
   return new Promise((resolve, reject) => {
@@ -62,9 +65,13 @@ function bearer(req) {
 // ── Declarative routes. auth defaults true; module/action are optional guards. ──
 const routes = [
   // Liveness/readiness for systemd, the smoke test and edge monitoring. Public,
-  // returns NO data beyond ok/db — safe to expose.
+  // returns NO data beyond ok/db/build — safe to expose. `build` is read ONCE at
+  // process start (BUILD_SHA is stamped into the deploy tarball), so it reports
+  // the code the RUNNING process serves — a redeploy that updated the disk but
+  // not the process shows the stale value here, which is exactly the signal the
+  // deploy's staleness checkpoint needs. Absent stamp (sandbox/dev) → null.
   { method: 'GET', pattern: /^\/health$/, auth: false,
-    handler: async () => { await db.query('SELECT 1'); return { status: 200, body: { ok: true, db: true } }; } },
+    handler: async () => { await db.query('SELECT 1'); return { status: 200, body: { ok: true, db: true, build: BUILD } }; } },
 
   // Public login config — the login UI reads it to show/hide the MFA field.
   // Same key that gates enforcement, so field + enforcement never disagree.
