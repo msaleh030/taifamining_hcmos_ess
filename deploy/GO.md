@@ -148,6 +148,23 @@ Airstrip Project or Dar Yard. Controls for this wave are DERIVED from the
 converted file (`scripts/derive-control.js`) because no independent totals
 were supplied — that catches conversion/load drift, NOT source truth.
 
+### 7a-iii. Scope rulings (Kira 2026-07-12, second)
+- **CENTRAL roles** (see all sites): R04, R06, R07, R11, R12, R14, R15, R16 —
+  enforced in the `site_scope` table by migrations 029/031 (upsert, durable),
+  verified by a deploy checkpoint. Site-bound tier stays R01/R02/R03/R05/R13.
+- **Every R03 carries an EXPLICIT multi-site set** (`user_site_scope` rows):
+  singletons are made explicit at deploy; Advera Speratus holds BOTH North
+  Mara projects. Fail-closed: an R03 whose set resolves empty sees nothing.
+- **Expatriate CRUD is STRICTLY the Head of HR** (`expat.crud.roles` = R11):
+  non-R11 can neither raise nor decide a field change on an `is_expat`
+  employee, and an expat's permit documents are R11-only in the document
+  list (DA-2's R11-only leg extended). R11 joined the maker tier for this
+  (migration 031 amends existing tenant config). SoD holds inside the tier —
+  approving an expat change needs a SECOND Head-of-HR-tier account; with the
+  single R11 (Omid) an expat change stays pending until one exists (or Kira
+  rules an alternate checker). Bulk ingest (R15/R16, control-totalled) is the
+  one sanctioned load path and is unchanged. Live probe fails the deploy.
+
 ### 7b. Opening balances — now ATTACH to the master by PF
 Drop the **opening balances + permit files** (CSV) on the box, prepare a
 `control.json` with the EXPECTED totals **from the source document** (independent

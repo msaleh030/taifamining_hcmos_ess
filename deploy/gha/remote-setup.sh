@@ -167,6 +167,32 @@ echo "SUPER ADMINS (interactive, hidden password — Kira runs on this box):"
 echo "  UAT_COMPANY=$UAT_CO hcmos-run node scripts/provision-super-admin.js mohammed@railgrid.tz"
 echo "  UAT_COMPANY=$UAT_CO hcmos-run node scripts/provision-super-admin.js admin@taifamining.tz"
 
+# ── SCOPE RULINGS (Kira 2026-07-12, second): every R03 carries an EXPLICIT
+# user_site_scope SET (a fallback-to-employee-site R03 becomes an explicit
+# singleton; Advera's two-site NM set is already rows); the management tier
+# (R04/R07/R12/R14/R15/R16 — plus R06/R11 from earlier rulings) is CENTRAL,
+# enforced by migration 031 in the site_scope table, verified here.
+say "R03 explicit multi-site sets + central-role verification (Kira ruling)"
+sudo -u postgres psql -d hcmos -c "
+  INSERT INTO user_site_scope(company_id, user_id, site_id)
+  SELECT u.company_id, u.id, e.site_id
+    FROM app_user u JOIN employee e ON e.id = u.employee_id
+   WHERE u.company_id='$UAT_CO' AND u.role_code='R03' AND e.site_id IS NOT NULL
+     AND NOT EXISTS (SELECT 1 FROM user_site_scope s WHERE s.user_id = u.id);"
+sudo -u postgres psql -d hcmos -c "
+  SELECT u.email, array_agg(st.name ORDER BY st.name) AS explicit_site_set
+    FROM app_user u
+    JOIN user_site_scope s ON s.user_id = u.id
+    JOIN site st ON st.id = s.site_id
+   WHERE u.company_id='$UAT_CO' AND u.role_code='R03'
+   GROUP BY u.email ORDER BY u.email;"
+echo "central vs site-bound (site_scope config after migration 031):"
+sudo -u postgres psql -d hcmos -c "
+  SELECT role_code, CASE WHEN scoped THEN 'SITE-BOUND' ELSE 'CENTRAL (all sites)' END AS scope
+    FROM site_scope
+   WHERE role_code IN ('R01','R02','R03','R04','R06','R07','R11','R12','R14','R15','R16')
+   ORDER BY role_code;"
+
 # ── CANONICAL SIX-SITE MODEL (Kira 2026-07-12) ────────────────────────────────
 # North Mara is TWO sites (L&H/Airstrip + TSF Lift 10) with independent HR
 # scoping; Nyanzaga carries its project name; Dar Yard is new. Legacy names are
@@ -577,6 +603,55 @@ EOF
 # visibility AND enforcement from the one key).
 say "post-restart security re-verification (rank lattice / leave cycle / MFA toggle — live process)"
 MFA_SETUP_PHASE=${MFA_SETUP_PHASE:-1} UAT_COMPANY=$UAT_CO hcmos-run node scripts/probe-security.js
+
+# ── expat CRUD gate (Kira 2026-07-12): only the Head of HR mutates expats ────
+# Live probe against the running process: a CENTRAL non-R11 maker (R04) must be
+# refused a field change on an is_expat employee; R11 must get a pending change
+# (declined immediately — the probe leaves no residue). FAILS the deploy.
+say "expat CRUD gate probe: non-R11 refused, R11 allowed (live process)"
+EXPAT_ID=$(sudo -u postgres psql -d hcmos -Atc \
+  "SELECT id FROM employee WHERE company_id='$UAT_CO' AND is_expat=true LIMIT 1")
+if [ -z "$EXPAT_ID" ]; then
+  echo "SKIP: no is_expat employee on the box (classification matched none) — gate stays pinned by the local suite"
+else
+  EXPAT_ID="$EXPAT_ID" node - <<'EOF'
+const fs = require('fs');
+const creds = fs.readFileSync('/root/uat-credentials.txt', 'utf8');
+const re = /email\s*:\s*(\S+)[\s\S]*?password\s*:\s*(\S+)/g;
+const latest = new Map(); let m;
+while ((m = re.exec(creds))) latest.set(m[1], m[2]);
+const T = () => AbortSignal.timeout(10000);
+async function login(email) {
+  const r = await fetch('http://127.0.0.1:3000/auth/console', {
+    method: 'POST', headers: { 'content-type': 'application/json' }, signal: T(),
+    body: JSON.stringify({ email, password: latest.get(email) }) }); // MFA off (setup)
+  if (r.status !== 200) throw new Error(`login ${email}: ${r.status}`);
+  return (await r.json()).token;
+}
+const change = (tok, body) => fetch(`http://127.0.0.1:3000/employees/${process.env.EXPAT_ID}/change`, {
+  method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${tok}` },
+  signal: T(), body: JSON.stringify(body) });
+(async () => {
+  const r04 = await login('baraka.nsemwa@taifamining.tz');   // central HR Manager — a maker role
+  const r11 = await login('omid.karambeck@taifamining.tz');  // Head of HR
+  const refused = await change(r04, { field: 'phone', value: '0700000000' });
+  const refusedBody = await refused.json();
+  const allowed = await change(r11, { field: 'phone', value: '0700000000' });
+  const allowedBody = await allowed.json();
+  let cleanup = 'no pending change to clean';
+  if (allowed.status === 200 && allowedBody.id) {
+    const d = await fetch(`http://127.0.0.1:3000/field-change/${allowedBody.id}/decline`, {
+      method: 'POST', headers: { authorization: `Bearer ${r11}` }, signal: T() });
+    cleanup = `pending change declined (${d.status})`;
+  }
+  const pass = refused.status === 403 && /Head of HR/.test(refusedBody.error || '') && allowed.status === 200;
+  console.log(`R04 change on expat: ${refused.status} (want 403) — "${refusedBody.error || ''}"`);
+  console.log(`R11 change on expat: ${allowed.status} (want 200, pending) — ${cleanup}`);
+  console.log(pass ? 'EXPAT CRUD GATE PROBE PASS' : 'EXPAT CRUD GATE PROBE FAIL');
+  process.exit(pass ? 0 : 1);
+})().catch((e) => { console.error('PROBE ERROR:', e.message); process.exit(1); });
+EOF
+fi
 
 # ── stale-serving window: when did the hcmos process (re)start historically? ──
 # `enable --now` never bounced a running service before run 29's fix, so the

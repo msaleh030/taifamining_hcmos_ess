@@ -127,10 +127,20 @@ async function get(session, id) {
 }
 
 // Resolve permitted makers/checkers for a field (field-specific, else generic).
+// Expatriate CRUD gate (Kira 2026-07-12): STRICTLY the Head of HR. Applied to
+// BOTH sides of maker-checker — a non-R11 may neither raise nor decide a change
+// on an is_expat employee. Config-driven ('expat.crud.roles'), fail-closed.
+async function assertExpatCrud(client, session, isExpat) {
+  if (!isExpat) return;
+  const allowed = await cfg.getRoleSet(session.company_id, 'expat.crud.roles', 'R11', client);
+  if (!allowed.has(session.role_code))
+    throw new HttpError(403, 'expatriate records are managed by the Head of HR only');
+}
+
 async function rolesFor(companyId, kind, field) {
   let s = await cfg.getRoleSet(companyId, `field_change.${kind}.${field}`, '');
   if (s.size === 0) s = await cfg.getRoleSet(companyId, `field_change.${kind}`,
-    kind === 'makers' ? 'R02,R03,R04' : 'R03,R04,R11');
+    kind === 'makers' ? 'R02,R03,R04,R11' : 'R03,R04,R11');
   return s;
 }
 
@@ -144,13 +154,14 @@ async function submitChange(session, id, body) {
   if (!makers.has(session.role_code)) throw new HttpError(403, 'forbidden');
 
   return db.withTenant(session.company_id, async (client) => {
-    const r = await client.query(`SELECT id, site_id, "${field}" AS current FROM employee WHERE id=$1`, [id]);
+    const r = await client.query(`SELECT id, site_id, is_expat, "${field}" AS current FROM employee WHERE id=$1`, [id]);
     const emp = r.rows[0];
     if (!emp) throw new HttpError(404, 'not found');
     if (await isScoped(client, session.role_code)) {
       const mySites = await requesterSites(client, session);
       if (!mySites.length || !mySites.includes(emp.site_id)) throw new HttpError(404, 'not found');
     }
+    await assertExpatCrud(client, session, emp.is_expat);
 
     const maker = await actorEmail(client, session);
     if (!maker) throw new HttpError(403, 'forbidden');
@@ -196,6 +207,8 @@ async function decide(session, changeId, approve) {
     if (!fc) throw new HttpError(404, 'not found');
     if (fc.status !== 'pending') throw new HttpError(409, 'already decided');
     if (!EDITABLE_FIELDS.has(fc.field)) throw new HttpError(400, 'field not editable');
+    const subj = await client.query('SELECT is_expat FROM employee WHERE id=$1', [fc.employee_id]);
+    await assertExpatCrud(client, session, subj.rows[0] && subj.rows[0].is_expat);
 
     const checkers = await rolesFor(session.company_id, 'checkers', fc.field);
     if (!checkers.has(session.role_code)) throw new HttpError(403, 'forbidden');
@@ -233,20 +246,31 @@ async function documents(session, id) {
   if (await directoryDenied(session.company_id, session.role_code)) throw new HttpError(403, 'forbidden');
 
   return db.withTenant(session.company_id, async (client) => {
-    const r = await client.query('SELECT id, site_id FROM employee WHERE id=$1', [id]);
+    const r = await client.query('SELECT id, site_id, is_expat FROM employee WHERE id=$1', [id]);
     const emp = r.rows[0];
     if (!emp) throw new HttpError(404, 'not found');
     if (await isScoped(client, session.role_code)) {
       const mySites = await requesterSites(client, session);
       if (!mySites.length || !mySites.includes(emp.site_id)) throw new HttpError(404, 'not found');
     }
-    const medSet = await cfg.getRoleSet(session.company_id, 'a3.medical.roles', 'R03,R06');
+    const medSet = await cfg.getRoleSet(session.company_id, 'a3.medical.roles', 'R03,R06', client);
     const canMedical = medSet.has(session.role_code);
-    const sql = canMedical
-      ? `SELECT id, kind, name, valid_until, uri FROM employee_document WHERE employee_id=$1 ORDER BY kind, name`
-      : `SELECT id, kind, name, valid_until, uri FROM employee_document
-          WHERE employee_id=$1 AND kind NOT IN ('medical','permit') ORDER BY kind, name`;
-    const docs = await client.query(sql, [id]);
+    const hidden = [];
+    if (!canMedical) hidden.push('medical');
+    if (emp.is_expat) {
+      // Kira 2026-07-12: an EXPATRIATE's permits are Head-of-HR-only — the
+      // DA-2 R11-only alert leg extended to the document list itself. The
+      // expat set REPLACES the medical set for permits here (R03/R06 lose
+      // them, R11 gains them). A local's permits stay with the A3 set.
+      const expatSet = await cfg.getRoleSet(session.company_id, 'expat.crud.roles', 'R11', client);
+      if (!expatSet.has(session.role_code)) hidden.push('permit');
+    } else if (!canMedical) hidden.push('permit');
+    const docs = await client.query(
+      hidden.length
+        ? `SELECT id, kind, name, valid_until, uri FROM employee_document
+            WHERE employee_id=$1 AND kind NOT IN (${hidden.map((_, i) => `$${i + 2}`).join(',')}) ORDER BY kind, name`
+        : `SELECT id, kind, name, valid_until, uri FROM employee_document WHERE employee_id=$1 ORDER BY kind, name`,
+      [id, ...hidden]);
     return { documents: docs.rows };
   });
 }

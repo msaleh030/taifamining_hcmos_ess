@@ -76,9 +76,11 @@ const DEFAULT_CONFIG = {
 
   // Maker-checker: who may propose / approve a change, per editable field.
   // Generic fallback applies when a field-specific key is absent.
-  'field_change.makers':         'R02,R03,R04',
+  // R11 is a maker since the expat ruling (Kira 2026-07-12): only the Head of
+  // HR may CRUD an is_expat employee, so R11 must be able to RAISE changes.
+  'field_change.makers':         'R02,R03,R04,R11',
   'field_change.checkers':       'R03,R04,R11',
-  'field_change.makers.phone':   'R02,R03,R04',
+  'field_change.makers.phone':   'R02,R03,R04,R11',
   'field_change.checkers.phone': 'R03,R04,R11',
 
   // Directory paging — server-side bound; first page must not full-table scan.
@@ -218,6 +220,13 @@ const DEFAULT_CONFIG = {
   'doc.notify.role.permit.business': 'R06', // business permits — SHEQ Manager (unchanged leg)
   'doc.notify.role.licence':         'R06', // business licences — SHEQ Manager (unchanged leg)
   'doc.notify.role.medical':         'R03', // HR Officer — SITE-MATCHED to the employee (Kira, 2026-07-06)
+  // Expatriate record CRUD (Kira, 2026-07-12): STRICTLY the Head of HR. Any
+  // application mutation of an is_expat employee — maker submit AND checker
+  // decision — requires a role in this set, and their permit documents are
+  // visible only to it (the DA-2 R11-only leg extended to the document list).
+  // The bulk ingest pipeline (R15 maker / R16 checker, control-totalled) is
+  // the ONE sanctioned load path and is not an interactive CRUD surface.
+  'expat.crud.roles':                'R11',
   // Support ticket channels (ES-5).
   'support.channels':         'in_app,email',
   // ── F7 guards (Slice 9 modules exposed over HTTP). All four are APPLIED,
