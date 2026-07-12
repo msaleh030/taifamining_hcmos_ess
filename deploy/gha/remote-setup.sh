@@ -271,13 +271,15 @@ load_file "Payroll_Master_File_North_Mara.xlsx" "North Mara - L&H and Airstrip P
 # NOTHING: it reports accounts/roles/sites/surfaces and flags every row that
 # would violate the auth split (console = email+password+MFA, ESS = device+PIN;
 # both surfaces = TWO credentials). Per-row detail (PII) → 600 on-box file.
-say "User_Accounts_Matrix.xlsx — read + report ONLY (no provisioning)"
-if [ -f /root/uat-data/User_Accounts_Matrix.xlsx ]; then
+say "user accounts matrix — audit + scope mapping, read + report ONLY (no provisioning)"
+UAM=$(ls /root/uat-data/Taifa_User_Accounts.xlsx /root/uat-data/User_Accounts_Matrix.xlsx 2>/dev/null | head -1 || true)
+if [ -n "$UAM" ]; then
+  echo "matrix file: $UAM (newest of Taifa_User_Accounts / User_Accounts_Matrix)"
   UAT_COMPANY=$UAT_CO hcmos-run node scripts/report-user-matrix.js \
-    /root/uat-data/User_Accounts_Matrix.xlsx /root/user-accounts-matrix-report.txt \
+    "$UAM" /root/user-accounts-matrix-report.txt \
     || echo "matrix report FAILED (non-fatal — nothing was provisioned)"
 else
-  echo "AWAITING: User_Accounts_Matrix.xlsx (drop into /root/uat-data — PII, never the repo)"
+  echo "AWAITING: Taifa_User_Accounts.xlsx (drop into /root/uat-data — PII, never the repo)"
 fi
 
 # ── legacy North Mara leave CSV (pre-master path) — kept for compatibility ────

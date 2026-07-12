@@ -17,6 +17,22 @@ const db = require('../src/db');
 const { readSheet, normHdr } = require('./xlsx-to-master');
 
 const KNOWN_ROLES = new Set(['R01','R02','R03','R04','R05','R06','R07','R08','R09','R10','R11','R12','R13','R14','R15','R16']);
+// Role NAMES as Taifa writes them -> role codes (the deployed role model:
+// R03 HR Officer, R04 HR Manager, R06 SHEQ Manager, R07 Payroll, R11 Head of
+// HR, R12 System Administrator, R14 CEO/Executive read-only, R15 Finance
+// Manager maker, R16 CFC checker). 'Super Admin' is NOT a matrix-provisionable
+// role — it is Kira's interactive on-box step (hidden password) — flagged.
+const ROLE_NAMES = new Map(Object.entries({
+  'hr officer': 'R03', 'hr manager': 'R04', 'head of hr': 'R11',
+  'sheq manager': 'R06', 'sheq': 'R06',
+  'payroll officer': 'R07', 'payroll': 'R07',
+  'finance manager': 'R15', 'finance manager maker': 'R15',
+  'chief financial controller': 'R16', 'chief financial controller checker': 'R16', 'cfc': 'R16',
+  'system administrator': 'R12', 'system admin': 'R12',
+  'ceo': 'R14', 'ceo executive': 'R14', 'ceo executive read only': 'R14', 'executive': 'R14',
+  'supervisor': 'R02', 'employee': 'R01',
+}));
+const normRole = (v) => String(v || '').toLowerCase().replace(/\([^)]*\)/g, ' ').replace(/[^a-z0-9]+/g, ' ').trim();
 // Column variants → canonical. Credential-VALUE columns are recognised so we
 // can WARN that plaintext credentials are present in a spreadsheet (they will
 // not be echoed anywhere) — never to load them.
@@ -67,8 +83,10 @@ async function main() {
   const truthy = (v) => /^(y|yes|true|x|1|✓)$/i.test(String(v).trim());
   const sites = await db.withOwner(async (c) =>
     new Set((await c.query('SELECT name FROM site WHERE company_id=$1', [company])).rows.map((r) => r.name.toUpperCase())));
-  const existing = await db.withOwner(async (c) =>
-    new Set((await c.query('SELECT lower(email) e FROM app_user WHERE company_id=$1', [company])).rows.map((r) => r.e)));
+  const existingRows = await db.withOwner(async (c) =>
+    (await c.query('SELECT lower(email) e, role_code FROM app_user WHERE company_id=$1', [company])).rows);
+  const existing = new Set(existingRows.map((r) => r.e));
+  const existingRole = new Map(existingRows.map((r) => [r.e, r.role_code]));
 
   const rows = grid.slice(hi + 1).filter((r) => r.some((x) => String(x).trim() !== ''));
   const byRole = new Map(), bySite = new Map();
@@ -81,7 +99,8 @@ async function main() {
     const name = g(r, 'name') || [g(r, 'first_name'), g(r, 'middle_name'), g(r, 'surname')].filter(Boolean).join(' ');
     const email = g(r, 'email').toLowerCase();
     const roleRaw = g(r, 'role');
-    const role = (roleRaw.match(/R\d{2}/i) || [''])[0].toUpperCase();
+    const role = ((roleRaw.match(/R\d{2}/i) || [])[0] || ROLE_NAMES.get(normRole(roleRaw)) || '').toUpperCase();
+    const superAdmin = /super\s*admin/i.test(roleRaw);
     const site = g(r, 'site');
     const surface = g(r, 'surface').toLowerCase();
     const wantsHcm = truthy(g(r, 'hcm_flag')) || /hcm|console|both|all/.test(surface);
@@ -89,10 +108,18 @@ async function main() {
     const rowFlags = [];
 
     if (email) withEmail++;
-    if (email && existing.has(email)) { alreadyProvisioned++; rowFlags.push('already provisioned (console account exists)'); }
-    if (roleRaw && !role) rowFlags.push(`unrecognised role "${roleRaw}"`);
+    if (email && existing.has(email)) {
+      alreadyProvisioned++;
+      const have = existingRole.get(email);
+      rowFlags.push(role && have && have !== role
+        ? `ROLE MISMATCH: account exists as ${have} but the matrix says ${role} — Kira ruling needed`
+        : 'already provisioned (console account exists, role matches)');
+    }
+    if (superAdmin) rowFlags.push('SUPER ADMIN: not matrix-provisioned — Kira\'s interactive on-box step (hidden password)');
+    else if (roleRaw && !role) rowFlags.push(`unrecognised role "${roleRaw}"`);
     if (role && !KNOWN_ROLES.has(role)) rowFlags.push(`unknown role code ${role}`);
-    if (role) byRole.set(role || '?', (byRole.get(role) || 0) + 1);
+    if (role) byRole.set(role, (byRole.get(role) || 0) + 1);
+    else if (superAdmin) byRole.set('SUPER', (byRole.get('SUPER') || 0) + 1);
     for (const s of site.split(/[;,/]/).map((x) => x.trim()).filter(Boolean)) {
       bySite.set(s, (bySite.get(s) || 0) + 1);
       // 'All sites' / 'Unscoped' style values are SCOPE descriptors, not site
@@ -100,6 +127,16 @@ async function main() {
       if (/^(all\s*sites?|unscoped|central|company\s*wide|hq)\b/i.test(s)) continue;
       if (!sites.has(s.toUpperCase())) rowFlags.push(`site "${s}" is not one of the canonical six`);
     }
+    // SCOPE MAPPING: 'All sites'/'Unscoped' -> central (valid only for central
+    // roles); named canonical sites -> user_site_scope rows; 'one site
+    // (confirm)' -> the site is UNNAMED, blocked until named.
+    const CENTRAL = new Set(['R07', 'R11', 'R12', 'R14', 'R15', 'R16']);
+    const scopeCentral = /^(all\s*sites?|unscoped|central|company\s*wide)\b/i.test(site);
+    const scopeUnnamed = /confirm|tbc|tbd/i.test(site) || (!site && !scopeCentral);
+    if (scopeCentral && role && !CENTRAL.has(role))
+      rowFlags.push(`SCOPE MISMATCH: "${site}" (central) on site-bound role ${role} — a site-bound role with org-wide scope breaks the site gate; Kira ruling needed`);
+    if (scopeUnnamed && role && !CENTRAL.has(role))
+      rowFlags.push('scope not named ("one site (confirm)"/blank) — provisioning blocked until the site is named');
     if (wantsHcm && !email) rowFlags.push('console access requested but NO email (console needs email+password+MFA)');
     // AUTH-SPLIT VIOLATIONS — the constraint that does not change:
     if (cols.has('pin_value') && g(r, 'pin_value') && wantsHcm && !wantsEss)
