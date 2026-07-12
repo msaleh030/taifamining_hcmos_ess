@@ -67,7 +67,11 @@ const sameName = (a, b) => norm(a).toLowerCase().replace(/\s+/g, ' ') === norm(b
 // ── Opening-balance validation ──────────────────────────────────────────────
 function validateOpening(raw, ctx) {
   const pf = norm(raw.pf), name = norm(raw.name), site = norm(raw.site);
-  const accrued = num(raw.accrued), taken = num(raw.taken), balance = num(raw.balance);
+  // A BLANK amount is ABSENT, not zero: num('') would read 0 and a file with
+  // no accrued column would fail balance != accrued - taken on EVERY row
+  // (Nyanzaga leave, run 36). The consistency check runs only on real numbers.
+  const amt = (v) => (norm(v) === '' ? NaN : num(v));
+  const accrued = amt(raw.accrued), taken = amt(raw.taken), balance = amt(raw.balance);
   const year = Number.isFinite(num(raw.year)) ? num(raw.year) : ctx.openingYear;
   const site_id = ctx.sites.get(site.toUpperCase()) || null;
   const exceptions = [], warnings = [];

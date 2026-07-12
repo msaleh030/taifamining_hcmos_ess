@@ -196,6 +196,16 @@ function main() {
     if (canon && !colMap.has(canon)) colMap.set(canon, i);
     else if (String(h).trim() && !canon) unmapped.push(String(h).trim());
   });
+  // TWO-TIER headers (the payroll tabular summary): a leaf label on the row
+  // ABOVE the detected header row claims columns the header row leaves blank.
+  // Gap-filling only — a mapping from the detected row is never overridden.
+  if (hi > 0) {
+    const claimed = new Set(colMap.values());
+    grid[hi - 1].forEach((h, i) => {
+      const canon = MAP.get(normHdr(h));
+      if (canon && !colMap.has(canon) && !claimed.has(i) && !String(grid[hi][i] || '').trim()) colMap.set(canon, i);
+    });
+  }
 
   const joinName = !colMap.has('name') && OUT_COLS.includes('name');
   const records = [];
@@ -232,9 +242,18 @@ function main() {
     .concat(records.map((r) => OUT_COLS.map((c) => q(String(r[c] ?? ''))).join(',')))
     .join('\n') + '\n';
   fs.writeFileSync(outPath, csv, { mode: 0o600 });
+  // Fill rates (% of records with a value per mapped column) — the honest
+  // signal for a mapping that matched a header but not the DATA (run 36's
+  // payroll: BASIC SALARY mapped, 0% filled — a two-tier-header artefact).
+  const fill = {};
+  for (const c of OUT_COLS) {
+    if (c === 'site') continue;
+    const n = records.filter((r) => String(r[c] ?? '').trim() !== '').length;
+    fill[c] = records.length ? Math.round((n * 100) / records.length) : 0;
+  }
   console.log(JSON.stringify({ kind: kindName, site, header_row: hi + 1, records: records.length,
     ...(kindName === 'master' ? { emails_blanked_shared_or_invalid: blanked } : {}),
-    unmapped_columns: unmapped }));
+    fill_pct: fill, unmapped_columns: unmapped }));
 }
 
 if (require.main === module) main();

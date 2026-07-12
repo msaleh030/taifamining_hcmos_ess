@@ -260,11 +260,16 @@ if [ -f "/root/uat-data/Expat_Permits_Master_File.permits.csv" ]; then
     || echo "classification FAILED (non-fatal; permits themselves are loaded)"
 fi
 
-say "payroll master (North Mara L&H — behind the pay gate, maker-checker)"
-# File naming matches the employee master ('North_Mara' = the L&H and Airstrip
-# Project). If that assumption is wrong the PFs will not match employees at the
-# site and every row excepts — fail-closed, self-reporting.
+say "payroll master (North Mara — BOTH projects; behind the pay gate, maker-checker)"
+# The June summary covers the whole North Mara complex (run 36: 110 of 285
+# rows had no PF at L&H — the TSF people). Convert + load once per project
+# site: each row's identity check (PF at site + name) decides which pass it
+# belongs to; the other pass reports it as an exception, never a wrong write.
 load_file "Payroll_Master_File_North_Mara.xlsx" "North Mara - L&H and Airstrip Project" payroll payroll-master
+if [ -f /root/uat-data/Payroll_Master_File_North_Mara.xlsx ]; then
+  cp -f /root/uat-data/Payroll_Master_File_North_Mara.xlsx /root/uat-data/Payroll_NM_TSF_pass.xlsx
+  load_file "Payroll_NM_TSF_pass.xlsx" "North Mara - TSF Lift 10 Project" payroll payroll-master
+fi
 
 # ── User_Accounts_Matrix: READ AND REPORT ONLY (Kira 2026-07-12) ─────────────
 # "READ IT FIRST AND REPORT BEFORE PROVISIONING ANYTHING." This step provisions
