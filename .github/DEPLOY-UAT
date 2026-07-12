@@ -37,3 +37,4 @@ run: token rotated — full re-fire: rulings + second wave + post-restart securi
 run: RETRY with firewall-rule evidence — run 32 SSH timed out right after the panel session (token rotation + new VM 1798564) 2026-07-12T17:40:48Z
 run: second-wave retry with real-header mappings + matrix re-read + provenance 2026-07-12T17:49:58Z
 run: run-34 fixes — idempotent flagged-dup re-run, no fabricated cross-site persons, control-mismatch detail 2026-07-12T17:58:57Z
+run: firewall no-churn fix + Taifa_User_Accounts audit + run-34 ingest fixes 2026-07-12T18:14:14Z
