@@ -197,7 +197,14 @@ say "5. ship enforced build + run remote setup"
 # instead of hanging the whole job on a dead box.
 SSH_OPTS=(-i ~/.ssh/uat_deploy -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15 \
           -o ServerAliveInterval=15 -o ServerAliveCountMax=4)
-for i in $(seq 1 30); do ssh "${SSH_OPTS[@]}" "root@$IP" true 2>/dev/null && break; sleep 10; done
+# Port-22 reachability FLAPS in ~10-15 min windows (runs 32/35/39: timeouts
+# with rules constant and no group churn — Hostinger edge behaviour, not
+# config). Ride the window out: ~25 min of patience instead of dying at 13.
+for i in $(seq 1 55); do
+  ssh "${SSH_OPTS[@]}" "root@$IP" true 2>/dev/null && break
+  [ $((i % 6)) -eq 0 ] && echo "  ...ssh not reachable yet (attempt $i, ~$((i * 25 / 60)) min)"
+  sleep 10
+done
 ssh "${SSH_OPTS[@]}" "root@$IP" true || {
   echo "FATAL: SSH as root failed. If the VM predates this deploy, authorise the deploy key:"
   echo "  $PUBKEY"
