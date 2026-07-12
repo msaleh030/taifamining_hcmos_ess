@@ -76,3 +76,39 @@ test('C17 registers inherit the C16 pay-gate server-side; catalogue hides financ
     await owner(`DELETE FROM exact_batch WHERE id=$1`, [setup.batchId]);
   }
 });
+
+// ── Organogram (Kira ruling 2026-07-12): positional BY DESIGN — job titles,
+// not person links — with the limitation stated in the output itself. Site-
+// scoped through the shared gate; directory-tier data only. ──────────────────
+test('organogram is positional (title-based), states its limitation, and site-scopes a bound viewer', async () => {
+  // Titled employees at TWO sites (the seed carries no positions).
+  const mk = (name, site, pos, rt) => owner(
+    `INSERT INTO employee(company_id, site_id, full_name, role_code, status, position, reports_to_title)
+     VALUES ($1,$2,$3,'R01','active',$4,$5) RETURNING id`, [A, site, name, pos, rt]);
+  const e1 = (await mk('Zz Org One', F.SITE.A1, 'Zz Operator', 'Zz Site Manager')).rows[0].id;
+  const e2 = (await mk('Zz Org Two', F.SITE.A1, 'Zz Site Manager', null)).rows[0].id;
+  const e3 = (await mk('Zz Org Three', F.SITE.HO, 'Zz Accountant', 'Zz CFO')).rows[0].id;
+  try {
+    // Central role with the reports module (R11) sees every site's chart.
+    const central = await H.req('GET', '/reports/organogram', { token: await tok(F.USERS.DIRECTOR_A) });
+    assert.equal(central.status, 200);
+    assert.equal(central.body.basis, 'position-hierarchy');
+    assert.ok(/cannot say WHICH/.test(central.body.limitation), 'the positional limitation is stated in the output');
+    const allRows = Object.values(central.body.sites).flat();
+    assert.ok(Object.keys(central.body.sites).length >= 2, 'central viewer sees multiple sites');
+    const op = allRows.find((n) => n.position === 'Zz Operator');
+    assert.ok(op && op.reports_to_title === 'Zz Site Manager', 'the edge is position → reports_to_title (verbatim)');
+    for (const n of allRows) {
+      assert.deepEqual(Object.keys(n).sort(), ['headcount', 'position', 'reports_to_title'],
+        'directory-tier fields only — no names, no pay, no PII');
+    }
+    // A site-bound viewer with the reports module (R02 Supervisor) sees ONLY her site.
+    const sup = await H.req('GET', '/reports/organogram', { token: await tok(F.USERS.SUP_A) });
+    assert.equal(sup.status, 200);
+    const supRows = Object.values(sup.body.sites).flat();
+    assert.ok(supRows.some((n) => n.position === 'Zz Operator'), 'her own site is present');
+    assert.ok(!supRows.some((n) => n.position === 'Zz Accountant'), 'another site\'s chart is NOT visible');
+  } finally {
+    for (const id of [e1, e2, e3]) await owner(`DELETE FROM employee WHERE id=$1`, [id]);
+  }
+});

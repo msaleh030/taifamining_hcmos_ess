@@ -24,8 +24,9 @@ const OBC = '/ingest/opening-balance/commit';
 const empByPf = async (pf) => (await owner(`SELECT id, site_id FROM employee WHERE legacy_id=$1`, [pf])).rows[0];
 async function purge(pfs, batchIds = []) {
   for (const pf of pfs) {
-    const e = await empByPf(pf);
-    if (e) {
+    // Site-level PF: one number may hold rows at SEVERAL sites — purge them all.
+    const rows = (await owner(`SELECT id FROM employee WHERE legacy_id=$1`, [pf])).rows;
+    for (const e of rows) {
       await owner(`DELETE FROM leave_carry_sweep WHERE employee_id=$1`, [e.id]);
       await owner(`DELETE FROM leave_carry WHERE employee_id=$1`, [e.id]);
       await owner(`DELETE FROM employee_document WHERE employee_id=$1`, [e.id]);
@@ -495,12 +496,29 @@ test('EM-6 rich fields land in their tiers; a BARE row is site-corrected; a MAST
     assert.equal(asPay.body.nok_contact, '0755000112', 'pay/PII gate sees next-of-kin');
     assert.equal(asPay.body.reports_to_title, 'Workshop Manager', 'directory tier present');
 
-    // A MASTERED row (position now set) must NOT move on a second file's claim.
+    // Kira ruling (2026-07-12, site-level PF): a MASTERED row at another site no
+    // longer blocks a second site's claim — the duplicate LOADS as a NEW
+    // employee at ITS site, FLAGGED for Head of HR correction. Never a move,
+    // never a merge, never an exclusion. The mastered original never moves.
     const again = await post(maker, EMP, {
       rows: [{ pf: '95050001', first_name: 'Zz', middle_name: 'Sitefix', surname: 'Person', site: 'North Mara', position: 'X' }],
-      control_totals: [{ site: 'North Mara', count: 0 }] });
-    assert.equal(again.body.exception_count, 1);
-    assert.ok(again.body.exceptions[0].exceptions.join().includes('DIFFERENT site'), 'cross-site claim on a mastered row = exception, never a move');
+      control_totals: [{ site: 'North Mara', count: 1 }] });
+    assert.equal(again.body.clean_count, 1, 'cross-site duplicate PF LOADS (clean + flagged), no longer an exception');
+    const flag = again.body.clean[0].warnings.join();
+    assert.ok(flag.includes('cross-site duplicate PF'), 'flagged for correction (pending Head of HR approval)');
+    assert.ok(flag.includes('SAME name'), 'a same-name duplicate is called out — possibly one person in two site files');
+    const sub2 = await post(maker, EMC, {
+      rows: [{ pf: '95050001', first_name: 'Zz', middle_name: 'Sitefix', surname: 'Person', site: 'North Mara', position: 'X' }],
+      control_totals: [{ site: 'North Mara', count: 1 }] });
+    await post(checker, EMC, { batch_id: sub2.body.batch_id });
+    const both = (await owner(`SELECT site_id, emp_no FROM employee WHERE legacy_id='95050001'`)).rows;
+    assert.equal(both.length, 2, 'both site records exist — loaded, not merged or excluded');
+    const original = both.find((r) => r.site_id === site2);
+    assert.ok(original, 'the mastered original stays at its site (never moved)');
+    const dup = both.find((r) => r.site_id === F.SITE.A1);
+    assert.ok(dup && dup.emp_no === null,
+      'the flagged duplicate carries the PF as legacy id ONLY — emp_no stays company-unique (unassigned)');
+    await owner(`DELETE FROM ingest_batch WHERE id=$1`, [sub2.body.batch_id]);
   } finally {
     await purge(['95050001'], [sub.body.batch_id]);
     await owner(`DELETE FROM site WHERE id=$1`, [site2]);
@@ -556,4 +574,91 @@ test('EM-8 reporting_to_pf must RESOLVE: in-batch links set manager_id; unresolv
   } finally {
     await purge(['95070001', '95070002', '95070003'], [sub.body.batch_id]);
   }
+});
+
+// ── Kira rulings 2026-07-12: email = login identity; payroll master pay-gated ─
+test('EM-9 email discipline: a duplicate email (in-batch or already assigned) is an EXCEPTION, never a shared login', async () => {
+  const maker = await tok(F.USERS.FINMGR_A);
+  const checker = await tok(F.USERS.CFC_A);
+  // In-batch duplicate: two people, one address → BOTH excepted.
+  const dup = await post(maker, EMP, {
+    rows: [
+      { pf: '95090001', name: 'Zz Mail One', site: 'North Mara', position: 'A', email: 'shared.login@taifamining.tz' },
+      { pf: '95090002', name: 'Zz Mail Two', site: 'North Mara', position: 'B', email: 'shared.login@taifamining.tz' },
+    ],
+    control_totals: [{ site: 'North Mara', count: 0 }] });
+  assert.equal(dup.body.exception_count, 2, 'both rows excepted — never "first one wins"');
+  assert.ok(dup.body.exceptions[0].exceptions.join().includes('duplicate email within this batch'));
+
+  // Already assigned to a DIFFERENT employee: load one, then try to reuse the address.
+  const sub = await post(maker, EMC, {
+    rows: [{ pf: '95090003', name: 'Zz Mail Owner', site: 'North Mara', position: 'C', email: 'zz.mailowner@taifamining.tz' }],
+    control_totals: [{ site: 'North Mara', count: 1 }] });
+  try {
+    await post(checker, EMC, { batch_id: sub.body.batch_id });
+    const reuse = await post(maker, EMP, {
+      rows: [{ pf: '95090004', name: 'Zz Mail Thief', site: 'North Mara', position: 'D', email: 'zz.mailowner@taifamining.tz' }],
+      control_totals: [{ site: 'North Mara', count: 0 }] });
+    assert.equal(reuse.body.exception_count, 1);
+    assert.ok(reuse.body.exceptions[0].exceptions.join().includes('already assigned to a different employee'));
+    // The OWNER re-enriching their own record with their own address stays clean.
+    const self = await post(maker, EMP, {
+      rows: [{ pf: '95090003', name: 'Zz Mail Owner', site: 'North Mara', position: 'C', email: 'zz.mailowner@taifamining.tz' }],
+      control_totals: [{ site: 'North Mara', count: 1 }] });
+    assert.equal(self.body.clean_count, 1, 'an employee\'s own address is not a collision with themselves');
+  } finally {
+    await purge(['95090001', '95090002', '95090003', '95090004'], [sub.body.batch_id]);
+  }
+});
+
+const PMP = '/ingest/payroll-master/preview';
+const PMC = '/ingest/payroll-master/commit';
+test('PM-1 payroll master: verified PF-at-site rows land basic/gross behind the pay gate; payroll NEVER creates people', async () => {
+  const maker = await tok(F.USERS.FINMGR_A);
+  const checker = await tok(F.USERS.CFC_A);
+  // The employee master row must exist FIRST (Kira's load order).
+  const em = await post(maker, EMC, {
+    rows: [{ pf: '95100001', name: 'Zz Paid Person', site: 'North Mara', position: 'Fitter', department: 'PLI', hire_date: '2022-02-01' }],
+    control_totals: [{ site: 'North Mara', count: 1 }] });
+  try {
+    await post(checker, EMC, { batch_id: em.body.batch_id });
+    const rows = [{ pf: '95100001', name: 'Zz Paid Person', site: 'North Mara',
+      basic_salary: '1,200,000', gross_salary: '1,500,000', currency: 'TZS', bank: 'CRDB', bank_account: '0150111' }];
+    const prev = await post(maker, PMP, { rows, control_totals: [{ site: 'North Mara', count: 1, sum_basic: 1200000 }] });
+    assert.equal(prev.status, 200);
+    assert.equal(prev.body.clean_count, 1);
+    assert.ok(prev.body.control.ok, 'count + sum_basic reconcile');
+    const sub = await post(maker, PMC, { rows, control_totals: [{ site: 'North Mara', count: 1, sum_basic: 1200000 }] });
+    const appr = await post(checker, PMC, { batch_id: sub.body.batch_id });
+    assert.equal(appr.body.loaded, 1);
+    const e = await empByPf('95100001');
+    const pay = (await owner(`SELECT basic_salary::text b, gross_salary::text g, pay_currency FROM employee_pay WHERE employee_id=$1`, [e.id])).rows[0];
+    assert.equal(pay.b, '1200000.00', 'basic landed (comma-parsed, verbatim value)');
+    assert.equal(pay.g, '1500000.00');
+    assert.equal(pay.pay_currency, 'TZS');
+    // Behind the gate: an R03 profile read carries NO pay block at all.
+    const asHr = await get(await tok(F.USERS.HR_A), `/employees/${e.id}`);
+    assert.equal(asHr.status, 200);
+    assert.ok(!('basic_salary' in asHr.body) && !('bank_account' in asHr.body), 'R03 sees no pay fields');
+    await owner(`DELETE FROM ingest_batch WHERE id=$1`, [sub.body.batch_id]);
+  } finally {
+    await purge(['95100001'], [em.body.batch_id]);
+  }
+});
+
+test('PM-2 payroll master fail-closed: unknown PF at the site / name mismatch / no amount are EXCEPTIONS; nothing is created', async () => {
+  const maker = await tok(F.USERS.FINMGR_A);
+  const before = (await owner(`SELECT count(*)::int n FROM employee WHERE company_id=$1`, [F.TENANT_A])).rows[0].n;
+  const prev = await post(maker, PMP, {
+    rows: [
+      { pf: '95119999', name: 'Zz Ghost', site: 'North Mara', basic_salary: '100000' },       // no such employee
+      { pf: '95100001', name: 'Zz Paid Person', site: 'North Mara' },                          // (purged) no amount either
+    ],
+    control_totals: [] });
+  assert.equal(prev.body.clean_count, 0, 'nothing clean');
+  const reasons = prev.body.exceptions.map((e) => e.exceptions.join());
+  assert.ok(reasons[0].includes('no employee with this PF at this site'), 'payroll never creates people');
+  assert.ok(reasons[1].includes('neither basic nor gross'), 'an amountless payroll row is an exception');
+  const after = (await owner(`SELECT count(*)::int n FROM employee WHERE company_id=$1`, [F.TENANT_A])).rows[0].n;
+  assert.equal(after, before, 'no employee was created by a payroll preview');
 });

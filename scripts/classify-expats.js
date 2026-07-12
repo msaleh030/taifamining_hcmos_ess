@@ -65,26 +65,44 @@ async function main() {
   const nameCol = col(['name']);
   if (nameCol < 0) throw new Error('no name column in the CSV header');
   const natCol = col(['national']);
-  const list = rows.slice(1).map((r) => ({ name: r[nameCol], nationality: natCol >= 0 ? r[natCol] : '' }))
-    .filter((r) => norm(r.name));
+  // Kira ruling 2026-07-12: key on PF, not name — the permits master carries a
+  // payroll number, which removes the 3-of-61 name-matching problem entirely.
+  // Name matching stays only as the fallback for rows without a PF.
+  const pfCol = col(['payroll', 'pf', 'employee id', 'staff no']);
+  const list = rows.slice(1).map((r) => ({
+    name: r[nameCol], nationality: natCol >= 0 ? r[natCol] : '',
+    pf: pfCol >= 0 ? String(r[pfCol] || '').trim() : '',
+  })).filter((r) => norm(r.name) || r.pf);
 
   const out = await db.withOwner(async (c) => {
     const emps = (await c.query(
-      `SELECT id, full_name FROM employee WHERE company_id=$1`, [company])).rows;
-    const byName = new Map();
+      `SELECT id, full_name, legacy_id FROM employee WHERE company_id=$1`, [company])).rows;
+    const byName = new Map(), byPf = new Map();
     for (const e of emps) {
       for (const k of new Set([norm(e.full_name), reversed(e.full_name)])) {
         if (!k) continue;
         if (!byName.has(k)) byName.set(k, []);
         byName.get(k).push(e.id);
       }
+      if (e.legacy_id) {
+        if (!byPf.has(e.legacy_id)) byPf.set(e.legacy_id, []);
+        byPf.get(e.legacy_id).push(e.id);
+      }
     }
 
     const matched = [], unmatched = [];
     for (const row of list) {
+      // PF first (authoritative). Site-level PF: the same number at several
+      // sites is >1 candidate — reported for resolution, never guessed.
+      if (row.pf && byPf.has(row.pf)) {
+        const cands = byPf.get(row.pf);
+        if (cands.length === 1) { matched.push({ ...row, employee_id: cands[0], by: 'pf' }); continue; }
+        unmatched.push({ ...row, candidates: cands.length, why: 'PF at multiple sites' });
+        continue;
+      }
       const cands = new Set([...(byName.get(norm(row.name)) || []), ...(byName.get(reversed(row.name)) || [])]);
-      if (cands.size === 1) matched.push({ ...row, employee_id: [...cands][0] });
-      else unmatched.push({ ...row, candidates: cands.size });
+      if (cands.size === 1) matched.push({ ...row, employee_id: [...cands][0], by: 'name' });
+      else unmatched.push({ ...row, candidates: cands.size, why: row.pf ? 'PF unknown, name ambiguous/absent' : 'name-only' });
     }
 
     let docsExpat = 0;
@@ -117,10 +135,10 @@ async function main() {
     `expat classification report — ${csvPath}`,
     `list rows: ${out.matched.length + out.unmatched.length} · matched: ${out.matched.length} · unmatched: ${out.unmatched.length}`,
     '', 'MATCHED (is_expat=true set):',
-    ...out.matched.map((m) => `  ${m.name}${m.nationality ? ` (${m.nationality})` : ''} -> employee ${m.employee_id}`),
+    ...out.matched.map((m) => `  ${m.name}${m.nationality ? ` (${m.nationality})` : ''} -> employee ${m.employee_id} (by ${m.by || 'name'})`),
     '', 'UNMATCHED (resolve with Kira/Baraka — NEVER guessed; 0 or >1 candidates):',
-    ...(out.unmatched.length ? out.unmatched.map((u) => `  ${u.name}${u.nationality ? ` (${u.nationality})` : ''} — ${u.candidates} candidate(s)`) : ['  (none)']),
-    '', 'note: no passport field exists on the employee record, so matching is name-only.',
+    ...(out.unmatched.length ? out.unmatched.map((u) => `  ${u.name}${u.nationality ? ` (${u.nationality})` : ''} — ${u.candidates} candidate(s)${u.why ? ` [${u.why}]` : ''}`) : ['  (none)']),
+    '', 'note: rows with a PF match by PF (authoritative); name matching is the fallback only.',
   ];
   fs.writeFileSync(reportPath, lines.join('\n') + '\n', { mode: 0o600 });
 

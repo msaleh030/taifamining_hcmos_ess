@@ -32,7 +32,8 @@ const exact = require('../src/exact');
 const ingest = require('../src/ingest');
 
 const KIND_ALIAS = { 'opening-balance': 'opening_balance', opening_balance: 'opening_balance', permits: 'permit', permit: 'permit',
-  'employee-master': 'employee_master', employee_master: 'employee_master', employees: 'employee_master' };
+  'employee-master': 'employee_master', employee_master: 'employee_master', employees: 'employee_master',
+  'payroll-master': 'payroll_master', payroll_master: 'payroll_master', payroll: 'payroll_master' };
 
 // Header-variant recognition. Keys are NORMALISED header text (lowercase,
 // punctuation → space). Only unambiguous, widely-used payroll/HR spellings are
@@ -52,9 +53,19 @@ const KIND_SYNONYMS = {
     year:    ['year', 'leave year'],
   },
   permit: {
-    pf: COMMON_SYNONYMS.pf, name: COMMON_SYNONYMS.name,
+    pf: COMMON_SYNONYMS.pf, name: COMMON_SYNONYMS.name, site: COMMON_SYNONYMS.site,
     permit: ['permit', 'permit name', 'permit type', 'document', 'licence', 'license'],
-    expiry: ['expiry', 'expiry date', 'valid until', 'valid to', 'expires', 'expiration date'],
+    expiry: ['expiry', 'expiry date', 'valid until', 'valid to', 'expires', 'expiration date',
+             'validity', 'permit validity', 'date of expiry'],
+  },
+  payroll_master: {
+    ...COMMON_SYNONYMS,
+    first_name: ['first name'], middle_name: ['middle name'], surname: ['surname', 'last name'],
+    basic_salary: ['basic salary', 'basic pay', 'monthly basic', 'basic'],
+    gross_salary: ['gross salary', 'gross pay', 'gross', 'monthly gross'],
+    currency:     ['currency'],
+    bank:         ['bank', 'bank name'],
+    bank_account: ['bank account', 'account number', 'account no'],
   },
   employee_master: {
     ...COMMON_SYNONYMS,
@@ -101,6 +112,7 @@ const REQUIRED = {
   opening_balance: ['pf', 'name', 'site', 'balance'],
   permit: ['pf', 'name', 'permit', 'expiry'],
   employee_master: ['pf', 'site', ['name', 'surname']],
+  payroll_master: ['pf', 'site', ['name', 'surname'], ['basic_salary', 'gross_salary']],
 };
 const HEADER_SCAN_ROWS = 30; // merged-title preambles are shallow; scan the top of the sheet
 
@@ -193,7 +205,7 @@ async function userByEmail(email) {
 
 async function runLoad({ kind: kindIn, csvPath, controlPath, makerEmail, checkerEmail, commit = false }) {
   const kind = KIND_ALIAS[kindIn];
-  if (!kind) throw new Error(`unknown kind "${kindIn}" (opening-balance | permits | employee-master)`);
+  if (!kind) throw new Error(`unknown kind "${kindIn}" (opening-balance | permits | employee-master | payroll-master)`);
   const { rows, mapping } = parseFile(kind, csvPath);
   const control = JSON.parse(fs.readFileSync(controlPath, 'utf8'));
 
@@ -248,7 +260,7 @@ async function main() {
   const commit = args.includes('--commit');
   const [kind, csvPath, controlPath, makerEmail, checkerEmail] = args.filter((a) => a !== '--commit');
   if (!kind || !csvPath || !controlPath || !makerEmail || !checkerEmail) {
-    console.error('usage: node scripts/load-ingest.js <opening-balance|permits|employee-master> <data.csv> <control.json> <maker-email> <checker-email> [--commit]');
+    console.error('usage: node scripts/load-ingest.js <opening-balance|permits|employee-master|payroll-master> <data.csv> <control.json> <maker-email> <checker-email> [--commit]');
     process.exit(2);
   }
   const res = await runLoad({ kind, csvPath, controlPath, makerEmail, checkerEmail, commit });

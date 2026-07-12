@@ -211,11 +211,77 @@ load_site "North_Mara_TSF_Employee_Masterfile.xlsx"   "North Mara - TSF Lift 10 
 load_site "Employee_Master_File_Nyanzaga.xlsx"        "Nyanzaga - Sotta Mining Project"       282
 load_site "Master_File_Dar_Yard.xlsx"                 "Dar Yard"                               71
 
-# ── field completeness: what the master ACTUALLY populated, straight from the DB
+# ── proposed ESS emails: DRAFT list for Taifa IT/HR (Kira ruling 2026-07-12) ──
+# Convention firstname.lastname@taifamining.tz, but the system NEVER invents a
+# login: a derived address may not exist as a mailbox, and name collisions map
+# two people onto one login. The full list (names — PII) goes to a 600 file ON
+# THE BOX; this log carries counts only. Confirmed addresses come back through
+# the employee-master enrich load, where a duplicate email is an EXCEPTION.
+say "proposed ESS emails (DRAFT for IT/HR confirmation — never auto-assigned)"
+UAT_COMPANY=$UAT_CO hcmos-run node scripts/propose-emails.js /root/proposed-emails.csv \
+  || echo "propose-emails FAILED (non-fatal)"
+
+# ── the second wave: leave / expat permits / payroll (Kira 2026-07-12) ────────
+# Order per Kira: employee masters FIRST (above), then leave (attaches by PF at
+# site), then expat permits (keyed on PF, not name), then payroll (behind the
+# pay-visibility gate). Controls for these are DERIVED from the converted file
+# (no independent totals were supplied): that catches conversion/load drift but
+# does NOT verify source truth — stated on every load.
+load_file() { # xlsx-file site-name conv-kind loader-kind
+  local XLSX="/root/uat-data/$1" SITE="$2" CKIND="$3" LKIND="$4"
+  if [ ! -f "$XLSX" ]; then echo "AWAITING: $1 (drop into /root/uat-data — PII, never the repo)"; return 0; fi
+  local CSV="${XLSX%.xlsx}.$CKIND.csv" CTL="${XLSX%.xlsx}.$CKIND.control.json"
+  hcmos-run node scripts/xlsx-to-master.js "$XLSX" "$CSV" ${SITE:+--site "$SITE"} --kind "$CKIND" \
+    || { echo "CONVERT FAILED: $1"; return 0; }
+  hcmos-run node scripts/derive-control.js "$LKIND" "$CSV" > "$CTL" || { echo "CONTROL DERIVE FAILED: $1"; return 0; }
+  echo "  controls DERIVED from the file (no independent totals) — catches conversion/load drift, NOT source truth"
+  UAT_COMPANY=$UAT_CO hcmos-run node scripts/load-ingest.js "$LKIND" "$CSV" "$CTL" \
+    omar.omar@taifamining.tz viswa.medhuru@taifamining.tz --commit \
+    | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{const r=JSON.parse(s.slice(s.indexOf("{")));console.log(`  loaded=${r.loaded||0} clean=${r.clean} exceptions=${r.exceptions} flagged=${r.warned} control_ok=${r.control_ok}`);for(const[k,n]of Object.entries(r.exception_kinds||{}))console.log(`    EXC ${String(n).padStart(4)}x ${k}`);for(const[k,n]of Object.entries(r.warning_kinds||{}))console.log(`    warn ${String(n).padStart(4)}x ${k}`);}catch(e){console.log(s);}})' \
+    || echo "  LOAD FAILED for ${SITE:-$1} — see ${CSV}.exceptions.json on the box"
+}
+
+say "leave masters (attach by PF at site; balances -> protected opening buckets)"
+load_file "Leave_Master_File_Head_Office.xlsx"      "Head Office"                       leave opening-balance
+load_file "Leave_Master_File_Mwadui.xlsx"           "Mwadui"                            leave opening-balance
+load_file "Leave_Master_File_North_Mara_TSF10.xlsx" "North Mara - TSF Lift 10 Project"  leave opening-balance
+load_file "Leave_Master_File_Nyanzaga.xlsx"         "Nyanzaga - Sotta Mining Project"   leave opening-balance
+echo "GAP (report to Kira): no leave master for 'North Mara - L&H and Airstrip Project' — only the earlier northmara-leave balances exist there"
+echo "GAP (report to Kira): no leave master for 'Dar Yard' — no opening balances loaded for that site"
+
+say "expat permits master (keyed on PF — replaces the 3-of-61 name matching)"
+# Company-wide file: NO site stamp — a site column in the file passes through
+# and disambiguates any cross-site PF; without one an ambiguous PF excepts.
+load_file "Expat_Permits_Master_File.xlsx" "" permits permits
+if [ -f "/root/uat-data/Expat_Permits_Master_File.permits.csv" ]; then
+  echo "-- expat classification, PF-keyed from the permits master:"
+  UAT_COMPANY=$UAT_CO hcmos-run node scripts/classify-expats.js \
+    /root/uat-data/Expat_Permits_Master_File.permits.csv /root/expat-classification-report.txt \
+    || echo "classification FAILED (non-fatal; permits themselves are loaded)"
+fi
+
+say "payroll master (North Mara L&H — behind the pay gate, maker-checker)"
+# File naming matches the employee master ('North_Mara' = the L&H and Airstrip
+# Project). If that assumption is wrong the PFs will not match employees at the
+# site and every row excepts — fail-closed, self-reporting.
+load_file "Payroll_Master_File_North_Mara.xlsx" "North Mara - L&H and Airstrip Project" payroll payroll-master
+
+# ── legacy North Mara leave CSV (pre-master path) — kept for compatibility ────
+NM_LEAVE=$(ls /root/uat-data/northmara-leave.csv /root/uat-data/northmara-opening-balance*.csv 2>/dev/null | head -1 || true)
+if [ -n "$NM_LEAVE" ] && [ -f "/root/uat-data/northmara-leave.control.json" ]; then
+  say "re-attach leave (legacy northmara-leave.csv, matched by PF)"
+  UAT_COMPANY=$UAT_CO hcmos-run node scripts/load-ingest.js opening-balance \
+    "$NM_LEAVE" /root/uat-data/northmara-leave.control.json \
+    omar.omar@taifamining.tz viswa.medhuru@taifamining.tz --commit \
+    | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{const r=JSON.parse(s.slice(s.indexOf("{")));console.log(`leave attach: rows=${r.rows} clean(attached)=${r.clean} no-match(exceptions)=${r.exceptions} committed=${r.committed} loaded=${r.loaded||0}`);}catch(e){console.log(s);}})' \
+    || echo "LEAVE LOAD FAILED — see the exception report next to the CSV"
+fi
+
+# ── field completeness: what the loads ACTUALLY populated, straight from the DB
 # Counts only (no PII in this log). This is the honest tally the Omid probe's
 # "master-loaded" is checked against — if these are populated and the API shows
 # zero, the SERVING code is stale, not the data.
-say "master field completeness (per-site DB counts, no PII)"
+say "field completeness after all loads (per-site DB counts, no PII)"
 sudo -u postgres psql -d hcmos -c "
   SELECT s.name                 AS site,
          count(e.id)            AS employees,
@@ -224,28 +290,21 @@ sudo -u postgres psql -d hcmos -c "
          count(e.joined_at)     AS with_join_date,
          count(e.manager_id)    AS with_manager,
          count(p.employee_id)   AS with_pay_row,
-         count(p.national_id)   AS with_national_id
+         count(p.national_id)   AS with_national_id,
+         count(p.basic_salary)  AS with_basic_salary
     FROM employee e
     JOIN site s ON s.id = e.site_id
     LEFT JOIN employee_pay p ON p.employee_id = e.id
    WHERE e.company_id='$UAT_CO'
    GROUP BY s.name ORDER BY s.name"
-
-# ── re-attach leave: opening balances now MATCH the master by PF ───────────────
-# Once the master is loaded, an opening-balance load ATTACHES each balance to the
-# real employee record (matched by PF) instead of failing "no employee match".
-say "re-attach leave (opening balances -> real North Mara employees, matched by PF)"
-NM_LEAVE=$(ls /root/uat-data/northmara-leave.csv /root/uat-data/northmara-opening-balance*.csv 2>/dev/null | head -1 || true)
-if [ -n "$NM_LEAVE" ] && [ -f "/root/uat-data/northmara-leave.control.json" ]; then
-  UAT_COMPANY=$UAT_CO hcmos-run node scripts/load-ingest.js opening-balance \
-    "$NM_LEAVE" /root/uat-data/northmara-leave.control.json \
-    omar.omar@taifamining.tz viswa.medhuru@taifamining.tz --commit \
-    | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{const r=JSON.parse(s.slice(s.indexOf("{")));console.log(`leave attach: rows=${r.rows} clean(attached)=${r.clean} no-match(exceptions)=${r.exceptions} committed=${r.committed} loaded=${r.loaded||0}`);}catch(e){console.log(s);}})' \
-    || echo "LEAVE LOAD FAILED — see the exception report next to the CSV"
-else
-  echo "AWAITING CSV: drop northmara-leave.csv + northmara-leave.control.json into /root/uat-data."
-  echo "Balances whose PF is in the master ATTACH to that employee; unmatched PFs report as 'no employee match'."
-fi
+sudo -u postgres psql -d hcmos -c "
+  SELECT s.name AS site, count(DISTINCT lc.employee_id) AS employees_with_opening_balance,
+         round(sum(lc.days)::numeric, 2) AS opening_days_total
+    FROM leave_carry lc
+    JOIN employee e ON e.id = lc.employee_id
+    JOIN site s ON s.id = e.site_id
+   WHERE lc.company_id='$UAT_CO' AND lc.opening_bucket
+   GROUP BY s.name ORDER BY s.name"
 
 # ── VERIFY IT'S ALIVE: log in AS OMID and count what HE sees via the real API ─
 # This is the honest verification: not a DB count, but Omid's actual session
@@ -298,16 +357,17 @@ const T = () => AbortSignal.timeout(10000);
 EOF
 
 # ── expat classification (is_expat + permit_type) — gated on the CSV drop ────
-say "expat classification (61-name authoritative list -> is_expat + permit_type)"
-if [ -f /root/uat-data/expat-permit-classification.csv ]; then
+say "expat classification (legacy 61-name list -> is_expat + permit_type)"
+if [ -f /root/uat-data/Expat_Permits_Master_File.permits.csv ]; then
+  echo "SUPERSEDED: the PF-keyed Expat_Permits_Master_File classification ran above (Kira: key on PF, not name)."
+elif [ -f /root/uat-data/expat-permit-classification.csv ]; then
   # Counts print here; NAMES/PII go only to the 600-mode report on the box —
   # this log is public with the repo, so the report never echoes through it.
   UAT_COMPANY=$UAT_CO node "$APP_DIR/scripts/classify-expats.js" \
     /root/uat-data/expat-permit-classification.csv /root/expat-classification-report.txt \
     && echo "report (names, on-box only): /root/expat-classification-report.txt"
 else
-  echo "AWAITING CSV: drop expat-permit-classification.csv into /root/uat-data (NEVER the repo — it carries passports/PII)."
-  echo "Then re-run this deploy, or on the box: UAT_COMPANY=$UAT_CO hcmos-run node scripts/classify-expats.js /root/uat-data/expat-permit-classification.csv /root/expat-classification-report.txt"
+  echo "AWAITING: Expat_Permits_Master_File.xlsx (PF-keyed, preferred) or expat-permit-classification.csv in /root/uat-data (NEVER the repo — passports/PII)."
 fi
 
 # ── backups + ONE tested restore ──────────────────────────────────────────────

@@ -108,11 +108,45 @@ Drop the six ORIGINAL .xlsx files into `/root/uat-data` (**PII — NEVER the
 repo**) and re-fire the deploy. Each converts on-box to the canonical template
 CSV (`scripts/xlsx-to-master.js`) and loads through the audited maker-checker
 ingest (Omar R15 / Viswa R16) with per-site canonical control totals.
-`allow_shortfall` is set per Kira: known-bad rows (Mwadui's 9 PF="HO", the 19
-cross-site PF collisions, Dar Yard's 4 contractor codes, within-file dups)
-carry as FLAGGED EXCEPTIONS and the gap is reported; an overshoot still
-hard-blocks. Reporting is SPLIT: `reports_to_title` free text; `manager_id`
-links only when a `reporting_to_pf` resolves to a real employee.
+`allow_shortfall` is set per Kira: known-bad rows (Mwadui's 9 PF="HO", Dar
+Yard's 4 contractor codes, within-file dups) carry as FLAGGED EXCEPTIONS and
+the gap is reported; an overshoot still hard-blocks. Reporting is SPLIT:
+`reports_to_title` free text; `manager_id` links only when a `reporting_to_pf`
+resolves to a real employee at the same site.
+
+**Kira's three rulings (2026-07-12):**
+1. **PF uniqueness is SITE-LEVEL.** A cross-site duplicate PF is a legitimate
+   different person: it LOADS at its site, FLAGGED for correction (pending
+   Head of HR approval), with the PF kept as legacy id only (`emp_no`
+   unassigned — the number scheme stays company-unique). A duplicate WITHIN a
+   site is still an exception.
+2. **Emails are never invented.** `scripts/propose-emails.js` writes the DRAFT
+   `firstname.lastname@taifamining.tz` list (collisions marked) to
+   `/root/proposed-emails.csv` (600, box-only) for Taifa IT/HR to confirm;
+   confirmed addresses come back through the employee-master enrich load,
+   where a duplicate email is an EXCEPTION — a login is personal, never shared.
+3. **Reporting lines are job TITLES by design.** The organogram
+   (`GET /reports/organogram`) builds on the position hierarchy and states its
+   limitation: with several same-titled managers it cannot say WHICH one a
+   person reports to.
+
+### 7a-ii. The second wave — leave / expat permits / payroll (Kira 2026-07-12)
+Load ORDER is enforced by the deploy script: masters FIRST, then leave
+(attaches by PF at site), then expat permits (**keyed on PF**, not name), then
+payroll (behind the pay-visibility gate). Drop into `/root/uat-data`:
+| File | Site / scope |
+|---|---|
+| `Leave_Master_File_Head_Office.xlsx` | Head Office |
+| `Leave_Master_File_Mwadui.xlsx` | Mwadui |
+| `Leave_Master_File_North_Mara_TSF10.xlsx` | North Mara - TSF Lift 10 Project |
+| `Leave_Master_File_Nyanzaga.xlsx` | Nyanzaga - Sotta Mining Project |
+| `Expat_Permits_Master_File.xlsx` | company-wide (site column passes through) |
+| `Payroll_Master_File_North_Mara.xlsx` | North Mara - L&H and Airstrip Project |
+
+KNOWN GAPS (reported every run): no leave master for North Mara - L&H and
+Airstrip Project or Dar Yard. Controls for this wave are DERIVED from the
+converted file (`scripts/derive-control.js`) because no independent totals
+were supplied — that catches conversion/load drift, NOT source truth.
 
 ### 7b. Opening balances — now ATTACH to the master by PF
 Drop the **opening balances + permit files** (CSV) on the box, prepare a

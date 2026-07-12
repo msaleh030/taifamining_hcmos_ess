@@ -120,6 +120,10 @@ const routes = [
   // registers are listed only to pay-visibility roles (server filters).
   { method: 'GET', pattern: /^\/reports\/catalogue$/, module: 'reports',
     handler: async (req, m, url, s) => ({ status: 200, body: await reports.catalogue(s) }) },
+  // Organogram — positional by design (titles, Kira ruling): directory-tier data
+  // only, site-scoped through the shared gate inside the service.
+  { method: 'GET', pattern: /^\/reports\/organogram$/, module: 'reports',
+    handler: async (req, m, url, s) => ({ status: 200, body: await reports.organogram(s) }) },
   // The Payroll + Leave-liability REGISTERS carry the C16 financial gate
   // (a3.pay.roles), NOT module:'reports' — a report inherits the gate of its data.
   // A reports-module role that is not pay-visibility is 403 here, server-side.
@@ -310,6 +314,16 @@ const routes = [
       const body = await readJson(req);
       const opts = process.env.NODE_ENV !== 'production' && body.faultStep ? { faultStep: body.faultStep } : {};
       return { status: 200, body: await ingest.commit(s, 'employee_master', body, opts) };
+    } },
+  // Payroll master (Kira 2026-07-12): pay data behind the SAME high-authority
+  // ingest gate + maker-checker; values land in employee_pay (pay-gated reads).
+  { method: 'POST', pattern: /^\/ingest\/payroll-master\/preview$/, allow: 'ingest.roles',
+    handler: async (req, m, url, s) => ({ status: 200, body: await ingest.preview(s, 'payroll_master', await readJson(req)) }) },
+  { method: 'POST', pattern: /^\/ingest\/payroll-master\/commit$/, allow: 'ingest.roles',
+    handler: async (req, m, url, s) => {
+      const body = await readJson(req);
+      const opts = process.env.NODE_ENV !== 'production' && body.faultStep ? { faultStep: body.faultStep } : {};
+      return { status: 200, body: await ingest.commit(s, 'payroll_master', body, opts) };
     } },
   { method: 'GET', pattern: /^\/ingest\/batch\/([0-9a-f-]+)\/exceptions$/i, allow: 'ingest.roles',
     handler: async (req, m, url, s) => ({ status: 200, body: await ingest.exceptionReport(s, m[1]) }) },

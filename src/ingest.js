@@ -29,7 +29,7 @@ const idstr = (s) => norm(s).replace(/^'/, '');
 // A hire-date arrives as an Excel timestamp ("2022-01-13 19:25:45[.ffffff]");
 // keep the calendar date for joined_at, drop the time. Returns null if unparseable.
 const asDate = (s) => { const m = /^(\d{4}-\d{2}-\d{2})/.exec(norm(s)); return m ? m[1] : null; };
-const KINDS = ['opening_balance', 'permit', 'employee_master'];
+const KINDS = ['opening_balance', 'permit', 'employee_master', 'payroll_master'];
 
 async function siteMap(exec) {
   const r = await exec.query('SELECT id, name FROM site');
@@ -42,15 +42,24 @@ async function siteMap(exec) {
 // legacy master-file IDs for permits). PLACEHOLDER-parameterised — safe for any
 // string value (the vendored client can't bind a JS array, but it binds scalars).
 // Carries name + site so PF-matches can be identity-VERIFIED, never assumed.
+// PF uniqueness is SITE-LEVEL (Kira ruling 2026-07-12): the same PF may exist
+// at several sites as different people, so each key maps to an ARRAY of rows.
 async function existingByPf(exec, pfs) {
   const uniq = [...new Set(pfs.map(norm).filter(Boolean))];
   const map = new Map();
   if (!uniq.length) return map;
   const ph = uniq.map((_, i) => `$${i + 1}`).join(',');
   const r = await exec.query(`SELECT id, legacy_id, full_name, site_id, position FROM employee WHERE legacy_id IN (${ph})`, uniq);
-  for (const row of r.rows) map.set(row.legacy_id, { id: row.id, full_name: row.full_name, site_id: row.site_id, position: row.position });
+  for (const row of r.rows) {
+    const entry = { id: row.id, full_name: row.full_name, site_id: row.site_id, position: row.position };
+    const prev = map.get(row.legacy_id);
+    if (prev) prev.push(entry); else map.set(row.legacy_id, [entry]);
+  }
   return map;
 }
+// The row for a PF at ONE site (or undefined). Site-level PF makes (site, pf)
+// the identity key; a bare ctx.existing.get(pf) is ambiguous by design now.
+const pfAtSite = (ctx, pf, siteId) => (ctx.existing.get(pf) || []).find((p) => p.site_id === siteId);
 // Name comparison for PF-match verification: case/spacing-insensitive, verbatim
 // otherwise — 'Juma  Hamis Mgeni' == 'juma hamis mgeni', but never fuzzy.
 const sameName = (a, b) => norm(a).toLowerCase().replace(/\s+/g, ' ') === norm(b).toLowerCase().replace(/\s+/g, ' ');
@@ -67,7 +76,10 @@ function validateOpening(raw, ctx) {
   // exception). A PF with no employee still CREATES one (greenfield path), so a
   // balances-only load keeps working. This is what re-attaches the North Mara
   // leave to the master records instead of failing "no employee match".
-  const matched = pf && ctx.existing.has(pf) ? ctx.existing.get(pf).id : null;
+  // Site-level PF: the balance attaches to the employee AT THIS SITE only — the
+  // same number at another site is a different person (Kira ruling).
+  const matchedRow = pf ? pfAtSite(ctx, pf, site_id) : undefined;
+  const matched = matchedRow ? matchedRow.id : null;
 
   if (!/^\d+$/.test(pf)) exceptions.push('PF not numeric');
   else if ((ctx.pfCount.get(pf) || 0) > 1) exceptions.push('duplicate PF within batch');
@@ -77,6 +89,8 @@ function validateOpening(raw, ctx) {
   if ([balance, accrued, taken].every(Number.isFinite) && Math.abs(balance - (accrued - taken)) > 0.5)
     exceptions.push('balance != accrued - taken (>0.5d)');
   if (matched) warnings.push('attaching to an existing employee (matched by PF)');
+  if (!matched && pf && ctx.existing.has(pf))
+    warnings.push('PF exists only at a DIFFERENT site (site-level PF) — not attached; a new employee record would be created at this site — verify the file\'s site');
   // A negative opening balance is a VALID deficit (Omid's ruling, 2026-07-09):
   // carried as a negative opening bucket that offsets future accrual, never
   // clamped to zero. It is WARNED (for visibility) not excepted — the
@@ -125,46 +139,69 @@ function validateEmployee(raw, ctx) {
   const site_id = ctx.sites.get(site.toUpperCase()) || null;
   const exceptions = [], warnings = [];
 
-  // ENRICH-BY-PF (identity-verified): a PF that already exists — e.g. the 103
-  // North Mara employees an earlier opening-balance load created with identity
-  // fields missing — is the SAME person (PF is the authoritative key), so the
-  // master ENRICHES that record instead of duplicating or refusing. But only
-  // when the identity checks out: a different NAME or a different SITE on the
-  // same PF is genuine ambiguity → exception, never an overwrite.
-  let matched = null, correctSite = false;
-  const prior = pf ? ctx.existing.get(pf) : undefined;
+  // ENRICH-BY-PF (identity-verified) under SITE-LEVEL PF (Kira ruling
+  // 2026-07-12): (site, PF) is the identity key.
+  //   • PF exists at THIS site → the same person: enrich (name must verify —
+  //     a different name at the same site stays an exception).
+  //   • PF exists only at ANOTHER site as a BARE row (identity-less stub a
+  //     balances load created at a legacy/coarse site) with the SAME name →
+  //     still that person: enrich + accept the master's authoritative site.
+  //   • PF exists only at ANOTHER site as a MASTERED record → a legitimate
+  //     cross-site duplicate: LOAD as a NEW employee at this site and FLAG for
+  //     later correction (pending Head of HR approval) — never excluded, never
+  //     merged. emp_no stays company-unique, so the new row carries the PF as
+  //     legacy_id only and its employee number is left unassigned.
+  let matched = null, correctSite = false, empnoConflict = false;
+  const priors = pf ? (ctx.existing.get(pf) || []) : [];
   if (!/^\d+$/.test(pf)) exceptions.push('PF not numeric');
   else if ((ctx.pfCount.get(pf) || 0) > 1) exceptions.push('duplicate PF within batch');
-  else if (prior) {
-    if (!sameName(prior.full_name, name))
-      exceptions.push(`PF already loaded with a DIFFERENT name ("${prior.full_name}" vs "${name}") — verify identity, refusing to overwrite`);
-    else if (site_id && prior.site_id && prior.site_id !== site_id && prior.position != null)
-      // A MASTERED record (position set) never moves site — the cross-site PF
-      // collision case (same PF listed by two site files): flagged, not moved.
-      exceptions.push('PF already loaded at a DIFFERENT site — verify, refusing to move');
-    else {
-      matched = prior.id;
-      if (site_id && prior.site_id && prior.site_id !== site_id) {
-        // A BARE record (created identity-less by a balances load, possibly at
-        // the legacy coarse site) accepts the master's authoritative site —
-        // e.g. legacy 'North Mara' splitting into the two project sites.
-        correctSite = true;
-        warnings.push('site corrected to the master file\'s site (previous record was identity-less at a legacy/coarse site)');
+  else if (priors.length) {
+    const here = site_id ? priors.find((p) => p.site_id === site_id) : undefined;
+    const bareElsewhere = priors.find((p) => p.site_id !== site_id && p.position == null && sameName(p.full_name, name));
+    if (here) {
+      if (!sameName(here.full_name, name))
+        exceptions.push(`PF already loaded at THIS site with a DIFFERENT name ("${here.full_name}" vs "${name}") — verify identity, refusing to overwrite`);
+      else {
+        matched = here.id;
+        warnings.push('enriching an existing employee (matched by PF, name verified) — identity fields filled in, leave kept');
       }
+    } else if (site_id && bareElsewhere) {
+      matched = bareElsewhere.id;
+      correctSite = true;
+      warnings.push('site corrected to the master file\'s site (previous record was identity-less at a legacy/coarse site)');
       warnings.push('enriching an existing employee (matched by PF, name verified) — identity fields filled in, leave kept');
+    } else if (site_id) {
+      empnoConflict = true;
+      const sameNamed = priors.some((p) => sameName(p.full_name, name));
+      warnings.push(`cross-site duplicate PF — loaded as a new employee at this site, FLAGGED for correction (pending Head of HR approval)${
+        sameNamed ? '; the other site lists the SAME name — possibly one person in two site files' : ''}; employee number left unassigned (PF kept as legacy id)`);
     }
   }
   if (!name) exceptions.push('name missing');
   if (!site_id) exceptions.push(`unknown site "${site}"`);
   // reporting_to_pf must resolve to a REAL employee — in this batch or already
-  // loaded. Unresolvable → exception (no fabricated manager links, Kira ruling).
+  // loaded AT THIS SITE (site-level PF: a bare PF cannot point across sites).
+  // Unresolvable → exception (no fabricated manager links, Kira ruling).
   if (reporting_to_pf) {
     const inBatch = (ctx.pfCount.get(reporting_to_pf) || 0) > 0;
-    if (!inBatch && !ctx.existing.has(reporting_to_pf))
-      exceptions.push(`reporting_to_pf "${reporting_to_pf}" does not resolve to a loaded employee`);
+    if (!inBatch && !pfAtSite(ctx, reporting_to_pf, site_id))
+      exceptions.push(`reporting_to_pf "${reporting_to_pf}" does not resolve to a loaded employee at this site`);
   }
   if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
     warnings.push(`email "${email}" is not a valid address — stored for review, NOT usable as an ESS login`);
+  // Email = login identity (Kira ruling 2026-07-12): NEVER shared. A duplicate
+  // — within the batch or against an address already assigned to a DIFFERENT
+  // employee — is an EXCEPTION, not a warning: whoever sets the password first
+  // on a shared address owns the other person's payslip and personal data.
+  if (email) {
+    if ((ctx.emailCount.get(email) || 0) > 1)
+      exceptions.push('duplicate email within this batch — a login address is personal, never shared');
+    else {
+      const owners = ctx.emailOwners.get(email) || [];
+      if (owners.some((o) => o.id !== matched))
+        exceptions.push('email already assigned to a different employee — refusing to create a shared login');
+    }
+  }
   if (norm(raw.hire_date || raw.joined_at) && !hire_date) warnings.push(`unparseable hire_date "${norm(raw.hire_date)}" — loaded without a join date`);
   if (!position) warnings.push('position (job title) missing — completeness punch-list');
   if (!national_id) warnings.push('national_id missing — completeness punch-list');
@@ -189,24 +226,79 @@ function validateEmployee(raw, ctx) {
   return { pf, site_id, matched_employee: matched,
     normalized: { pf, name, site, site_id, position, dept, hire_date, national_id, tin, bank,
       level, employment_type, email, phone, reporting_to_pf, reports_to_title,
-      correct_site: correctSite, pii },
+      correct_site: correctSite, empno_conflict: empnoConflict, pii },
+    exceptions, warnings, status: exceptions.length ? 'exception' : 'clean' };
+}
+
+// ── Payroll-master validation (Kira 2026-07-12) ─────────────────────────────
+// Pay data behind the pay-visibility gate (employee_pay). Payroll NEVER creates
+// an employee — the master must already hold the person at this site; identity
+// is verified (PF at site + name), amounts must be plausible numbers. Values
+// load verbatim; anomalies are flagged, never "fixed".
+function validatePayroll(raw, ctx) {
+  const pf = norm(raw.pf), site = norm(raw.site);
+  const name = norm(raw.name) ||
+    [raw.first_name, raw.middle_name, raw.surname].map(norm).filter(Boolean).join(' ');
+  // A BLANK amount is ABSENT, not zero (num('') would read 0 — a real salary).
+  const amt = (v) => (norm(v) === '' ? NaN : num(v));
+  const basic = amt(raw.basic_salary), gross = amt(raw.gross_salary);
+  const currency = norm(raw.currency).toUpperCase();
+  const bank = norm(raw.bank), bank_account = idstr(raw.bank_account);
+  const site_id = ctx.sites.get(site.toUpperCase()) || null;
+  const exceptions = [], warnings = [];
+
+  const prior = pf && site_id ? pfAtSite(ctx, pf, site_id) : undefined;
+  if (!/^\d+$/.test(pf)) exceptions.push('PF not numeric');
+  else if ((ctx.pfCount.get(pf) || 0) > 1) exceptions.push('duplicate PF within batch');
+  if (!site_id) exceptions.push(`unknown site "${site}"`);
+  if (site_id && /^\d+$/.test(pf) && !prior)
+    exceptions.push('no employee with this PF at this site — load the employee master first (payroll never creates people)');
+  if (prior && name && !sameName(prior.full_name, name))
+    exceptions.push(`payroll row names a DIFFERENT person than the employee at this PF ("${prior.full_name}" vs "${name}") — verify identity`);
+  if (!Number.isFinite(basic) && !Number.isFinite(gross))
+    exceptions.push('neither basic nor gross salary is a number');
+  for (const [label, v] of [['basic', basic], ['gross', gross]]) {
+    if (Number.isFinite(v) && v < 0) exceptions.push(`${label} salary is negative`);
+  }
+  if (Number.isFinite(basic) && Number.isFinite(gross) && gross < basic)
+    warnings.push('gross below basic — verify against the source document');
+  if (!Number.isFinite(basic)) warnings.push('basic salary missing — completeness punch-list');
+  if (currency && !/^[A-Z]{3}$/.test(currency)) warnings.push(`currency "${currency}" is not a 3-letter code — verify`);
+
+  return { pf, site_id, matched_employee: prior ? prior.id : null,
+    normalized: { pf, name, site, site_id, basic, gross, currency: currency || null,
+      bank: bank || null, bank_account: bank_account || null },
     exceptions, warnings, status: exceptions.length ? 'exception' : 'clean' };
 }
 
 // ── Permit validation ───────────────────────────────────────────────────────
+// Keyed on PF (Kira ruling 2026-07-12) — name match is only a last-resort
+// fallback needing manual confirm. Site-level PF: a PF that exists at several
+// sites needs the row's site column to disambiguate; without one it is genuine
+// ambiguity → exception, never a guess.
 async function validatePermit(raw, ctx, exec) {
   const pf = norm(raw.pf), name = norm(raw.name), permit = norm(raw.permit || raw.permit_name);
-  const expiry = norm(raw.expiry);
+  const expiry = norm(raw.expiry), site = norm(raw.site);
+  const site_id = site ? (ctx.sites.get(site.toUpperCase()) || null) : null;
   const exceptions = [], warnings = [];
-  let matched = pf && ctx.existing.has(pf) ? ctx.existing.get(pf).id : null;
-  let by = matched ? 'pf' : null;
-  if (!matched && name) {  // fall back to name match, which needs manual confirm
+  let matched = null, by = null;
+  const priors = pf ? (ctx.existing.get(pf) || []) : [];
+  if (priors.length === 1) { matched = priors[0].id; by = 'pf'; }
+  else if (priors.length > 1) {
+    const atSite = site_id ? priors.filter((p) => p.site_id === site_id) : [];
+    if (atSite.length === 1) { matched = atSite[0].id; by = 'pf+site'; }
+    else exceptions.push(`PF matches employees at ${priors.length} sites — a site column is required to disambiguate (site-level PF)`);
+  }
+  if (priors.length === 1 && name && !sameName(priors[0].full_name, name))
+    warnings.push(`permit row names "${name}" but the PF belongs to "${priors[0].full_name}" — verify against the source document`);
+  if (!matched && !exceptions.length && name) {  // fall back to name match, which needs manual confirm
     const r = await exec.query('SELECT id FROM employee WHERE lower(full_name)=lower($1)', [name]);
-    if (r.rows[0]) { matched = r.rows[0].id; by = 'name'; warnings.push('matched by name — manual confirm'); }
+    if (r.rows.length === 1) { matched = r.rows[0].id; by = 'name'; warnings.push('matched by name — manual confirm'); }
   }
   if (!permit) exceptions.push('permit name missing');
   if (!/^\d{4}-\d{2}-\d{2}$/.test(expiry)) exceptions.push('expiry required (YYYY-MM-DD)');
-  if (!matched) exceptions.push('no employee match (PF or name)');
+  if (!matched && !exceptions.some((e) => e.startsWith('PF matches')))
+    exceptions.push('no employee match (PF or name)');
 
   return { pf, site_id: null, matched_employee: matched,
     normalized: { pf, name, permit, expiry, matched_by: by },
@@ -215,27 +307,35 @@ async function validatePermit(raw, ctx, exec) {
 
 // Control totals over the CLEAN rows. opening_balance: per-site {count,sum_balance}
 // keyed by site name; employee_master: per-site {count} (a headcount check, no
-// sum); permit: a single {count}.
+// sum); payroll_master: per-site {count,sum_basic}; permit: a single {count}.
 function computeControl(kind, cleanRows) {
   if (kind === 'permit') return { ALL: { count: cleanRows.length } };
   const by = {};
   for (const r of cleanRows) {
     const k = norm(r.normalized.site).toUpperCase();
-    by[k] = by[k] || { count: 0, sum_balance: 0 };
+    by[k] = by[k] || { count: 0, ...(kind === 'opening_balance' ? { sum_balance: 0 } : {}),
+      ...(kind === 'payroll_master' ? { sum_basic: 0 } : {}) };
     by[k].count += 1;
     if (kind === 'opening_balance') by[k].sum_balance = round2(by[k].sum_balance + r.normalized.balance);
+    if (kind === 'payroll_master' && Number.isFinite(r.normalized.basic))
+      by[k].sum_basic = round2(by[k].sum_basic + r.normalized.basic);
   }
   return by;
 }
 
-// Normalise a caller's supplied control totals ([{site,count[,sum_balance]
-// [,allow_shortfall]}] or the permit {count}) into the same shape
+// Normalise a caller's supplied control totals ([{site,count[,sum_balance|
+// sum_basic][,allow_shortfall]}] or the permit {count}) into the same shape
 // computeControl produces.
 function normSupplied(kind, supplied) {
-  if (kind === 'permit') return { ALL: { count: Number((supplied && supplied.count) || 0) } };
+  if (kind === 'permit') {
+    return { ALL: { count: Number((supplied && supplied.count) || 0),
+      ...(supplied && supplied.allow_shortfall ? { allow_shortfall: true } : {}) } };
+  }
   const by = {};
   for (const s of supplied || []) {
-    by[norm(s.site).toUpperCase()] = { count: Number(s.count || 0), sum_balance: round2(Number(s.sum_balance || 0)),
+    by[norm(s.site).toUpperCase()] = { count: Number(s.count || 0),
+      ...(kind === 'opening_balance' ? { sum_balance: round2(Number(s.sum_balance || 0)) } : {}),
+      ...(kind === 'payroll_master' ? { sum_basic: round2(Number(s.sum_basic || 0)) } : {}),
       ...(s.allow_shortfall ? { allow_shortfall: true } : {}) };
   }
   return by;
@@ -253,15 +353,19 @@ function reconcile(kind, supplied, computed) {
       // canonical headcount stands, known-bad rows carry as flagged exceptions
       // and the gap is REPORTED, not silently absorbed. Only a shortfall is
       // tolerated: MORE clean rows than the canonical count still hard-blocks
-      // (that catches duplicates and wrong-site rows).
+      // (that catches duplicates and wrong-site rows). A tolerated shortfall
+      // also skips the sum check for that site — with rows excepted, the sum
+      // can only differ, and the shortfall report already carries the gap.
       if (s.allow_shortfall && c.count < s.count) {
         shortfalls.push({ site: k, expected: s.count, loaded: c.count, shortfall: s.count - c.count });
-      } else {
-        mismatches.push({ site: k, field: 'count', expected: s.count, computed: c.count });
+        continue;
       }
+      mismatches.push({ site: k, field: 'count', expected: s.count, computed: c.count });
     }
     if (kind === 'opening_balance' && round2(s.sum_balance) !== round2(c.sum_balance))
       mismatches.push({ site: k, field: 'sum_balance', expected: s.sum_balance, computed: c.sum_balance });
+    if (kind === 'payroll_master' && round2(s.sum_basic) !== round2(c.sum_basic))
+      mismatches.push({ site: k, field: 'sum_basic', expected: s.sum_basic, computed: c.sum_basic });
   }
   return { ok: mismatches.length === 0, mismatches, ...(shortfalls.length ? { shortfalls } : {}) };
 }
@@ -277,21 +381,36 @@ async function evaluate(exec, companyId, kind, rows) {
   // Batch-wide identity-number counts (employee_master anomaly flags): two rows
   // sharing a NIDA/TIN is a data-quality question for the owner, not a block.
   const natCount = new Map(), tinCount = new Map();
+  // Email = login identity (Kira): batch-wide counts + current DB assignments,
+  // so a duplicate can be REJECTED (exception), never silently shared.
+  const emailCount = new Map(), emailOwners = new Map();
   if (kind === 'employee_master') {
     for (const r of rows) {
       const n = idstr(r.national_id), t = idstr(r.tin);
       if (n) natCount.set(n, (natCount.get(n) || 0) + 1);
       if (t) tinCount.set(t, (tinCount.get(t) || 0) + 1);
+      const e = norm(r.email).toLowerCase();
+      if (e) emailCount.set(e, (emailCount.get(e) || 0) + 1);
+    }
+    const emails = [...emailCount.keys()];
+    if (emails.length) {
+      const ph = emails.map((_, i) => `$${i + 1}`).join(',');
+      const r = await exec.query(`SELECT id, lower(email) AS email FROM employee WHERE lower(email) IN (${ph})`, emails);
+      for (const row of r.rows) {
+        const prev = emailOwners.get(row.email);
+        if (prev) prev.push({ id: row.id }); else emailOwners.set(row.email, [{ id: row.id }]);
+      }
     }
   }
   const today = new Date().toISOString().slice(0, 10);
-  const ctx = { sites, pfCount, existing, annual, openingYear, natCount, tinCount, today };
+  const ctx = { sites, pfCount, existing, annual, openingYear, natCount, tinCount, emailCount, emailOwners, today };
 
   const results = [];
   for (let i = 0; i < rows.length; i++) {
     let res;
     if (kind === 'permit') res = await validatePermit(rows[i], ctx, exec);
     else if (kind === 'employee_master') res = validateEmployee(rows[i], ctx);
+    else if (kind === 'payroll_master') res = validatePayroll(rows[i], ctx);
     else res = validateOpening(rows[i], ctx);
     results.push({ row_no: i + 1, ...res });
   }
@@ -406,9 +525,11 @@ async function approve(session, kind, body, opts = {}) {
              ...(nzd.correct_site ? [r.site_id] : [])]);
         } else {
           // EM: create the employee through the application path (site-scoped,
-          // directory-visible). PF is the legacy number AND emp_no.
+          // directory-visible). PF is the legacy number AND emp_no — EXCEPT a
+          // flagged cross-site duplicate, where emp_no stays company-unique so
+          // the new row keeps the PF as legacy_id only (number unassigned).
           empId = await employees.create(c, session.company_id, {
-            legacy_id: nzd.pf, emp_no: nzd.pf, full_name: nzd.name, site_id: r.site_id,
+            legacy_id: nzd.pf, emp_no: nzd.empno_conflict ? null : nzd.pf, full_name: nzd.name, site_id: r.site_id,
             dept: nzd.dept, position: nzd.position, joined_at: nzd.hire_date,
             role_code: 'R01', status: 'active', email: nzd.email || null, phone: nzd.phone || null,
           });
@@ -480,6 +601,23 @@ async function approve(session, kind, body, opts = {}) {
         if (!attached) await c.query(
           `INSERT INTO leave_carry (company_id, employee_id, days, carried_for_year, opening_bucket)
            VALUES ($1,$2,$3,$4,true)`, [session.company_id, empId, nzd.balance, nzd.year]);
+      } else if (kind === 'payroll_master') {
+        // Pay data behind the pay gate (employee_pay), upsert-with-coalesce so a
+        // re-run enriches and a payroll load never blanks identity fields. The
+        // matched employee was verified at validation (PF at site + name).
+        await c.query(
+          `INSERT INTO employee_pay (employee_id, company_id, basic_salary, gross_salary, pay_currency,
+                  bank_name, bank_account)
+           VALUES ($1,$2,$3,$4,$5,$6,$7)
+           ON CONFLICT (employee_id) DO UPDATE SET
+             basic_salary = coalesce(EXCLUDED.basic_salary, employee_pay.basic_salary),
+             gross_salary = coalesce(EXCLUDED.gross_salary, employee_pay.gross_salary),
+             pay_currency = coalesce(EXCLUDED.pay_currency, employee_pay.pay_currency),
+             bank_name    = coalesce(EXCLUDED.bank_name, employee_pay.bank_name),
+             bank_account = coalesce(EXCLUDED.bank_account, employee_pay.bank_account)`,
+          [r.matched_employee, session.company_id,
+           Number.isFinite(nzd.basic) ? nzd.basic : null, Number.isFinite(nzd.gross) ? nzd.gross : null,
+           nzd.currency || null, nzd.bank || null, nzd.bank_account || null]);
       } else {
         await c.query(
           `INSERT INTO employee_document (company_id, employee_id, kind, name, valid_until)
@@ -494,11 +632,14 @@ async function approve(session, kind, body, opts = {}) {
       for (const r of cleanRows) {
         const mgrPf = r.normalized.reporting_to_pf;
         if (!mgrPf) continue;
+        // Site-level PF: both ends of the link resolve WITHIN the row's site —
+        // the same number at another site is a different person.
         await c.query(
           `UPDATE employee SET manager_id = m.id
              FROM employee m
-            WHERE employee.legacy_id = $1 AND m.legacy_id = $2 AND m.id <> employee.id`,
-          [r.normalized.pf, mgrPf]);
+            WHERE employee.legacy_id = $1 AND employee.site_id = $3
+              AND m.legacy_id = $2 AND m.site_id = $3 AND m.id <> employee.id`,
+          [r.normalized.pf, mgrPf, r.site_id]);
       }
     }
     await c.query(`UPDATE ingest_batch SET status='committed', committed_by=$2, committed_at=now() WHERE id=$1`,
