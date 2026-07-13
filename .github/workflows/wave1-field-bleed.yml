@@ -154,9 +154,9 @@ jobs:
         run: |
           SSH="ssh $(cat /tmp/ssh_host)"
           $SSH "sudo -u postgres psql -d hcmos -c \"
-            DELETE FROM session WHERE device_id IN (SELECT id FROM device d JOIN employee e ON e.id=d.employee_id
+            DELETE FROM session WHERE device_id IN (SELECT d.id FROM device d JOIN employee e ON e.id=d.employee_id
               WHERE e.company_id='$UAT_CO' AND e.role_code='R01');
-            DELETE FROM device WHERE employee_id IN (SELECT id FROM employee WHERE company_id='$UAT_CO' AND role_code='R01');\""
+            DELETE FROM device WHERE employee_id IN (SELECT e.id FROM employee e WHERE e.company_id='$UAT_CO' AND e.role_code='R01');\""
           $SSH "sudo -u postgres psql -d hcmos -c \"
             SELECT (SELECT hash FROM audit WHERE company_id='$UAT_CO' AND seq=638) IS NOT NULL AS seq638_present,
                    (SELECT max(seq) FROM audit WHERE company_id='$UAT_CO') AS head_seq_now,
