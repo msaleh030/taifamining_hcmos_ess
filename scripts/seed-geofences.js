@@ -42,13 +42,12 @@ async function main() {
       const site = (await c.query(
         'SELECT id FROM site WHERE company_id=$1 AND name=$2', [company, siteName])).rows[0];
       if (!site) { console.log(`  SKIP ${siteName} — site not on this box`); continue; }
-      // Idempotent upsert by (site, name); the DB guard (migration 034) is the
-      // real backstop — this insert will fail loudly on any out-of-bounds value.
-      const upd = await c.query(
-        `UPDATE geofence_zone SET center_lat=$3, center_lng=$4, radius_m=$5
-          WHERE company_id=$1 AND site_id=$2 AND name=$6`,
-        [company, site.id, lat, lng, r, siteName]);
-      if (!upd.rowCount) await c.query(
+      // AUTHORITATIVE: the six confirmed zones are the truth. Replace ALL zones
+      // for this site with the single confirmed one, so no stale/demo zone (e.g.
+      // an L&H zone left at TSF coordinates) can wrongly accept a clock-in. The
+      // DB guard (migration 034) fails any out-of-bounds value loudly at insert.
+      await c.query('DELETE FROM geofence_zone WHERE company_id=$1 AND site_id=$2', [company, site.id]);
+      await c.query(
         `INSERT INTO geofence_zone (company_id, site_id, name, center_lat, center_lng, radius_m)
          VALUES ($1,$2,$3,$4,$5,$6)`, [company, site.id, siteName, lat, lng, r]);
       seeded += 1;

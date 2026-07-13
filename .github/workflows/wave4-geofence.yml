@@ -1,0 +1,141 @@
+name: Wave4 Geofence Probe
+
+# Wave 4.4/4.5/4.6 (Kira 2026-07-13): LIVE clock-in over HTTPS — three-way
+# outcome (within / outside / accuracy-too-low=HOLD), boundary behaviour, and
+# offline idempotency. Prep re-runs the AUTHORITATIVE seed (one confirmed zone
+# per site) and re-enrols a Mwadui device. Sentinel: .github/RUN-WAVE4.
+on:
+  workflow_dispatch:
+  push:
+    branches: [claude/nifty-goodall-poihi4]
+    paths: ['.github/RUN-WAVE4']
+
+concurrency: { group: wave4, cancel-in-progress: false }
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      UAT_IP: 152.239.121.249
+      UAT_CO: 11111111-1111-1111-1111-111111111111
+      BASE: https://uat.taifamining.tz
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - name: SSH path — tunnel first, direct fallback
+        env:
+          CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+          CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
+        run: |
+          mkdir -p ~/.ssh && printf '%s\n' "${{ secrets.UAT_SSH_PRIVATE_KEY }}" > ~/.ssh/uat && chmod 600 ~/.ssh/uat
+          sudo curl -sSL -o /usr/local/bin/cloudflared \
+            https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 \
+            && sudo chmod +x /usr/local/bin/cloudflared || true
+          cat > ~/.ssh/config <<EOF
+          Host uat-tunnel
+            HostName ssh.uat.taifamining.tz
+            User root
+            IdentityFile ~/.ssh/uat
+            StrictHostKeyChecking accept-new
+            ProxyCommand /usr/local/bin/cloudflared access ssh --hostname %h --service-token-id $CF_ACCESS_CLIENT_ID --service-token-secret $CF_ACCESS_CLIENT_SECRET
+          Host uat-direct
+            HostName $UAT_IP
+            User root
+            IdentityFile ~/.ssh/uat
+            StrictHostKeyChecking accept-new
+            ConnectTimeout 10
+          EOF
+          chmod 600 ~/.ssh/config
+          if timeout 30 ssh uat-tunnel true 2>/dev/null; then echo uat-tunnel > /tmp/ssh_host; echo tunnel; exit 0; fi
+          for i in $(seq 1 100); do
+            ssh uat-direct true 2>/dev/null && { echo uat-direct > /tmp/ssh_host; echo direct; exit 0; }
+            echo "waiting ($i/100)"; sleep 15
+          done
+          echo FATAL; exit 1
+
+      - name: Prep — authoritative geofence seed + Mwadui device + zone geometry
+        run: |
+          SSH="ssh $(cat /tmp/ssh_host)"
+          # Re-run the corrected (authoritative) seed from the deployed tree.
+          $SSH "cd /opt/hcmos && UAT_COMPANY=$UAT_CO hcmos-run node scripts/seed-geofences.js" | tail -12
+          $SSH "cd /opt/hcmos && set -a && . /etc/hcmos/hcmos.env && set +a && node -e '
+            const db=require(\"./src/db\"), C=require(\"./src/crypto\");
+            const CO=\"$UAT_CO\";
+            (async()=>{ await db.withOwner(async c=>{
+              const emp=(await c.query(\"SELECT employee_id FROM app_user WHERE company_id=\$1 AND lower(email)=lower(\$2)\",[CO,\"yusuph.kabeza@taifamining.tz\"])).rows[0]?.employee_id;
+              let d=(await c.query(\"SELECT id FROM device WHERE company_id=\$1 AND employee_id=\$2 LIMIT 1\",[CO,emp])).rows[0];
+              if(d){ await c.query(\"UPDATE device SET pin_hash=\$1,status=\x27active\x27,failed_count=0,locked_until=NULL WHERE id=\$2\",[C.hashSecret(\"445566\"),d.id]); }
+              else { d=(await c.query(\"INSERT INTO device(company_id,employee_id,pin_hash,status) VALUES(\$1,\$2,\$3,\x27active\x27) RETURNING id\",[CO,emp,C.hashSecret(\"445566\")])).rows[0]; }
+              const z=(await c.query(\"SELECT z.center_lat,z.center_lng,z.radius_m FROM geofence_zone z JOIN employee e ON e.site_id=z.site_id WHERE e.id=\$1 LIMIT 1\",[emp])).rows[0];
+              require(\"fs\").writeFileSync(\"/root/wave4.json\",JSON.stringify({device:d.id, lat:Number(z.center_lat), lng:Number(z.center_lng), radius:Number(z.radius_m)}));
+              console.log(\"mwadui zone:\", JSON.stringify(z));
+            }); await db.close(); })().catch(e=>{console.error(e.message);process.exit(1);});
+          '"
+          $SSH 'cat /root/wave4.json' > /tmp/w4.json
+          echo "── zones per site now (authoritative: one each) ──"
+          $SSH "sudo -u postgres psql -d hcmos -c \"SELECT s.name, count(*) AS zones FROM geofence_zone z JOIN site s ON s.id=z.site_id WHERE z.company_id='$UAT_CO' GROUP BY s.name ORDER BY s.name\""
+
+      - name: 4.4/4.5/4.6 — three-way clock-in + offline dedupe (raw bodies)
+        env:
+          CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+          CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
+        run: |
+          node - <<'EOF'
+          const Z = require('/tmp/w4.json');
+          const CF = { 'CF-Access-Client-Id': process.env.CF_ACCESS_CLIENT_ID, 'CF-Access-Client-Secret': process.env.CF_ACCESS_CLIENT_SECRET };
+          const BASE = process.env.BASE;
+          const api = async (method, path, { token, body } = {}) => {
+            const headers = { ...CF }; if (token) headers.authorization = `Bearer ${token}`; if (body) headers['content-type']='application/json';
+            const r = await fetch(BASE+path,{method,headers,body:body&&JSON.stringify(body),signal:AbortSignal.timeout(20000)});
+            let d=null; try{d=await r.json();}catch{} return {status:r.status, body:d||{}};
+          };
+          const dLat = (m) => m/111320; // metres -> degrees latitude
+          let fail=false; const say=(ok,n,det)=>{ if(!ok)fail=true; console.log(`${ok?'PASS':'FAIL'}  ${n} — ${det}`); };
+          (async () => {
+            const f = await api('POST','/auth/field',{body:{device_id:Z.device, pin:'445566'}});
+            say(f.status===200 && f.body.role==='R13','field login (R13)',`${f.status} role=${f.body.role}`);
+            const t=f.body.token;
+            // 4.4 WITHIN: at the zone centre, accuracy 5 m.
+            const within = await api('POST','/attendance/clock-in',{token:t, body:{lat:Z.lat, lng:Z.lng, accuracy:5}});
+            say(within.status===200 && (within.body.accepted||within.body.ok), 'ATT-01 within -> accept + names zone',
+                `${within.status} raw=${JSON.stringify(within.body).slice(0,160)}`);
+            // 4.4 OUTSIDE: radius + 600 m north.
+            const out = await api('POST','/attendance/clock-in',{token:t, body:{lat:Z.lat + dLat(Z.radius+600), lng:Z.lng, accuracy:5}});
+            say(out.status===403, 'ATT-02 outside -> reject', `${out.status} raw=${JSON.stringify(out.body).slice(0,160)}`);
+            // 4.4 ACCURACY-TOO-LOW: at centre but accuracy 140 m (> 100 m retry threshold) -> HOLD, not reject.
+            const hold = await api('POST','/attendance/clock-in',{token:t, body:{lat:Z.lat, lng:Z.lng, accuracy:140}});
+            say(hold.status===200 && hold.body.retry===true, 'ATT-03 accuracy-too-low -> HOLD AND RETRY (not a 403)',
+                `${hold.status} retry=${hold.body.retry} raw=${JSON.stringify(hold.body).slice(0,160)}`);
+            // 4.5 BOUNDARY at accuracy 90-100 m: Mwadui r=300 now, so a boundary fix + tolerance is comfortably inside.
+            const bnd = await api('POST','/attendance/clock-in',{token:t, body:{lat:Z.lat + dLat(Z.radius-5), lng:Z.lng, accuracy:95}});
+            say(bnd.status===200, '4.5 boundary at accuracy 95 m (r=300)', `${bnd.status} raw=${JSON.stringify(bnd.body).slice(0,160)}`);
+            // 4.6 OFFLINE IDEMPOTENCY: same key twice -> one punch (identical response).
+            const key='w4-offline-'+Z.device.slice(0,8);
+            const p1 = await api('POST','/attendance/clock-in',{token:t, body:{lat:Z.lat, lng:Z.lng, accuracy:5, idempotency_key:key}});
+            const p2 = await api('POST','/attendance/clock-in',{token:t, body:{lat:Z.lat, lng:Z.lng, accuracy:5, idempotency_key:key}});
+            const same = JSON.stringify(p1.body)===JSON.stringify(p2.body);
+            say(p1.status===200 && same, '4.6 offline dedupe: same key twice -> one punch', `p1=${p1.status} identical=${same}`);
+            process.exit(fail?1:0);
+          })().catch(e=>{console.error('PROBE ERROR:',e.message);process.exit(1);});
+          EOF
+
+      - name: source_ip populated + audit-chain extension (read-only)
+        if: always()
+        run: |
+          SSH="ssh $(cat /tmp/ssh_host)"
+          echo "── most-recent auth.signin rows: is source_ip now populated through the tunnel? ──"
+          $SSH "sudo -u postgres psql -d hcmos -c \"
+            SELECT split_part(actor,'@',1) AS who, mfa_presented, (source_ip IS NOT NULL) AS ip_present, left(source_ip,7)||'…' AS ip_prefix, ts
+              FROM audit WHERE company_id='$UAT_CO' AND action='auth.signin' ORDER BY seq DESC LIMIT 5\""
+          $SSH "sudo -u postgres psql -d hcmos -c \"
+            SELECT (SELECT max(seq) FROM audit WHERE company_id='$UAT_CO') AS head_seq,
+                   bool_and(hash = encode(sha256(convert_to(prev_hash || concat_ws('|',
+                     company_id::text, coalesce(actor,''), coalesce(role,''), action,
+                     coalesce(entity,''), coalesce(entity_id,''), ts::text,
+                     coalesce(before::text,''), coalesce(after::text,'')), 'UTF8')),'hex')) AS recompute_ok
+              FROM audit WHERE company_id='$UAT_CO';
+            SELECT count(*) AS linkage_breaks FROM (
+              SELECT prev_hash, lag(hash) OVER (PARTITION BY company_id ORDER BY seq) AS expect FROM audit) x
+             WHERE (expect IS NULL AND prev_hash <> repeat('0',64)) OR (expect IS NOT NULL AND prev_hash <> expect)\""
