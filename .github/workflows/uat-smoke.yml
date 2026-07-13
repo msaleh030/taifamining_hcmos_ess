@@ -49,18 +49,50 @@ jobs:
           echo "body: $(head -c 200 /tmp/h-tok.json)"
           echo "(302 + location to cloudflareaccess.com login = the token did not match any Service Auth policy on THIS application; 200 JSON = edge cleared)"
 
-      - name: SSH key + reachability (fetch-only; port 22 flaps in ~10-15 min windows — same ~25 min patience as deploys)
+      # Hostinger's edge drops inbound port 22 in 10-25 min windows (proven, not
+      # our firewall). The Cloudflare tunnel is an OUTBOUND connection from the
+      # box and is immune — so SSH rides the tunnel when the ssh.* hostname is
+      # configured (tunnel public hostname ssh.uat.taifamining.tz -> localhost:22
+      # + an Access app with the same Service Auth policy), and falls back to
+      # direct-IP with the ~25 min patience when it is not.
+      - name: SSH path — tunnel first (flap-immune), direct-IP fallback
+        env:
+          CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+          CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
         run: |
           mkdir -p ~/.ssh && printf '%s\n' "${{ secrets.UAT_SSH_PRIVATE_KEY }}" > ~/.ssh/uat && chmod 600 ~/.ssh/uat
+          sudo curl -sSL -o /usr/local/bin/cloudflared \
+            https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 \
+            && sudo chmod +x /usr/local/bin/cloudflared || echo "cloudflared download failed — direct-IP only"
+          cat > ~/.ssh/config <<EOF
+          Host uat-tunnel
+            HostName ssh.uat.taifamining.tz
+            User root
+            IdentityFile ~/.ssh/uat
+            StrictHostKeyChecking accept-new
+            ProxyCommand /usr/local/bin/cloudflared access ssh --hostname %h --service-token-id $CF_ACCESS_CLIENT_ID --service-token-secret $CF_ACCESS_CLIENT_SECRET
+          Host uat-direct
+            HostName $UAT_IP
+            User root
+            IdentityFile ~/.ssh/uat
+            StrictHostKeyChecking accept-new
+            ConnectTimeout 10
+          EOF
+          # (EOF above must be at the script's base indent — heredoc terminator)
+          chmod 600 ~/.ssh/config
+          if timeout 30 ssh uat-tunnel true 2>/dev/null; then
+            echo uat-tunnel > /tmp/ssh_host; echo "SSH path: THROUGH THE TUNNEL (flap-immune)"; exit 0
+          fi
+          echo "tunnel SSH not available (ssh.uat hostname/Access app not configured yet?) — trying direct IP"
           for i in $(seq 1 100); do
-            ssh -i ~/.ssh/uat -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 "root@$UAT_IP" true && exit 0
-            echo "ssh not reachable yet (attempt $i/100)"; sleep 15
+            ssh uat-direct true 2>/dev/null && { echo uat-direct > /tmp/ssh_host; echo "SSH path: direct IP"; exit 0; }
+            echo "direct ssh not reachable yet (attempt $i/100)"; sleep 15
           done
-          echo "FATAL: box unreachable over SSH for ~25 min — cannot fetch credentials"; exit 1
+          echo "FATAL: box unreachable over BOTH tunnel-SSH and direct IP"; exit 1
 
       - name: Fetch credentials + read-only inputs (never printed)
         run: |
-          SSH="ssh -i $HOME/.ssh/uat -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 root@$UAT_IP"
+          SSH="ssh $(cat /tmp/ssh_host)"
           $SSH 'cat /root/uat-credentials.txt' > /tmp/creds && chmod 600 /tmp/creds
           echo "creds fetched: $(wc -l < /tmp/creds) lines (content never echoed)"
           $SSH "sudo -u postgres psql -d hcmos -Atc \"
@@ -109,7 +141,7 @@ jobs:
       - name: C7 audit evidence (read-only; actors masked to local-part)
         if: always()
         run: |
-          SSH="ssh -i $HOME/.ssh/uat -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 root@$UAT_IP"
+          SSH="ssh $(cat /tmp/ssh_host)"
           echo "audit rows written in the last 30 minutes (action, actor role, masked actor, count):"
           $SSH "sudo -u postgres psql -d hcmos -c \"
             SELECT action, role, split_part(actor,'@',1) AS actor_local, count(*)
