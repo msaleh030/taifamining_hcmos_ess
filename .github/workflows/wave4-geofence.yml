@@ -112,7 +112,7 @@ jobs:
             const bnd = await api('POST','/attendance/clock-in',{token:t, body:{lat:Z.lat + dLat(Z.radius-5), lng:Z.lng, accuracy:95}});
             say(bnd.status===200, '4.5 boundary at accuracy 95 m (r=300)', `${bnd.status} raw=${JSON.stringify(bnd.body).slice(0,160)}`);
             // 4.6 OFFLINE IDEMPOTENCY: same key twice -> one punch (identical response).
-            const key='w4-offline-'+Z.device.slice(0,8);
+            const key='w4-offline-'+Date.now(); // fresh per run so p1 is a true first-write
             const p1 = await api('POST','/attendance/clock-in',{token:t, body:{lat:Z.lat, lng:Z.lng, accuracy:5, idempotency_key:key}});
             const p2 = await api('POST','/attendance/clock-in',{token:t, body:{lat:Z.lat, lng:Z.lng, accuracy:5, idempotency_key:key}});
             // One punch: replay returns the SAME attendance_id, flagged deduped:true.
