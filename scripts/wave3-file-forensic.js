@@ -21,7 +21,8 @@ const { readSheet, normHdr } = require(path.join(__dirname, 'xlsx-to-master.js')
 const SYN = {
   pf: ['payroll no', 'payroll number', 'pf', 'pf no', 'payroll', 'employee id'],
   name: ['name', 'full name', 'employee name', 'names', 'first name', 'surname'],
-  nida: ['nida', 'nida no', 'nida number', 'national id', 'national id no', 'national identification', 'nin'],
+  nida: ['nida', 'nida no', 'nida number', 'national id', 'national id no', 'national id number',
+    'national identification', 'national identification number', 'national identity number', 'nin', 'nin no'],
   tin: ['tin', 'tin no', 'tin number'],
   accrued: ['accrued', 'accrued days', 'days accrued', 'leave accrued', 'leave days accrued', 'earned', 'entitlement earned'],
   taken: ['taken', 'days taken', 'leave taken', 'leave days taken', 'used', 'utilised', 'utilized'],

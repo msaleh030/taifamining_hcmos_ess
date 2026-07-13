@@ -88,7 +88,7 @@ jobs:
           SSH="ssh $(cat /tmp/ssh_host)"
           echo "── NM payroll currently in the DB: rows attached to the L&H/Airstrip site ──"
           $SSH "sudo -u postgres psql -d hcmos <<'SQL'
-          \echo -- employees at the North Mara L&H site (the payroll file's site) --
+          \echo -- employees at the North Mara L&H site (the payroll-file site) --
           SELECT s.name AS site, count(*) AS employee_rows
             FROM employee e JOIN site s ON s.id=e.site_id
            WHERE e.company_id='$UAT_CO' AND s.name='North Mara - L&H and Airstrip Project'
