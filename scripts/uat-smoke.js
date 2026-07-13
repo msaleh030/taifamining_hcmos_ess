@@ -368,16 +368,19 @@ const siteName = (id) => (INPUTS.sites.find((s) => s.id === id) || {}).name || i
       `${parts.join(' | ')}${anyOpen ? '' : ` — nothing inside the lead windows yet (earliest loaded permit expiry ${INPUTS.earliest_permit_expiry}); routing rules are config-pinned (expat->R11, business->R06, medical->site R03) but UNEXERCISED by live data`}`);
   }
 
-  // C6 — organogram: renders, positional, site-scoped.
-  {
+  // C6 — organogram: renders, positional, site-scoped. (body.sites is an
+  // OBJECT keyed by site name: { "<site>": [{position, reports_to_title, headcount}] }.)
+  try {
     const asR11 = await api('GET', '/reports/organogram', { token: await login(E.omid) });
     const asR03 = await api('GET', '/reports/organogram', { token: await login(E.yusuph) });
-    const sitesOf = (b) => (b && b.sites ? b.sites.map((s) => s.site || s.name) : []);
+    const sitesOf = (b) => (b && b.sites && typeof b.sites === 'object' ? Object.keys(b.sites) : []);
     const s11 = sitesOf(asR11.body), s03 = sitesOf(asR03.body);
-    const ok = asR11.status === 200 && s11.length === 6 && asR03.status === 200 && s03.length === 1 && /Mwadui/.test(s03[0] || '');
+    const positional = asR11.body && asR11.body.basis === 'position-hierarchy';
+    const ok = asR11.status === 200 && s11.length === 6 && positional
+      && asR03.status === 200 && s03.length === 1 && /Mwadui/.test(s03[0] || '');
     report('C6', ok ? 'PASS' : 'FAIL',
-      `R11: ${asR11.status}, ${s11.length} sites; R03 Yusuph: ${asR03.status}, sites=[${s03.join(';')}] (want Mwadui only); limitation note present: ${!!(asR11.body && JSON.stringify(asR11.body).includes('cannot say WHICH'))}`);
-  }
+      `R11: ${asR11.status}, ${s11.length} sites, basis=${asR11.body && asR11.body.basis}; R03 Yusuph: ${asR03.status}, sites=[${s03.join(';')}] (want Mwadui only); limitation note present: ${!!(asR11.body && JSON.stringify(asR11.body).includes('cannot say WHICH'))}`);
+  } catch (e) { report('C6', 'FAIL', `organogram probe error: ${e.message}`); }
 
   // C7 — audit trail: verified via read-only DB query in the workflow step that
   // follows this script (no HTTP audit endpoint exists — reported as a gap).
