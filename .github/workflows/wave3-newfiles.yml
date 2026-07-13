@@ -83,7 +83,7 @@ jobs:
           run_one "Leave — L&H / Airwick"   "Leave*[Aa]irwick*.xlsx"     leave
           run_one "Payroll — North Mara"    "Payroll*North_Mara*.xlsx"   payroll
 
-      - name: 3.x — NM payroll: does the file match what is LOADED? (SELECT only)
+      - name: "3.x — NM payroll — does the file match what is LOADED? (SELECT only)"
         run: |
           SSH="ssh $(cat /tmp/ssh_host)"
           echo "── NM payroll currently in the DB: rows attached to the L&H/Airstrip site ──"
