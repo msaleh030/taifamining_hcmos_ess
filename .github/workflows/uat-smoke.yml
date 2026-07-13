@@ -90,6 +90,9 @@ jobs:
           node -e "JSON.parse(require('fs').readFileSync('/tmp/inputs.json','utf8')); console.log('inputs.json parses OK')"
 
       - name: Smoke test over HTTPS (the tunnel)
+        env:
+          CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+          CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
         run: node scripts/uat-smoke.js "${{ inputs.base_url || 'https://uat.taifamining.tz' }}" /tmp/creds /tmp/inputs.json
 
       - name: C7 audit evidence (read-only; actors masked to local-part)

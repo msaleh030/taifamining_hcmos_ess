@@ -33,8 +33,15 @@ const essDev = new Map();
 }
 
 const T = () => AbortSignal.timeout(20000);
+// Cloudflare Access service token (Zero Trust -> Service Auth): the edge sits
+// in front of the app, so a headless client authenticates to ACCESS with these
+// headers, then to the APP with its own Bearer token — two layers, as designed.
+const CF = process.env.CF_ACCESS_CLIENT_ID
+  ? { 'CF-Access-Client-Id': process.env.CF_ACCESS_CLIENT_ID,
+      'CF-Access-Client-Secret': process.env.CF_ACCESS_CLIENT_SECRET || '' }
+  : {};
 async function api(method, path, { token, body } = {}) {
-  const headers = {};
+  const headers = { ...CF };
   if (token) headers.authorization = `Bearer ${token}`;
   if (body !== undefined) headers['content-type'] = 'application/json';
   const res = await fetch(BASE + path, { method, headers, signal: T(),
@@ -92,7 +99,9 @@ const siteName = (id) => (INPUTS.sites.find((s) => s.id === id) || {}).name || i
   const h = await api('GET', '/health');
   if (h.status !== 200 || h.body.ok !== true) {
     console.log(`BLOCKED-ALL: ${BASE}/health returned ${h.status} ${JSON.stringify(h.body).slice(0, 160)}`);
-    console.log('The edge (Cloudflare Access?) is intercepting unauthenticated API calls — a service token or Access bypass for this runner is needed before any item can execute.');
+    console.log(CF['CF-Access-Client-Id']
+      ? 'A service token WAS sent but the edge still intercepted — check the Access policy includes a Service Auth rule for this token.'
+      : 'Cloudflare Access intercepts unauthenticated clients. Kira: Zero Trust -> Access -> Service Auth -> create a service token, add a Service Auth policy to the uat application, then set repo secrets CF_ACCESS_CLIENT_ID / CF_ACCESS_CLIENT_SECRET.');
     process.exit(2);
   }
   console.log(`edge OK: /health 200 build=${h.body.build}\n`);
@@ -378,7 +387,7 @@ const siteName = (id) => (INPUTS.sites.find((s) => s.id === id) || {}).name || i
   const dev = essDev.get(E.yusuph);
   // D1 — reachability of the app + the field-auth endpoint through the tunnel.
   {
-    const root = await fetch(BASE + '/', { signal: T() });
+    const root = await fetch(BASE + '/', { signal: T(), headers: { ...CF } });
     const html = (await root.text()).slice(0, 400);
     const spa = root.status === 200 && /<div id="root"|<script/i.test(html);
     report('D1', spa ? 'PASS' : 'FAIL',
