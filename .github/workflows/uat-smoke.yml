@@ -23,7 +23,7 @@ jobs:
   smoke:
     name: Smoke over the tunnel (report-only)
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 45
     env:
       UAT_IP: 152.239.121.249
       UAT_CO: 11111111-1111-1111-1111-111111111111
@@ -32,14 +32,20 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: 22 }
 
-      - name: SSH key + reachability (fetch-only; port 22 flaps in windows)
+      - name: Tunnel liveness (SSH-independent — proves the box/app even when port 22 flaps)
+        run: |
+          BASE="${{ inputs.base_url || 'https://uat.taifamining.tz' }}"
+          code=$(curl -sS -m 15 -o /tmp/health.json -w '%{http_code}' "$BASE/health" || echo 'unreachable')
+          echo "tunnel /health -> $code $(head -c 200 /tmp/health.json 2>/dev/null)"
+
+      - name: SSH key + reachability (fetch-only; port 22 flaps in ~10-15 min windows — same ~25 min patience as deploys)
         run: |
           mkdir -p ~/.ssh && printf '%s\n' "${{ secrets.UAT_SSH_PRIVATE_KEY }}" > ~/.ssh/uat && chmod 600 ~/.ssh/uat
-          for i in $(seq 1 30); do
+          for i in $(seq 1 100); do
             ssh -i ~/.ssh/uat -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 "root@$UAT_IP" true && exit 0
-            echo "ssh not reachable yet (attempt $i/30)"; sleep 10
+            echo "ssh not reachable yet (attempt $i/100)"; sleep 15
           done
-          echo "FATAL: box unreachable over SSH — cannot fetch credentials"; exit 1
+          echo "FATAL: box unreachable over SSH for ~25 min — cannot fetch credentials"; exit 1
 
       - name: Fetch credentials + read-only inputs (never printed)
         run: |
