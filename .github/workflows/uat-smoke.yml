@@ -11,6 +11,9 @@ on:
         description: Public base URL through the tunnel
         default: https://uat.taifamining.tz
         required: true
+  push:
+    branches: [claude/nifty-goodall-poihi4]
+    paths: ['.github/RUN-SMOKE']
 
 concurrency:
   group: uat-smoke
@@ -81,7 +84,7 @@ jobs:
           node -e "JSON.parse(require('fs').readFileSync('/tmp/inputs.json','utf8')); console.log('inputs.json parses OK')"
 
       - name: Smoke test over HTTPS (the tunnel)
-        run: node scripts/uat-smoke.js "${{ inputs.base_url }}" /tmp/creds /tmp/inputs.json
+        run: node scripts/uat-smoke.js "${{ inputs.base_url || 'https://uat.taifamining.tz' }}" /tmp/creds /tmp/inputs.json
 
       - name: C7 audit evidence (read-only; actors masked to local-part)
         if: always()
