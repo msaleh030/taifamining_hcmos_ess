@@ -1,0 +1,143 @@
+name: Super-Admin Split Probe
+
+# Job 2g/2h (Kira 2026-07-13): LIVE regression over HTTPS through the tunnel —
+# all four probes are NEGATIVE (403s), so nothing on the box mutates — plus the
+# read-only audit-chain re-verification (head must EXTEND from seq 601 /
+# cb5071bc4776…, not break). Sentinel: .github/RUN-SPLIT-PROBE.
+on:
+  workflow_dispatch:
+  push:
+    branches: [claude/nifty-goodall-poihi4]
+    paths: ['.github/RUN-SPLIT-PROBE']
+
+concurrency:
+  group: uat-split-probe
+  cancel-in-progress: false
+
+jobs:
+  probe:
+    name: Rank-lattice split probes (HTTPS) + audit extension (read-only)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      UAT_IP: 152.239.121.249
+      UAT_CO: 11111111-1111-1111-1111-111111111111
+      BASE: https://uat.taifamining.tz
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+
+      - name: SSH path — tunnel first, direct fallback
+        env:
+          CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+          CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
+        run: |
+          mkdir -p ~/.ssh && printf '%s\n' "${{ secrets.UAT_SSH_PRIVATE_KEY }}" > ~/.ssh/uat && chmod 600 ~/.ssh/uat
+          sudo curl -sSL -o /usr/local/bin/cloudflared \
+            https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 \
+            && sudo chmod +x /usr/local/bin/cloudflared || true
+          cat > ~/.ssh/config <<EOF
+          Host uat-tunnel
+            HostName ssh.uat.taifamining.tz
+            User root
+            IdentityFile ~/.ssh/uat
+            StrictHostKeyChecking accept-new
+            ProxyCommand /usr/local/bin/cloudflared access ssh --hostname %h --service-token-id $CF_ACCESS_CLIENT_ID --service-token-secret $CF_ACCESS_CLIENT_SECRET
+          Host uat-direct
+            HostName $UAT_IP
+            User root
+            IdentityFile ~/.ssh/uat
+            StrictHostKeyChecking accept-new
+            ConnectTimeout 10
+          EOF
+          chmod 600 ~/.ssh/config
+          if timeout 30 ssh uat-tunnel true 2>/dev/null; then echo uat-tunnel > /tmp/ssh_host; echo "SSH via tunnel"; exit 0; fi
+          for i in $(seq 1 100); do
+            ssh uat-direct true 2>/dev/null && { echo uat-direct > /tmp/ssh_host; echo "SSH direct"; exit 0; }
+            echo "waiting for ssh ($i/100)"; sleep 15
+          done
+          echo "FATAL: unreachable"; exit 1
+
+      - name: Inputs (read-only) — target user ids + creds
+        run: |
+          SSH="ssh $(cat /tmp/ssh_host)"
+          $SSH 'cat /root/uat-credentials.txt' > /tmp/creds && chmod 600 /tmp/creds
+          $SSH "sudo -u postgres psql -d hcmos -Atc \"
+            SELECT json_build_object(
+              'rajesh',   (SELECT id FROM app_user WHERE company_id='$UAT_CO' AND lower(email)='rajesh.chohan@taifamining.tz'),
+              'super',    (SELECT id FROM app_user WHERE company_id='$UAT_CO' AND is_super_admin LIMIT 1),
+              'supers_flagged', (SELECT count(*) FROM app_user WHERE company_id='$UAT_CO' AND is_super_admin),
+              'rank_row', (SELECT value FROM config WHERE company_id='$UAT_CO' AND key='auth.role.rank'))
+          \"" > /tmp/inputs.json
+          node -e "const i=require('/tmp/inputs.json'); console.log('supers flagged:', i.supers_flagged, '| lattice:', i.rank_row)"
+
+      - name: 2g — the four probes, live over HTTPS (all negative; zero mutation)
+        env:
+          CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+          CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
+        run: |
+          node - <<'EOF'
+          const fs = require('node:fs');
+          const I = JSON.parse(fs.readFileSync('/tmp/inputs.json', 'utf8'));
+          const creds = fs.readFileSync('/tmp/creds', 'utf8');
+          const latest = new Map(); let m;
+          const re = /email\s*:\s*(\S+)[\s\S]*?password\s*:\s*(\S+)/g;
+          while ((m = re.exec(creds))) latest.set(m[1], m[2]);
+          const CF = { 'CF-Access-Client-Id': process.env.CF_ACCESS_CLIENT_ID,
+                       'CF-Access-Client-Secret': process.env.CF_ACCESS_CLIENT_SECRET };
+          const BASE = process.env.BASE;
+          const api = async (method, path, { token, body } = {}) => {
+            const headers = { ...CF };
+            if (token) headers.authorization = `Bearer ${token}`;
+            if (body) headers['content-type'] = 'application/json';
+            const r = await fetch(BASE + path, { method, headers, body: body && JSON.stringify(body),
+              signal: AbortSignal.timeout(20000) });
+            let data = null; try { data = await r.json(); } catch { /* html */ }
+            return { status: r.status, body: data || {} };
+          };
+          const login = async (email) => {
+            const r = await api('POST', '/auth/console', { body: { email, password: latest.get(email) } });
+            if (r.status !== 200) throw new Error(`login ${email}: ${r.status}`);
+            return r.body.token;
+          };
+          (async () => {
+            const r03 = await login('uat.probe.r03@taifamining.tz');
+            const r12 = await login('rajesh.chohan@taifamining.tz');
+            const reset = (tok, target) => api('POST', '/auth/reset/password',
+              { token: tok, body: { target_user: target, new_password: 'Probe!Never9x' } });
+            const checks = [
+              ['R03 -> reset Rajesh (R12 sysadmin)', await reset(r03, I.rajesh), 403],
+              ['R03 -> reset super account',         await reset(r03, I.super), 403],
+              ['R12 sysadmin -> reset super',        await reset(r12, I.super), 403],
+              ['R12 sysadmin -> employee directory', await api('GET', '/employees?limit=1', { token: r12 }), 403],
+            ];
+            let fail = false;
+            for (const [name, r, want] of checks) {
+              const ok = r.status === want;
+              if (!ok) fail = true;
+              console.log(`${ok ? 'PASS' : 'FAIL'}  ${name} -> ${r.status} (want ${want}) ${r.body.error ? `"${r.body.error}"` : ''}`);
+            }
+            process.exit(fail ? 1 : 0);
+          })().catch((e) => { console.error('PROBE ERROR:', e.message); process.exit(1); });
+          EOF
+
+      - name: 2h — audit chain EXTENDS from seq 601 / cb5071bc4776… (read-only)
+        if: always()
+        run: |
+          SSH="ssh $(cat /tmp/ssh_host)"
+          $SSH "sudo -u postgres psql -d hcmos -c \"
+            SELECT (SELECT hash FROM audit WHERE company_id='$UAT_CO' AND seq=601) =
+                   'cb5071bc47761974a9abcee9b55c97930dfb7de85b69d86ef7153a41dd41eb5b' AS seq601_hash_intact,
+                   (SELECT max(seq) FROM audit WHERE company_id='$UAT_CO') AS head_seq_now,
+                   (SELECT hash FROM audit WHERE company_id='$UAT_CO' ORDER BY seq DESC LIMIT 1) AS head_hash_now;
+            SELECT bool_and(hash = encode(sha256(convert_to(prev_hash || concat_ws('|',
+                   company_id::text, coalesce(actor,''), coalesce(role,''), action,
+                   coalesce(entity,''), coalesce(entity_id,''), ts::text,
+                   coalesce(before::text,''), coalesce(after::text,'')), 'UTF8')),'hex')) AS recompute_ok,
+                   count(*) AS rows_checked FROM audit;
+            SELECT count(*) AS linkage_breaks FROM (
+              SELECT seq, prev_hash, lag(hash) OVER (PARTITION BY company_id ORDER BY seq) AS expect
+                FROM audit) x
+             WHERE (expect IS NULL AND prev_hash <> repeat('0',64))
+                OR (expect IS NOT NULL AND prev_hash <> expect)\""

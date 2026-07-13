@@ -29,7 +29,10 @@ async function consoleLogin({ email, password, mfa }) {
   if (u.company_status !== 'active') throw genericAuthError();
   if (future(u.locked_until)) throw genericAuthError();   // AC-AUTH-03: still locked
 
-  const mfaRequired = (await cfg.getInt(u.company_id, 'auth.mfa.required', 1)) !== 0;
+  // Super accounts are MFA-MANDATORY unconditionally (Kira 2026-07-13): the
+  // setup-phase auth.mfa.required=0 convenience never applies to them.
+  const mfaRequired = u.is_super_admin === true
+    || (await cfg.getInt(u.company_id, 'auth.mfa.required', 1)) !== 0;
   if (mfaRequired && !mfa) throw genericAuthError();      // AUTH-04: never name the factor
 
   // Verify the factors; status must be active (terminated/suspended refused).
@@ -145,22 +148,29 @@ async function resetPassword(session, { target_user, new_password }) {
   if (!owners.includes(session.role_code)) throw new HttpError(403, 'forbidden');
 
   // Target must be in the actor's tenant — RLS makes other tenants invisible.
-  const exists = await db.withTenant(session.company_id, (c) =>
-    c.query('SELECT role_code FROM app_user WHERE id=$1', [target_user]));
-  if (exists.rows.length === 0) throw new HttpError(404, 'not found');
+  const both = await db.withTenant(session.company_id, (c) =>
+    c.query(`SELECT id, role_code, is_super_admin FROM app_user WHERE id = $1 OR id = $2`,
+      [target_user, session.user_id]));
+  const target = both.rows.find((r) => r.id === target_user);
+  const actorRow = both.rows.find((r) => r.id === session.user_id);
+  if (!target) throw new HttpError(404, 'not found');
 
   // bughunt-B #3 (rank lattice): a reset may only TARGET a role at or below the
   // actor's rank. Being in password.reset.owner opens the door; it must NEVER
   // let an R03 HR Officer rotate an R12 System Administrator's / super-admin's
   // credential and take the account over. Fail closed: a role absent from the
   // lattice outranks everyone as a target.
+  // Super-admin split (Kira 2026-07-13): Super Admin ranks via the
+  // is_super_admin COLUMN (auth.super.rank, default 100), never via a role
+  // code — so only a super can reset a super, whatever role code either holds.
   const ranks = new Map();
   for (const part of String(await cfg.getConfig(session.company_id, 'auth.role.rank', '') || '').split(',')) {
     const [role, n] = part.split(':').map((s) => s.trim());
     if (role && Number.isFinite(Number(n))) ranks.set(role, Number(n));
   }
-  const actorRank = ranks.get(session.role_code) ?? 0;
-  const targetRank = ranks.get(exists.rows[0].role_code) ?? Infinity;
+  const superRank = await cfg.getInt(session.company_id, 'auth.super.rank', 100);
+  const actorRank = actorRow && actorRow.is_super_admin ? superRank : (ranks.get(session.role_code) ?? 0);
+  const targetRank = target.is_super_admin ? superRank : (ranks.get(target.role_code) ?? Infinity);
   if (targetRank > actorRank) throw new HttpError(403, 'cannot reset a higher-ranked account (rank lattice)');
 
   const actor = await actorEmail(session);

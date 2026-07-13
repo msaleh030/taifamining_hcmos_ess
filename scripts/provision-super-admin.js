@@ -30,8 +30,8 @@ async function provisionSuperAdmin({ company, email, password }) {
     const dup = await c.query('SELECT 1 FROM app_user WHERE company_id=$1 AND email=$2', [company, email]);
     if (dup.rows.length) throw new Error(`${email} already exists — refusing to overwrite (no silent admin reset)`);
     await c.query(
-      `INSERT INTO app_user(id, company_id, employee_id, email, password_hash, mfa_secret, role_code, status)
-       VALUES ($1,$2,NULL,$3,$4,$5,'R12','active')`,
+      `INSERT INTO app_user(id, company_id, employee_id, email, password_hash, mfa_secret, role_code, status, is_super_admin)
+       VALUES ($1,$2,NULL,$3,$4,$5,'R12','active', true)`,
       [userId, company, email, C.hashSecret(password), secret]);
   });
   const label = encodeURIComponent(`HCMOS:${email}`);

@@ -45,7 +45,12 @@ const DEFAULT_CONFIG = {
   // Role rank lattice (bughunt-B #3): a credential reset may only TARGET a role
   // at or below the actor's rank — an R03 HR Officer must never take over an
   // R12 System Administrator / executive account. Registry-overridable.
-  'auth.role.rank': 'R01:10,R13:10,R08:20,R09:20,R10:20,R02:30,R03:30,R05:30,R04:50,R06:50,R07:50,R11:70,R14:70,R15:70,R16:70,R12:90',
+  // Super-admin split (Kira 2026-07-13): R12 System Administrator sits at 60 —
+  // the IT tier, above site managers (50), BELOW the people-data tier (70) —
+  // and Super Admin ranks via the app_user.is_super_admin COLUMN at
+  // auth.super.rank, never via a role code. Migration 032 rewrote live rows.
+  'auth.role.rank': 'R01:10,R13:10,R08:20,R09:20,R10:20,R02:30,R03:30,R05:30,R04:50,R06:50,R07:50,R12:60,R11:70,R14:70,R15:70,R16:70',
+  'auth.super.rank': '100',
   'device.reenrolment.owner':   'R12',     // [TBC] new phone / replaced kiosk
 
   // default role for a field session when the device's employee has no app_user
