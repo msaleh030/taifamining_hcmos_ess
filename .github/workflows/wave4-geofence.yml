@@ -115,8 +115,12 @@ jobs:
             const key='w4-offline-'+Z.device.slice(0,8);
             const p1 = await api('POST','/attendance/clock-in',{token:t, body:{lat:Z.lat, lng:Z.lng, accuracy:5, idempotency_key:key}});
             const p2 = await api('POST','/attendance/clock-in',{token:t, body:{lat:Z.lat, lng:Z.lng, accuracy:5, idempotency_key:key}});
-            const same = JSON.stringify(p1.body)===JSON.stringify(p2.body);
-            say(p1.status===200 && same, '4.6 offline dedupe: same key twice -> one punch', `p1=${p1.status} identical=${same}`);
+            // One punch: replay returns the SAME attendance_id, flagged deduped:true.
+            const onePunch = p1.status===200 && p2.status===200
+              && p1.body.attendance_id === p2.body.attendance_id
+              && p1.body.deduped===false && p2.body.deduped===true;
+            say(onePunch, '4.6 offline dedupe: same key twice -> one punch (same id, replay deduped)',
+                `p1.id=${(p1.body.attendance_id||'').slice(0,8)} p2.id=${(p2.body.attendance_id||'').slice(0,8)} p2.deduped=${p2.body.deduped}`);
             process.exit(fail?1:0);
           })().catch(e=>{console.error('PROBE ERROR:',e.message);process.exit(1);});
           EOF
