@@ -32,11 +32,22 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: 22 }
 
-      - name: Tunnel liveness (SSH-independent — proves the box/app even when port 22 flaps)
+      - name: Tunnel liveness + Access diagnosis (SSH-independent)
+        env:
+          CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+          CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
         run: |
           BASE="${{ inputs.base_url || 'https://uat.taifamining.tz' }}"
-          code=$(curl -sS -m 15 -o /tmp/health.json -w '%{http_code}' "$BASE/health" || echo 'unreachable')
-          echo "tunnel /health -> $code $(head -c 200 /tmp/health.json 2>/dev/null)"
+          echo "── no token (a stranger's browser): raw status without following redirects"
+          curl -sS -m 15 -o /dev/null -D - "$BASE/health" | sed -n '1p;/^location:/Ip;/^cf-/Ip' || true
+          echo "── WITH service token: raw status without following redirects"
+          curl -sS -m 15 -o /tmp/h-tok.json -D /tmp/h-tok.hdr \
+            -H "CF-Access-Client-Id: $CF_ACCESS_CLIENT_ID" \
+            -H "CF-Access-Client-Secret: $CF_ACCESS_CLIENT_SECRET" \
+            "$BASE/health" || true
+          sed -n '1p;/^location:/Ip;/^cf-/Ip' /tmp/h-tok.hdr
+          echo "body: $(head -c 200 /tmp/h-tok.json)"
+          echo "(302 + location to cloudflareaccess.com login = the token did not match any Service Auth policy on THIS application; 200 JSON = edge cleared)"
 
       - name: SSH key + reachability (fetch-only; port 22 flaps in ~10-15 min windows — same ~25 min patience as deploys)
         run: |
