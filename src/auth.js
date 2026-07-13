@@ -211,14 +211,30 @@ function landing(session) {
 // reads anyone's pay/bank. Kept in lock-step with employees.js:104-118.
 async function readProfile(session, employeeId) {
   if (!isUuid(employeeId)) throw new HttpError(400, 'invalid request');
-  const deny = await cfg.getRoleSet(session.company_id, 'directory.deny.roles', 'R12,R13,R15,R16');
-  if (deny.has(session.role_code)) throw new HttpError(403, 'forbidden');
   return db.withTenant(session.company_id, async (c) => {
+    // ESS self-service (Wave 1.3/1.4): a FIELD session (device+PIN, always R13)
+    // may read its OWN employee record and nothing else — A3 still filters every
+    // field by the R13 session role, so a pay-visible person's DEVICE never sees
+    // pay/bank/tin (D3/D4). Resolve own-employee from the device, falling back to
+    // the linked console account. For a CONSOLE session this bypass never fires.
+    let ownEmp = null;
+    if (session.device_id) {
+      ownEmp = (await c.query('SELECT employee_id FROM device WHERE id=$1', [session.device_id])).rows[0]?.employee_id
+        || (session.user_id
+          ? (await c.query('SELECT employee_id FROM app_user WHERE id=$1', [session.user_id])).rows[0]?.employee_id
+          : null);
+    }
+    const isOwnRecord = ownEmp && ownEmp === employeeId;
+
+    const deny = await cfg.getRoleSet(session.company_id, 'directory.deny.roles', 'R12,R13,R15,R16');
+    if (deny.has(session.role_code) && !isOwnRecord) throw new HttpError(403, 'forbidden');
+
     const r = await c.query('SELECT * FROM employee WHERE id=$1', [employeeId]);
     if (r.rows.length === 0) throw new HttpError(404, 'not found'); // RLS already hid other tenants
     // Site check BEFORE any confidential assembly (Section 17.2): an out-of-site
-    // request 404s exactly as the directory does.
-    if (await sitescope.isScoped(c, session.role_code)) {
+    // request 404s exactly as the directory does. Own-record is exempt (a person
+    // always sees their own site).
+    if (!isOwnRecord && await sitescope.isScoped(c, session.role_code)) {
       const mySites = await sitescope.requesterSites(c, session);
       if (!mySites.length || !mySites.includes(r.rows[0].site_id)) throw new HttpError(404, 'not found');
     }

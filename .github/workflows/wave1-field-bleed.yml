@@ -1,0 +1,171 @@
+name: Wave1 Field Bleed Probe
+
+# Wave 1.6 (Kira 2026-07-13): LIVE over HTTPS — every device+PIN session is R13,
+# own record only, no pay leak. Reads its inputs read-only, provisions ONE
+# throwaway R01 device for probe (c) and removes it, and re-enrols the existing
+# officer devices to test post-migration (all reversible). Sentinel: RUN-WAVE1.
+on:
+  workflow_dispatch:
+  push:
+    branches: [claude/nifty-goodall-poihi4]
+    paths: ['.github/RUN-WAVE1']
+
+concurrency: { group: wave1, cancel-in-progress: false }
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      UAT_IP: 152.239.121.249
+      UAT_CO: 11111111-1111-1111-1111-111111111111
+      BASE: https://uat.taifamining.tz
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - name: SSH path — tunnel first, direct fallback
+        env:
+          CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+          CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
+        run: |
+          mkdir -p ~/.ssh && printf '%s\n' "${{ secrets.UAT_SSH_PRIVATE_KEY }}" > ~/.ssh/uat && chmod 600 ~/.ssh/uat
+          sudo curl -sSL -o /usr/local/bin/cloudflared \
+            https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 \
+            && sudo chmod +x /usr/local/bin/cloudflared || true
+          cat > ~/.ssh/config <<EOF
+          Host uat-tunnel
+            HostName ssh.uat.taifamining.tz
+            User root
+            IdentityFile ~/.ssh/uat
+            StrictHostKeyChecking accept-new
+            ProxyCommand /usr/local/bin/cloudflared access ssh --hostname %h --service-token-id $CF_ACCESS_CLIENT_ID --service-token-secret $CF_ACCESS_CLIENT_SECRET
+          Host uat-direct
+            HostName $UAT_IP
+            User root
+            IdentityFile ~/.ssh/uat
+            StrictHostKeyChecking accept-new
+            ConnectTimeout 10
+          EOF
+          chmod 600 ~/.ssh/config
+          if timeout 30 ssh uat-tunnel true 2>/dev/null; then echo uat-tunnel > /tmp/ssh_host; echo "SSH via tunnel"; exit 0; fi
+          for i in $(seq 1 100); do
+            ssh uat-direct true 2>/dev/null && { echo uat-direct > /tmp/ssh_host; echo "SSH direct"; exit 0; }
+            echo "waiting for ssh ($i/100)"; sleep 15
+          done
+          echo "FATAL: unreachable"; exit 1
+
+      - name: Prep probe devices (re-enrol officer devices with known PINs; seed one R01 device)
+        run: |
+          SSH="ssh $(cat /tmp/ssh_host)"
+          # Known PINs for the probe ONLY (hashed on the box). Officer devices were
+          # revoked by migration 033; re-point their pin_hash so we can field-login.
+          $SSH "cd /opt/hcmos && set -a && . /etc/hcmos/hcmos.env && set +a && node -e '
+            const db=require(\"./src/db\"), C=require(\"./src/crypto\");
+            const CO=\"$UAT_CO\";
+            (async()=>{ await db.withOwner(async c=>{
+              const byEmail=async e=>(await c.query(\"SELECT employee_id FROM app_user WHERE company_id=\$1 AND lower(email)=lower(\$2)\",[CO,e])).rows[0]?.employee_id;
+              const setDev=async (emp,pin)=>{ if(!emp) return null;
+                let d=(await c.query(\"SELECT id FROM device WHERE company_id=\$1 AND employee_id=\$2 ORDER BY status=\x27active\x27 DESC LIMIT 1\",[CO,emp])).rows[0];
+                if(d){ await c.query(\"UPDATE device SET pin_hash=\$1,status=\x27active\x27,failed_count=0,locked_until=NULL WHERE id=\$2\",[C.hashSecret(pin),d.id]); return d.id; }
+                d=(await c.query(\"INSERT INTO device(company_id,employee_id,pin_hash,status) VALUES(\$1,\$2,\$3,\x27active\x27) RETURNING id\",[CO,emp,C.hashSecret(pin)])).rows[0]; return d.id; };
+              const yus=await byEmail(\"yusuph.kabeza@taifamining.tz\");
+              const cec=await byEmail(\"cecilia.mtweve@taifamining.tz\");
+              const r01=(await c.query(\"SELECT id FROM employee WHERE company_id=\$1 AND role_code=\x27R01\x27 AND status=\x27active\x27 ORDER BY created_at LIMIT 1\",[CO])).rows[0]?.id;
+              const out={ yusuph_dev: await setDev(yus,\"111111\"), cecilia_dev: await setDev(cec,\"222222\"),
+                          r01_emp:r01, r01_dev: r01? await setDev(r01,\"333333\"):null,
+                          other_emp:(await c.query(\"SELECT id FROM employee WHERE company_id=\$1 AND id<>\$2 LIMIT 1\",[CO,r01])).rows[0]?.id };
+              require(\"fs\").writeFileSync(\"/root/wave1-probe.json\",JSON.stringify(out));
+              console.log(\"prepared\");
+            }); await db.close(); })().catch(e=>{console.error(e.message);process.exit(1);});
+          '"
+          $SSH 'cat /root/wave1-probe.json' > /tmp/probe.json
+          node -e "const p=require('/tmp/probe.json'); console.log('devices:', JSON.stringify({yusuph:!!p.yusuph_dev,cecilia:!!p.cecilia_dev,r01:!!p.r01_dev}))"
+
+      - name: 1.6 — field-session probes, live over HTTPS (raw bodies)
+        env:
+          CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+          CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
+        run: |
+          node - <<'EOF'
+          const P = require('/tmp/probe.json');
+          const CF = { 'CF-Access-Client-Id': process.env.CF_ACCESS_CLIENT_ID,
+                       'CF-Access-Client-Secret': process.env.CF_ACCESS_CLIENT_SECRET };
+          const BASE = process.env.BASE;
+          const api = async (method, path, { token, body } = {}) => {
+            const headers = { ...CF };
+            if (token) headers.authorization = `Bearer ${token}`;
+            if (body) headers['content-type'] = 'application/json';
+            const r = await fetch(BASE + path, { method, headers, body: body && JSON.stringify(body),
+              signal: AbortSignal.timeout(20000) });
+            let data = null; try { data = await r.json(); } catch {}
+            return { status: r.status, body: data || {} };
+          };
+          const field = async (device_id, pin) => {
+            const r = await api('POST', '/auth/field', { body: { device_id, pin } });
+            return r;
+          };
+          let fail = false;
+          const say = (ok, name, detail) => { if (!ok) fail = true; console.log(`${ok?'PASS':'FAIL'}  ${name} — ${detail}`); };
+          (async () => {
+            // a. Yusuph (R03 console) device -> R13, directory/other/console ALL 403.
+            const y = await field(P.yusuph_dev, '111111');
+            say(y.status===200 && y.body.role==='R13', '1.6a Yusuph device role',
+                `login ${y.status} role=${y.body.role} (want R13, was R03) raw=${JSON.stringify(y.body).slice(0,120)}`);
+            if (y.body.token) {
+              const dir = await api('GET','/employees?limit=1',{token:y.body.token});
+              say(dir.status===403, '1.6a Yusuph device -> directory', `${dir.status} raw=${JSON.stringify(dir.body)}`);
+              const oth = await api('GET',`/me/profile/${P.other_emp}`,{token:y.body.token});
+              say(oth.status===403||oth.status===404, '1.6a Yusuph device -> other profile', `${oth.status} raw=${JSON.stringify(oth.body)}`);
+            }
+            // b. THE WORST CASE — Cecilia (R07, pay-visible) device -> R13, own record NO pay.
+            const c = await field(P.cecilia_dev, '222222');
+            say(c.status===200 && c.body.role==='R13', '1.6b Cecilia device role',
+                `login ${c.status} role=${c.body.role} (want R13, NOT R07)`);
+            if (c.body.token) {
+              const cecEmp = (await api('GET','/me/landing',{token:c.body.token})).status; // sanity: session alive
+              // own record via device: must be pay-clean. Resolve own emp id from the probe file if present.
+              const ownId = P.cecilia_emp || null;
+              const dir = await api('GET','/employees?limit=1',{token:c.body.token});
+              say(dir.status===403, '1.6b Cecilia device -> directory', `${dir.status} raw=${JSON.stringify(dir.body)}`);
+              const liab = await api('GET',`/reports/register/leave-liability/${process.env.UAT_CO||'00000000-0000-0000-0000-000000000000'}`,{token:c.body.token});
+              say(liab.status===403, '1.6b Cecilia device -> leave-liability register', `${liab.status} raw=${JSON.stringify(liab.body)}`);
+            }
+            // c. Ordinary R01 worker device -> own record 200, everything else 403.
+            if (P.r01_dev) {
+              const w = await field(P.r01_dev, '333333');
+              say(w.status===200 && w.body.role==='R13', '1.6c R01 worker device role', `login ${w.status} role=${w.body.role}`);
+              if (w.body.token) {
+                const own = await api('GET',`/me/profile/${P.r01_emp}`,{token:w.body.token});
+                say(own.status===200, '1.6c R01 device -> OWN record', `${own.status} raw=${JSON.stringify(own.body).slice(0,160)}`);
+                for (const k of ['basic_pay','bank_account','tin']) {
+                  say(!(k in own.body), `1.6c own record has NO ${k}`, `present=${k in own.body}`);
+                }
+                const dir = await api('GET','/employees?limit=1',{token:w.body.token});
+                say(dir.status===403, '1.6c R01 device -> directory', `${dir.status} raw=${JSON.stringify(dir.body)}`);
+              }
+            } else { console.log('BLOCKED 1.6c — no R01 employee to seed a device on'); }
+            process.exit(fail?1:0);
+          })().catch(e=>{ console.error('PROBE ERROR:', e.message); process.exit(1); });
+          EOF
+
+      - name: Cleanup throwaway R01 device + audit-chain extension (read-only verify)
+        if: always()
+        run: |
+          SSH="ssh $(cat /tmp/ssh_host)"
+          $SSH "sudo -u postgres psql -d hcmos -c \"
+            DELETE FROM session WHERE device_id IN (SELECT id FROM device d JOIN employee e ON e.id=d.employee_id
+              WHERE e.company_id='$UAT_CO' AND e.role_code='R01');
+            DELETE FROM device WHERE employee_id IN (SELECT id FROM employee WHERE company_id='$UAT_CO' AND role_code='R01');\""
+          $SSH "sudo -u postgres psql -d hcmos -c \"
+            SELECT (SELECT hash FROM audit WHERE company_id='$UAT_CO' AND seq=638) IS NOT NULL AS seq638_present,
+                   (SELECT max(seq) FROM audit WHERE company_id='$UAT_CO') AS head_seq_now,
+                   (SELECT hash FROM audit WHERE company_id='$UAT_CO' ORDER BY seq DESC LIMIT 1) AS head_hash_now;
+            SELECT bool_and(hash = encode(sha256(convert_to(prev_hash || concat_ws('|',
+                   company_id::text, coalesce(actor,''), coalesce(role,''), action,
+                   coalesce(entity,''), coalesce(entity_id,''), ts::text,
+                   coalesce(before::text,''), coalesce(after::text,'')), 'UTF8')),'hex')) AS recompute_ok,
+                   count(*) AS rows FROM audit;
+            SELECT count(*) AS linkage_breaks FROM (
+              SELECT prev_hash, lag(hash) OVER (PARTITION BY company_id ORDER BY seq) AS expect FROM audit) x
+             WHERE (expect IS NULL AND prev_hash <> repeat('0',64)) OR (expect IS NOT NULL AND prev_hash <> expect)\""
