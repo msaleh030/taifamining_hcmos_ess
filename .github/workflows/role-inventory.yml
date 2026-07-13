@@ -1,0 +1,111 @@
+name: Role Inventory (read-only)
+
+# Turn 1 of the role-renumber protocol (Kira): INVENTORY ONLY. Every query in
+# this workflow is a SELECT — nothing on the box is written, and the app is
+# not restarted. Sentinel: .github/RUN-INVENTORY.
+on:
+  workflow_dispatch:
+  push:
+    branches: [claude/nifty-goodall-poihi4]
+    paths: ['.github/RUN-INVENTORY']
+
+concurrency:
+  group: role-inventory
+  cancel-in-progress: false
+
+jobs:
+  inventory:
+    name: Live role inventory (SELECT-only)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      UAT_IP: 152.239.121.249
+      UAT_CO: 11111111-1111-1111-1111-111111111111
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build stamp through the tunnel (no SSH)
+        env:
+          CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+          CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
+        run: |
+          curl -sS -m 15 \
+            -H "CF-Access-Client-Id: $CF_ACCESS_CLIENT_ID" \
+            -H "CF-Access-Client-Secret: $CF_ACCESS_CLIENT_SECRET" \
+            https://uat.taifamining.tz/health || true
+          echo
+
+      - name: SSH path — tunnel first, direct fallback
+        env:
+          CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+          CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
+        run: |
+          mkdir -p ~/.ssh && printf '%s\n' "${{ secrets.UAT_SSH_PRIVATE_KEY }}" > ~/.ssh/uat && chmod 600 ~/.ssh/uat
+          sudo curl -sSL -o /usr/local/bin/cloudflared \
+            https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 \
+            && sudo chmod +x /usr/local/bin/cloudflared || true
+          cat > ~/.ssh/config <<EOF
+          Host uat-tunnel
+            HostName ssh.uat.taifamining.tz
+            User root
+            IdentityFile ~/.ssh/uat
+            StrictHostKeyChecking accept-new
+            ProxyCommand /usr/local/bin/cloudflared access ssh --hostname %h --service-token-id $CF_ACCESS_CLIENT_ID --service-token-secret $CF_ACCESS_CLIENT_SECRET
+          Host uat-direct
+            HostName $UAT_IP
+            User root
+            IdentityFile ~/.ssh/uat
+            StrictHostKeyChecking accept-new
+            ConnectTimeout 10
+          EOF
+          chmod 600 ~/.ssh/config
+          if timeout 30 ssh uat-tunnel true 2>/dev/null; then echo uat-tunnel > /tmp/ssh_host; echo "SSH via tunnel"; exit 0; fi
+          for i in $(seq 1 100); do
+            ssh uat-direct true 2>/dev/null && { echo uat-direct > /tmp/ssh_host; echo "SSH direct"; exit 0; }
+            echo "waiting for ssh ($i/100)"; sleep 15
+          done
+          echo "FATAL: unreachable"; exit 1
+
+      - name: Live role inventory (all SELECTs)
+        run: |
+          SSH="ssh $(cat /tmp/ssh_host)"
+          $SSH 'cat /opt/hcmos/BUILD_SHA 2>/dev/null; echo; sudo -u postgres psql -d hcmos <<'"'"'SQL'"'"'
+          \echo ── migrations applied ──
+          SELECT max(version) AS latest, count(*) AS total FROM schema_migrations;
+          \echo ── app_user roles (console accounts; employee_id NULL = super admin) ──
+          SELECT role_code, count(*) AS accounts,
+                 count(*) FILTER (WHERE employee_id IS NULL) AS no_employee_super,
+                 count(*) FILTER (WHERE status <> '"'"'active'"'"') AS non_active
+            FROM app_user GROUP BY role_code ORDER BY role_code;
+          \echo ── employee roles (all rows incl. non-active) ──
+          SELECT role_code, count(*) AS employees,
+                 count(*) FILTER (WHERE status = '"'"'active'"'"') AS active
+            FROM employee GROUP BY role_code ORDER BY role_code;
+          \echo ── site_scope table (the authoritative scope config) ──
+          SELECT role_code, scoped FROM site_scope ORDER BY role_code;
+          \echo ── tenant config rows whose VALUE carries role codes ──
+          SELECT company_id, key, value FROM config WHERE value ~ '"'"'R(0[1-9]|1[0-7])'"'"' ORDER BY company_id, key;
+          \echo ── HISTORIC AUDIT ROWS by role ──
+          SELECT coalesce(role,'"'"'(null)'"'"') AS role, count(*) AS rows,
+                 min(ts)::date AS first, max(ts)::date AS last
+            FROM audit GROUP BY role ORDER BY role;
+          \echo ── audit head (per tenant): max seq + head hash ──
+          SELECT company_id, max(seq) AS head_seq,
+                 (SELECT hash FROM audit a2 WHERE a2.company_id = a.company_id ORDER BY seq DESC LIMIT 1) AS head_hash
+            FROM audit a GROUP BY company_id ORDER BY company_id;
+          \echo ── audit chain VERIFICATION (recompute + linkage, read-only) ──
+          SELECT bool_and(hash = encode(sha256(convert_to(prev_hash || concat_ws('"'"'|'"'"',
+                 company_id::text, coalesce(actor,'"'"''"'"'), coalesce(role,'"'"''"'"'), action,
+                 coalesce(entity,'"'"''"'"'), coalesce(entity_id,'"'"''"'"'), ts::text,
+                 coalesce(before::text,'"'"''"'"'), coalesce(after::text,'"'"''"'"')), '"'"'UTF8'"'"')),'"'"'hex'"'"')) AS recompute_ok,
+                 count(*) AS rows_checked
+            FROM audit;
+          SELECT count(*) AS linkage_breaks FROM (
+            SELECT seq, prev_hash, lag(hash) OVER (PARTITION BY company_id ORDER BY seq) AS expect
+              FROM audit) x
+           WHERE (expect IS NULL AND prev_hash <> repeat('"'"'0'"'"',64))
+              OR (expect IS NOT NULL AND prev_hash <> expect);
+          \echo ── other tables carrying role codes? (information_schema scan) ──
+          SELECT table_name, column_name FROM information_schema.columns
+           WHERE table_schema='"'"'public'"'"' AND column_name ~ '"'"'role'"'"' ORDER BY 1;
+          SQL'
