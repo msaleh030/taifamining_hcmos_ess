@@ -17,7 +17,7 @@ const future = (ts) => ts && new Date(ts).getTime() > Date.now();
 // MFA (TOTP) is required unless the tenant explicitly disables it with config
 // `auth.mfa.required=0` — a UAT/CRP convenience only. The default keeps
 // AUTH-01's three-factor rule, so tenants are unchanged unless deliberately set.
-async function consoleLogin({ email, password, mfa }) {
+async function consoleLogin({ email, password, mfa }, meta = {}) {
   if (!email || !password) throw genericAuthError();
 
   const r = await db.query('SELECT * FROM auth_lookup_console($1)', [email]);
@@ -51,8 +51,10 @@ async function consoleLogin({ email, password, mfa }) {
 
   const ttl = await cfg.getInt(u.company_id, 'session.ttl', 3600);
   const token = C.newToken();
-  const s = await db.query('SELECT * FROM auth_console_success($1,$2,$3)',
-    [u.user_id, C.tokenHash(token), ttl]);
+  // Forward-only forensics (Kira 2026-07-13): record the source IP and whether a
+  // second factor was actually presented on this auth.signin row.
+  const s = await db.query('SELECT * FROM auth_console_success($1,$2,$3,$4,$5)',
+    [u.user_id, C.tokenHash(token), ttl, meta.source_ip || null, mfa != null && mfa !== '']);
   const land = roles.landingFor(u.role_code);
   return {
     token,

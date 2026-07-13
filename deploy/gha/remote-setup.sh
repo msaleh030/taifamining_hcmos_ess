@@ -275,6 +275,12 @@ load_file() { # xlsx-file site-name conv-kind loader-kind
     || echo "  LOAD FAILED for ${SITE:-$1} — see ${CSV}.exceptions.json on the box"
 }
 
+# ── Geofence zones (Kira Wave 4, 2026-07-13): six CONFIRMED zones incl. Dar
+# Yard's corrected NEGATIVE latitude. The seed parse-checks TZ bounds and the
+# DB guard (migration 034) fails any sign error loudly at INSERT.
+say "geofence zones (six confirmed; TZ-bounds guarded; Dar Yard latitude corrected)"
+UAT_COMPANY=$UAT_CO hcmos-run node scripts/seed-geofences.js || echo "GEOFENCE SEED FAILED — see the parse-back above"
+
 say "leave masters (attach by PF at site; balances -> protected opening buckets)"
 load_file "Leave_Master_File_Head_Office.xlsx"      "Head Office"                       leave opening-balance
 load_file "Leave_Master_File_Mwadui.xlsx"           "Mwadui"                            leave opening-balance

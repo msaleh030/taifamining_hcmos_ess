@@ -62,6 +62,18 @@ function bearer(req) {
   return m ? m[1] : null;
 }
 
+// The real client IP behind the Cloudflare tunnel: cloudflared connects from
+// loopback, so req.socket.remoteAddress is 127.0.0.1; the true origin is in the
+// CF-Connecting-IP header (fall back to the first X-Forwarded-For hop, then the
+// socket). Recorded on auth.signin for forensics; never used for authorization.
+function clientIp(req) {
+  const cf = req.headers['cf-connecting-ip'];
+  if (cf) return String(cf).slice(0, 64);
+  const xff = req.headers['x-forwarded-for'];
+  if (xff) return String(xff).split(',')[0].trim().slice(0, 64);
+  return (req.socket && req.socket.remoteAddress) ? String(req.socket.remoteAddress).slice(0, 64) : null;
+}
+
 // ── Declarative routes. auth defaults true; module/action are optional guards. ──
 const routes = [
   // Liveness/readiness for systemd, the smoke test and edge monitoring. Public,
@@ -78,7 +90,7 @@ const routes = [
   { method: 'GET', pattern: /^\/auth\/config$/, auth: false,
     handler: async () => ({ status: 200, body: await auth.publicAuthConfig() }) },
   { method: 'POST', pattern: /^\/auth\/console$/, auth: false,
-    handler: async (req) => ({ status: 200, body: await auth.consoleLogin(await readJson(req)) }) },
+    handler: async (req) => ({ status: 200, body: await auth.consoleLogin(await readJson(req), { source_ip: clientIp(req) }) }) },
   { method: 'POST', pattern: /^\/auth\/field$/, auth: false,
     handler: async (req) => ({ status: 200, body: await auth.fieldLogin(await readJson(req)) }) },
   { method: 'POST', pattern: /^\/auth\/reset\/password$/,
