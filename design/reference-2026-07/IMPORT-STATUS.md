@@ -19,3 +19,10 @@ Status: PENDING → IMPORTED (or SKIPPED-<reason>).
 - [ ] HCMOS Tenant Provisioning.html
 - [ ] HCMOS ESS Services.html
 ## Stage C (rest of reference — fetch per-build; full list in project inventory)
+
+## Stage C imports 2026-07-14 (ESS slice — fetched for ESS-1..6 builds)
+- [x] Build Handoff - Slice 14 ESS Services.md IMPORTED (handoff/)
+- [x] ess-i18n.js IMPORTED (src/) — E2/E5/E10/E11/E13/E14 EN+SW strings
+- [x] ess-flow.js IMPORTED (src/) — screen structure incl. blockedScreen (E14) + 8 home quick-actions
+- [x] att-i18n.js IMPORTED (src/) — clock in/out, geofence, offline sync + CONFLICT strings EN+SW
+- [x] att-flow.js IMPORTED (src/) — clock-out states + sync-queue/conflict card (keep-device/keep-server/keep-both)
