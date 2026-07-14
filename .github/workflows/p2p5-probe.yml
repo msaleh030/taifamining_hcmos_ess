@@ -66,6 +66,16 @@ jobs:
           SSH="ssh $(cat /tmp/ssh_host)"
           echo "── BUILD_SHA (running process) at START of P2+P5 ──"
           $SSH "curl -fsS http://127.0.0.1:3000/health 2>/dev/null; echo; cat /opt/hcmos/BUILD_SHA 2>/dev/null | head -c 40; echo"
+          # Sweep any prior run's leftovers FIRST — the seed must never trip on
+          # a unique constraint from an interrupted earlier probe.
+          $SSH "sudo -u postgres psql -d hcmos -c \"
+            DELETE FROM notification WHERE employee_id IN (SELECT id FROM employee WHERE full_name LIKE 'Zz P2P5%');
+            DELETE FROM leave_request WHERE employee_id IN (SELECT id FROM employee WHERE full_name LIKE 'Zz P2P5%');
+            DELETE FROM session WHERE device_id IN (SELECT id FROM device WHERE employee_id IN (SELECT id FROM employee WHERE full_name LIKE 'Zz P2P5%'));
+            DELETE FROM session WHERE user_id IN (SELECT id FROM app_user WHERE email LIKE 'zz.p2p5.%@probe.local');
+            DELETE FROM device WHERE employee_id IN (SELECT id FROM employee WHERE full_name LIKE 'Zz P2P5%');
+            DELETE FROM app_user WHERE email LIKE 'zz.p2p5.%@probe.local';
+            DELETE FROM employee WHERE full_name LIKE 'Zz P2P5%';\""
           $SSH "cd /opt/hcmos && set -a && . /etc/hcmos/hcmos.env && set +a && node -e '
             const db=require(\"./src/db\"), C=require(\"./src/crypto\");
             const CO=\"$UAT_CO\";
