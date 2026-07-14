@@ -30,6 +30,16 @@ test('controls flags SoD breach / leaver-with-access / GPS-less punch and lists 
     `INSERT INTO attendance(company_id,employee_id,source) VALUES ($1,$2,'field') RETURNING id`,
     [A, F.EMP.CAROL])).rows[0].id;
   await owner(`UPDATE app_user SET status='active' WHERE id=$1`, [F.USERS.TERM_A.id]); // leaver regains access
+  // Kira 2026-07-14: an ingest commit whose maker and checker are the SAME actor
+  // (the create-a-person + set-their-bank fraud pattern), and one committed with
+  // missing provenance — both must surface as offenders.
+  seeded.sameActor = (await owner(
+    `INSERT INTO ingest_batch(company_id,kind,status,submitted_by,committed_by,committed_at,control,clean_count,exception_count)
+     VALUES ($1,'employee_master','committed',$2,$2,now(),'{}',0,0) RETURNING id`,
+    [A, F.USERS.FINMGR_A.id])).rows[0].id;
+  seeded.noProv = (await owner(
+    `INSERT INTO ingest_batch(company_id,kind,status,submitted_by,committed_by,committed_at,control,clean_count,exception_count)
+     VALUES ($1,'payroll_master','committed',NULL,NULL,now(),'{}',0,0) RETURNING id`, [A])).rows[0].id;
   try {
     const { checks } = await controls.runControls(admin);
     const by = Object.fromEntries(checks.map((c) => [c.check, c]));
@@ -45,10 +55,18 @@ test('controls flags SoD breach / leaver-with-access / GPS-less punch and lists 
 
     assert.equal(by['audit.chain_integrity'].pass, true, 'audit chain intact');
     assert.deepEqual(by['audit.chain_integrity'].offenders, []);
+
+    assert.equal(by['sod.ingest_maker_checker'].pass, false);
+    assert.ok(by['sod.ingest_maker_checker'].offenders.some((o) => o.id === seeded.sameActor),
+      'lists the batch whose maker and checker are the same actor');
+    assert.ok(by['sod.ingest_maker_checker'].offenders.some((o) => o.id === seeded.noProv),
+      'lists the committed batch with no recorded maker/checker (fail-closed provenance)');
   } finally {
     await owner(`UPDATE app_user SET status='terminated' WHERE id=$1`, [F.USERS.TERM_A.id]);
     await owner(`DELETE FROM field_change WHERE id=$1`, [seeded.fc]);
     await owner(`DELETE FROM attendance WHERE id=$1`, [seeded.att]);
+    await owner(`DELETE FROM ingest_batch WHERE id=$1`, [seeded.sameActor]);
+    await owner(`DELETE FROM ingest_batch WHERE id=$1`, [seeded.noProv]);
   }
 });
 

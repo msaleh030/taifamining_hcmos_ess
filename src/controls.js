@@ -45,6 +45,19 @@ async function runControls(session) {
     // 4. Audit-chain — population: every audit row; offender: hash no longer recomputes.
     add('audit.chain_integrity', await one('SELECT 1 FROM audit'), (await c.query(AUDIT_VERIFY)).rows);
 
+    // 5. Ingest maker-checker identity (Kira 2026-07-14) — the ingest commit is
+    //    the one path that CREATES employees and LANDS their bank details, i.e.
+    //    the classic payroll-fraud pattern if a single actor holds both legs.
+    //    The endpoint enforces maker≠checker at approve time; this control
+    //    proves it HELD for every committed batch on record (catches raw-SQL or
+    //    historic bypass). Population: committed batches; offender: the same
+    //    actor on both legs, or a commit with missing provenance (fail-closed —
+    //    a load whose maker or checker is unrecorded cannot be attested).
+    add('sod.ingest_maker_checker', await one(`SELECT 1 FROM ingest_batch WHERE status='committed'`), (await c.query(
+      `SELECT id, kind, submitted_by, committed_by, committed_at FROM ingest_batch
+        WHERE status='committed'
+          AND (submitted_by IS NULL OR committed_by IS NULL OR submitted_by = committed_by)`)).rows);
+
     return { checks, all_pass: checks.every((x) => x.pass) };
   });
 

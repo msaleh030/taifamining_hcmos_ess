@@ -674,6 +674,14 @@ async function approve(session, kind, body, opts = {}) {
     }
     await c.query(`UPDATE ingest_batch SET status='committed', committed_by=$2, committed_at=now() WHERE id=$1`,
       [body.batch_id, session.user_id || null]);
+    // Kira 2026-07-14 (compensating control): an ingest commit is the ONE path
+    // that creates employees AND lands their bank details — it must be on the
+    // tamper-evident chain, naming maker and checker. Same tenant tx: the audit
+    // row commits atomically with the load itself.
+    await c.query('SELECT audit_append($1,$2,$3,$4,$5,$6,$7,$8)', [
+      session.company_id, String(session.user_id || 'system'), session.role_code || null,
+      'ingest.commit', 'ingest_batch', String(body.batch_id), null,
+      { kind, loaded, maker: b.submitted_by || null, checker: session.user_id || null }]);
     return { batch_id: body.batch_id, kind, status: 'committed', loaded };
   });
 }

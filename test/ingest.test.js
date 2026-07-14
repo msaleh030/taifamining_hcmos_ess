@@ -109,6 +109,15 @@ test('OB-2 Finance Manager submits, CFC approves → committed; same person / wr
     const lc = (await owner(`SELECT days, opening_bucket FROM leave_carry WHERE employee_id=$1`, [e.id])).rows[0];
     assert.equal(Number(lc.days), 10);
     assert.equal(lc.opening_bucket, true, 'lands in the protected opening bucket');
+    // Kira 2026-07-14: the commit is ON the tamper-evident chain, naming both legs
+    // (the ingest commit is the one path that creates people + lands bank details).
+    const aud = (await owner(
+      `SELECT actor, after FROM audit
+        WHERE company_id=$1 AND action='ingest.commit' AND entity_id=$2`, [F.TENANT_A, batchId])).rows[0];
+    assert.ok(aud, 'an ingest.commit audit row was appended');
+    assert.equal(aud.after.maker, F.USERS.FINMGR_A.id, 'the maker is named');
+    assert.equal(aud.after.checker, F.USERS.CFC_A.id, 'the checker is named');
+    assert.notEqual(aud.after.maker, aud.after.checker, 'distinct legs on the record');
   } finally {
     await purge(['90010001', '90010002'], [batchId]);
   }
