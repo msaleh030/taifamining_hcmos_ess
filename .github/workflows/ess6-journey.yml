@@ -1,0 +1,272 @@
+name: ESS-6 Journey (apply leave end-to-end + the WHOLE ESS journey, live over HTTPS)
+
+# ESS-6 (E4), Kira 2026-07-14 — apply leave through the SAME payload the real
+# UI submits, landing in the APPROVER'S queue (C10: LV-03/SOD-01/LR-6), and
+# the WHOLE JOURNEY proved as ONE FLOW:
+#   enrol PIN → home (real data) → geofence clock-in/out → apply leave →
+#   approver queue → approved → payslip (wording law) → suspended = blocked.
+# Seeds a throwaway worker (device+PIN, geofenced site, joined_at set so the
+# leave cycle anchors), an R11 approver (console account), and a PUBLISHED
+# v2.0 batch with an ESS-pushed row for the payslip leg. Raw bodies on every
+# leg. On-box evidence: the request row approved with decided_by; the
+# leave.approved audit action; the worker's ESS notification row (E10 has no
+# UI yet — deferred honestly, the ROW is the evidence the loop closed).
+# Cleanup removes everything seeded. Chain + BUILD_SHA at start and end.
+# Sentinel: .github/RUN-ESS6.
+on:
+  workflow_dispatch:
+  push:
+    branches: [claude/nifty-goodall-poihi4]
+    paths: ['.github/RUN-ESS6']
+
+concurrency: { group: ess6, cancel-in-progress: false }
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      UAT_IP: 152.239.121.249
+      UAT_CO: 11111111-1111-1111-1111-111111111111
+      BASE: https://uat.taifamining.tz
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - name: SSH path — tunnel first, direct fallback
+        env:
+          CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+          CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
+        run: |
+          mkdir -p ~/.ssh && printf '%s\n' "${{ secrets.UAT_SSH_PRIVATE_KEY }}" > ~/.ssh/uat && chmod 600 ~/.ssh/uat
+          sudo curl -sSL -o /usr/local/bin/cloudflared \
+            https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 \
+            && sudo chmod +x /usr/local/bin/cloudflared || true
+          cat > ~/.ssh/config <<EOF
+          Host uat-tunnel
+            HostName ssh.uat.taifamining.tz
+            User root
+            IdentityFile ~/.ssh/uat
+            StrictHostKeyChecking accept-new
+            ProxyCommand /usr/local/bin/cloudflared access ssh --hostname %h --service-token-id $CF_ACCESS_CLIENT_ID --service-token-secret $CF_ACCESS_CLIENT_SECRET
+          Host uat-direct
+            HostName $UAT_IP
+            User root
+            IdentityFile ~/.ssh/uat
+            StrictHostKeyChecking accept-new
+            ConnectTimeout 10
+          EOF
+          chmod 600 ~/.ssh/config
+          if timeout 30 ssh uat-tunnel true 2>/dev/null; then echo uat-tunnel > /tmp/ssh_host; exit 0; fi
+          for i in $(seq 1 60); do
+            ssh uat-direct true 2>/dev/null && { echo uat-direct > /tmp/ssh_host; exit 0; }
+            echo "waiting ($i/60)"; sleep 15
+          done
+          echo FATAL; exit 1
+
+      - name: BUILD_SHA START + seed worker, approver, published batch
+        run: |
+          SSH="ssh $(cat /tmp/ssh_host)"
+          echo "── BUILD_SHA (running process) at START of ESS-6 ──"
+          $SSH "curl -fsS http://127.0.0.1:3000/health 2>/dev/null; echo; cat /opt/hcmos/BUILD_SHA 2>/dev/null | head -c 40; echo"
+          $SSH "cd /opt/hcmos && set -a && . /etc/hcmos/hcmos.env && set +a && node -e '
+            const db=require(\"./src/db\"), C=require(\"./src/crypto\");
+            const contractDef=require(\"./src/exact_contract\");
+            const CO=\"$UAT_CO\";
+            (async()=>{ const out={};
+              await db.withOwner(async c=>{
+                const z=(await c.query(\"SELECT site_id, name, center_lat, center_lng FROM geofence_zone WHERE company_id=\$1 ORDER BY name LIMIT 1\",[CO])).rows[0];
+                if(!z){ console.error(\"no geofence zone — cannot run the journey\"); process.exit(1); }
+                out.zone=z.name; out.lat=Number(z.center_lat); out.lng=Number(z.center_lng);
+                out.emp=(await c.query(\"INSERT INTO employee(id,company_id,site_id,full_name,role_code,status,is_expat,joined_at) VALUES(gen_random_uuid(),\$1,\$2,\x27Zz ESS6 Journey\x27,\x27R13\x27,\x27active\x27,false,\x272025-03-01\x27) RETURNING id\",[CO,z.site_id])).rows[0].id;
+                out.dev=(await c.query(\"INSERT INTO device(company_id,employee_id,pin_hash,status) VALUES(\$1,\$2,\$3,\x27active\x27) RETURNING id\",[CO,out.emp,C.hashSecret(\"331177\")])).rows[0].id;
+                out.appEmp=(await c.query(\"INSERT INTO employee(id,company_id,site_id,full_name,role_code,status,is_expat) VALUES(gen_random_uuid(),\$1,\$2,\x27Zz ESS6 Approver\x27,\x27R11\x27,\x27active\x27,false) RETURNING id\",[CO,z.site_id])).rows[0].id;
+                out.approver=(await c.query(\"INSERT INTO app_user(id,company_id,employee_id,email,password_hash,role_code,status) VALUES(gen_random_uuid(),\$1,\$2,\x27zz.ess6.approver@probe.local\x27,\$3,\x27R11\x27,\x27active\x27) RETURNING id\",[CO,out.appEmp,C.hashSecret(\"Ess6Probe!2026\")])).rows[0].id;
+                out.batch=(await c.query(\"INSERT INTO exact_batch(company_id,period,file_hash,version,status,row_count,published_at) VALUES(\$1,\x272026-06-ess6\x27,\x27ess6-hash\x27,\x27v2.0\x27,\x27published\x27,1,now()) RETURNING id\",[CO])).rows[0].id;
+                const N=contractDef.build().length;
+                const cells=Array(N).fill(\"0\");
+                cells[10]=\"800000\"; cells[19]=\"200000\";                        // Basic + Transport(Fixed)
+                cells[27]=\"1000000\"; cells[30]=\"200000\"; cells[42]=\"200000\";  // Total Allowances / PAYE / Total Deductions
+                cells[44]=\"800000\";                                            // Net Payment
+                await c.query(\"INSERT INTO exact_row(company_id,batch_id,row_no,employee_id_raw,full_name,cells,matched_employee,match_status) VALUES(\$1,\$2,1,\x27ESS6\x27,\x27\x27,\$3,\$4,\x27matched\x27)\",[CO,out.batch,JSON.stringify(cells),out.emp]);
+                await c.query(\"INSERT INTO ess_push(company_id,batch_id) VALUES(\$1,\$2)\",[CO,out.batch]);
+              });
+              require(\"fs\").writeFileSync(\"/root/ess6.json\",JSON.stringify(out));
+              console.log(\"seeded\",JSON.stringify(out)); await db.close();
+            })().catch(e=>{console.error(e.message);process.exit(1);});
+          '"
+          $SSH 'cat /root/ess6.json' > /tmp/ess6.json
+
+      - name: THE WHOLE JOURNEY, one flow over HTTPS (raw bodies)
+        env:
+          CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+          CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
+        run: |
+          node - <<'EOF'
+          const fs = require('node:fs');
+          const Z = require('/tmp/ess6.json');
+          const CF = { 'CF-Access-Client-Id': process.env.CF_ACCESS_CLIENT_ID, 'CF-Access-Client-Secret': process.env.CF_ACCESS_CLIENT_SECRET };
+          const BASE = process.env.BASE;
+          const call = async (method, path, body, token) => {
+            const headers = { ...CF };
+            if (token) headers.authorization = `Bearer ${token}`;
+            if (body !== undefined) headers['content-type'] = 'application/json';
+            const r = await fetch(BASE+path,{method,headers,body:body!==undefined?JSON.stringify(body):undefined,signal:AbortSignal.timeout(20000)});
+            let d=null; try{d=await r.json();}catch{} return {status:r.status, body:d||{}};
+          };
+          let fail=false; const say=(ok,n,det)=>{ if(!ok)fail=true; console.log(`${ok?'PASS':'FAIL'}  ${n} — ${det}`); };
+          (async () => {
+            const at = { lat: Z.lat, lng: Z.lng, accuracy: 5 };
+
+            // 1 — enrol PIN → sign in on the field device.
+            const login = await call('POST','/auth/field',{ device_id: Z.dev, pin: '331177' });
+            say(login.status===200 && !!login.body.token, 'journey 1: field-PIN sign-in', `${login.status}`);
+            const tok = login.body.token;
+
+            // 2 — home answers with REAL data (landing + leave balance + payslip list).
+            const landing = await call('GET','/me/landing',undefined,tok);
+            say(landing.status===200, 'journey 2a: home landing answers', `${landing.status} raw=${JSON.stringify(landing.body).slice(0,140)}`);
+            const bal = await call('GET','/leave/balance',undefined,tok);
+            say(bal.status===200 && bal.body.annual && bal.body.annual.available>0,
+                'journey 2b: leave balance real (annual available)', `${bal.status} raw=${JSON.stringify(bal.body).slice(0,180)}`);
+
+            // 3 — geofence clock-in at the site, then close the shift.
+            const inn = await call('POST','/attendance/clock-in',at,tok);
+            say(inn.status===200 && inn.body.accepted===true && !!inn.body.zone,
+                'journey 3a: geofence clock-in accepts and names the zone', `${inn.status} raw=${JSON.stringify(inn.body)}`);
+            const out = await call('POST','/attendance/clock-out',at,tok);
+            say(out.status===200 && out.body.direction==='out',
+                'journey 3b: clock-out closes the shift', `${out.status} raw=${JSON.stringify(out.body)}`);
+
+            // 4 — apply leave with the EXACT payload the E4 screen submits.
+            const applied = await call('POST','/leave/apply',{ leave_type:'annual', days:2, hoh_override:false },tok);
+            say(applied.status===200 && !!applied.body.id && applied.body.days===2,
+                'journey 4: apply leave (the UI payload) → request created', `${applied.status} raw=${JSON.stringify(applied.body)}`);
+            const reqId = applied.body.id;
+
+            // 5 — the request lands in the APPROVER'S queue (R11, console).
+            const alog = await call('POST','/auth/console',{ email:'zz.ess6.approver@probe.local', password:'Ess6Probe!2026' });
+            say(alog.status===200 && !!alog.body.token, 'journey 5a: approver console sign-in (R11)', `${alog.status}`);
+            const atok = alog.body.token;
+            const q = await call('GET','/leave/requests',undefined,atok);
+            const mine = (q.body.pending||[]).find((p)=>p.id===reqId);
+            say(q.status===200 && !!mine,
+                'journey 5b: the request is IN the approver queue with its coverage meter',
+                `${q.status} raw=${JSON.stringify(mine||q.body).slice(0,240)}`);
+
+            // 6 — approve (LR-6 warn-not-block: a coverage warn needs the audited override).
+            let dec = await call('POST',`/leave/requests/${reqId}/decide`,{ approve:true },atok);
+            if (dec.status===409 && dec.body.coverage) {
+              console.log(`INFO  LR-6 coverage warn surfaced — acknowledging the gap (audited): ${JSON.stringify(dec.body.coverage)}`);
+              dec = await call('POST',`/leave/requests/${reqId}/decide`,{ approve:true, override_ack:true },atok);
+            }
+            say(dec.status===200 && dec.body.status==='approved',
+                'journey 6: approved (SOD-01 approver ≠ requester; decision audited)', `${dec.status} raw=${JSON.stringify(dec.body)}`);
+
+            // 7 — payslip: the worker reads their OWN slip; the wording-law identity holds.
+            const slip = await call('GET','/me/payslip',undefined,tok);
+            const t = (slip.body.payslip||{}).totals||{};
+            say(slip.status===200 && t.total_pay===1000000 && t.total_deduction===200000 && t.net_pay===800000
+                && t.net_pay===t.total_pay-t.total_deduction,
+                'journey 7: payslip totals — Net Pay = Total Pay − Total Deduction', `${slip.status} totals=${JSON.stringify(t)}`);
+
+            // The suspension leg runs from the NEXT step (on-box UPDATE first).
+            fs.writeFileSync('/tmp/ess6-token.txt', tok);
+            process.exit(fail?1:0);
+          })().catch(e=>{console.error('PROBE ERROR:',e.message);process.exit(1);});
+          EOF
+
+      - name: journey 8 — suspended = blocked (E14 closes the journey)
+        env:
+          CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+          CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
+        run: |
+          SSH="ssh $(cat /tmp/ssh_host)"
+          EMP=$(python3 -c "import json;print(json.load(open('/tmp/ess6.json'))['emp'])")
+          $SSH "sudo -u postgres psql -d hcmos -c \"UPDATE employee SET status='suspended' WHERE id='$EMP'\""
+          node - <<'EOF'
+          const fs = require('node:fs');
+          const Z = require('/tmp/ess6.json');
+          const CF = { 'CF-Access-Client-Id': process.env.CF_ACCESS_CLIENT_ID, 'CF-Access-Client-Secret': process.env.CF_ACCESS_CLIENT_SECRET };
+          const BASE = process.env.BASE;
+          const call = async (method, path, body, token) => {
+            const headers = { ...CF };
+            if (token) headers.authorization = `Bearer ${token}`;
+            if (body !== undefined) headers['content-type'] = 'application/json';
+            const r = await fetch(BASE+path,{method,headers,body:body!==undefined?JSON.stringify(body):undefined,signal:AbortSignal.timeout(20000)});
+            let d=null; try{d=await r.json();}catch{} return {status:r.status, body:d||{}};
+          };
+          let fail=false; const say=(ok,n,det)=>{ if(!ok)fail=true; console.log(`${ok?'PASS':'FAIL'}  ${n} — ${det}`); };
+          (async () => {
+            const relog = await call('POST','/auth/field',{ device_id: Z.dev, pin: '331177' });
+            say(relog.status===403 && relog.body.blocked==='suspended' && !relog.body.token,
+                'journey 8a: suspended + CORRECT PIN → the distinct blocked answer, no session',
+                `${relog.status} raw=${JSON.stringify(relog.body)}`);
+            const old = fs.readFileSync('/tmp/ess6-token.txt','utf8').trim();
+            const dead = await call('GET','/leave/balance',undefined,old);
+            say(dead.status===401,
+                'journey 8b: the LIVE session died with the suspension (no lingering mine-gate token)',
+                `${dead.status} raw=${JSON.stringify(dead.body)}`);
+            process.exit(fail?1:0);
+          })().catch(e=>{console.error('PROBE ERROR:',e.message);process.exit(1);});
+          EOF
+
+      - name: on-box evidence — approved row, audit action, ESS notification (E10 row)
+        run: |
+          SSH="ssh $(cat /tmp/ssh_host)"
+          EMP=$(python3 -c "import json;print(json.load(open('/tmp/ess6.json'))['emp'])")
+          APPROVER=$(python3 -c "import json;print(json.load(open('/tmp/ess6.json'))['approver'])")
+          echo "── the request row: approved, decided_by the approver ──"
+          $SSH "sudo -u postgres psql -d hcmos -c \"
+            SELECT status, decided_by='$APPROVER' AS by_approver, coverage_override
+              FROM leave_request WHERE employee_id='$EMP'\""
+          echo "── the decision on the audit chain ──"
+          $SSH "sudo -u postgres psql -d hcmos -c \"
+            SELECT action, actor='$APPROVER' AS by_approver, role FROM audit
+             WHERE company_id='$UAT_CO' AND action='leave.approved'
+               AND entity_id IN (SELECT id::text FROM leave_request WHERE employee_id='$EMP')\""
+          echo "── the worker's ESS notification row (E10 UI deferred — the ROW closes the loop) ──"
+          $SSH "sudo -u postgres psql -d hcmos -c \"
+            SELECT kind, body->>'status' AS status FROM notification WHERE employee_id='$EMP'\""
+          OK=$($SSH "sudo -u postgres psql -d hcmos -tA -c \"
+            SELECT (SELECT count(*) FROM leave_request WHERE employee_id='$EMP' AND status='approved' AND decided_by='$APPROVER')
+                 + (SELECT count(*) FROM audit WHERE company_id='$UAT_CO' AND action='leave.approved' AND entity_id IN (SELECT id::text FROM leave_request WHERE employee_id='$EMP'))
+                 + (SELECT count(*) FROM notification WHERE employee_id='$EMP' AND kind='leave.decision' AND body->>'status'='approved')\"")
+          echo "evidence_rows=$OK (expect 3)"
+          [ "$OK" = "3" ] || { echo "FAIL on-box evidence"; exit 1; }
+          echo "PASS  approved + audited + the worker's ESS notification row exists"
+
+      - name: audit chain + BUILD_SHA END + cleanup
+        if: always()
+        run: |
+          SSH="ssh $(cat /tmp/ssh_host)"
+          EMP=$(python3 -c "import json;print(json.load(open('/tmp/ess6.json'))['emp'])" 2>/dev/null || echo '')
+          APPEMP=$(python3 -c "import json;print(json.load(open('/tmp/ess6.json'))['appEmp'])" 2>/dev/null || echo '')
+          BATCH=$(python3 -c "import json;print(json.load(open('/tmp/ess6.json'))['batch'])" 2>/dev/null || echo '')
+          if [ -n "$EMP" ]; then
+            $SSH "sudo -u postgres psql -d hcmos -c \"
+              DELETE FROM ess_push WHERE batch_id='$BATCH';
+              DELETE FROM exact_batch WHERE id='$BATCH';
+              DELETE FROM notification WHERE employee_id='$EMP';
+              DELETE FROM leave_request WHERE employee_id='$EMP';
+              DELETE FROM idempotency WHERE key LIKE 'att:$EMP:%';
+              DELETE FROM attendance WHERE employee_id='$EMP';
+              DELETE FROM session WHERE device_id IN (SELECT id FROM device WHERE employee_id='$EMP');
+              DELETE FROM session WHERE user_id IN (SELECT id FROM app_user WHERE email='zz.ess6.approver@probe.local');
+              DELETE FROM device WHERE employee_id='$EMP';
+              DELETE FROM app_user WHERE email='zz.ess6.approver@probe.local';
+              DELETE FROM employee WHERE id IN ('$EMP','$APPEMP');\""
+          fi
+          echo "── audit chain: head + recompute + linkage ──"
+          $SSH "sudo -u postgres psql -d hcmos -c \"
+            SELECT (SELECT max(seq) FROM audit WHERE company_id='$UAT_CO') AS head_seq,
+                   bool_and(hash = encode(sha256(convert_to(prev_hash || concat_ws('|',
+                     company_id::text, coalesce(actor,''), coalesce(role,''), action,
+                     coalesce(entity,''), coalesce(entity_id,''), ts::text,
+                     coalesce(before::text,''), coalesce(after::text,'')), 'UTF8')),'hex')) AS recompute_ok
+              FROM audit WHERE company_id='$UAT_CO';
+            SELECT count(*) AS linkage_breaks FROM (
+              SELECT prev_hash, lag(hash) OVER (PARTITION BY company_id ORDER BY seq) AS expect FROM audit) x
+             WHERE (expect IS NULL AND prev_hash <> repeat('0',64)) OR (expect IS NOT NULL AND prev_hash <> expect)\""
+          echo "── BUILD_SHA END ──"
+          $SSH "curl -fsS http://127.0.0.1:3000/health 2>/dev/null; echo; cat /opt/hcmos/BUILD_SHA 2>/dev/null | head -c 40; echo"
