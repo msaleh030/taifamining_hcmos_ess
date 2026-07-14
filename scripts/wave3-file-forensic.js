@@ -145,12 +145,73 @@ function main() {
     over100[k] = { over_100_days: over, example_values: examples };
   }
 
+  // ── PAY RATIFICATION VALIDATION (Kira 2026-07-14, official NM export) ──────
+  // Over the COMPLETE records (basic pay present, TIN present, net > 0):
+  //   base (six ratified components)      = TZS 332,052,804  (75.1% of gross)
+  //   Total Allowances (Overdraft=EARNING)= TZS 442,168,949
+  //   mean daily rate (base/30)           = TZS 47,915
+  //   GROSS TRAP: mean daily ≈ 63,805 means the run is using GROSS — 33% wrong.
+  //   Net identity (all rows): Net = TotAllow − TotDeduct + CentRoundUp − CentRoundDown.
+  let ratification = null;
+  if (kind === 'payroll') {
+    const BASE_SIX = ['Basic Salary', 'Fixed Overtime', 'Project Allowance',
+      'Responsibility Allowance', 'Housing Allowance (Fixed)', 'Transport Allowance(Fixed)'];
+    const findCol = (name) => hdr.findIndex((h) => normHdr(h) === normHdr(name));
+    const cIdx = Object.fromEntries(BASE_SIX.map((n) => [n, findCol(n)]));
+    const totAllow = findCol('Total Allowances'), totDed = findCol('Total Deductions');
+    const netC = findCol('Net Pay') >= 0 ? findCol('Net Pay') : findCol('Net Salary');
+    const overdraft = findCol('Overdraft');
+    const cru = findCol('Cent Round Up'), crd = findCol('Cent Round Down');
+    const basicC = cIdx['Basic Salary'];
+    const num2 = (v) => { const n = Number(String(v ?? '').replace(/,/g, '').trim()); return Number.isFinite(n) ? n : 0; };
+    const missingCols = BASE_SIX.filter((n) => cIdx[n] < 0);
+    if (missingCols.length) {
+      ratification = { error: 'ratified component column(s) not found by EXACT header', missing: missingCols };
+    } else {
+      const complete = rows.filter((r) => num2(r[basicC]) > 0
+        && col.tin != null && String(r[col.tin] ?? '').trim() !== ''
+        && (netC < 0 || num2(r[netC]) > 0));
+      let baseSum = 0, allowSum = 0, netIdentityFails = 0;
+      for (const r of complete) {
+        for (const n of BASE_SIX) baseSum += num2(r[cIdx[n]]);
+        if (totAllow >= 0) allowSum += num2(r[totAllow]);
+      }
+      // Net identity over ALL rows (285): Overdraft is INSIDE Total Allowances
+      // (an earning); the cent columns are Net-level, outside both totals.
+      if (totAllow >= 0 && totDed >= 0 && netC >= 0) {
+        for (const r of rows) {
+          const net = num2(r[totAllow]) - num2(r[totDed])
+            + (cru >= 0 ? num2(r[cru]) : 0) - (crd >= 0 ? num2(r[crd]) : 0);
+          if (Math.abs(net - num2(r[netC])) > 1) netIdentityFails++;
+        }
+      }
+      const meanDaily = complete.length ? Math.round(baseSum / 30 / complete.length) : 0;
+      const T = { base: 332052804, allow: 442168949, daily: 47915, grossTrap: 63805 };
+      const near = (a, b, tolPct) => b !== 0 && Math.abs(a - b) / b <= tolPct;
+      ratification = {
+        complete_records: complete.length,           // target: 231
+        base_sum: Math.round(baseSum),               // target: 332,052,804
+        base_target_pass: Math.round(baseSum) === T.base,
+        total_allowances_sum: Math.round(allowSum),  // target: 442,168,949
+        allow_target_pass: Math.round(allowSum) === T.allow,
+        mean_daily_rate: meanDaily,                  // target: 47,915
+        daily_target_pass: Math.abs(meanDaily - T.daily) <= 1,
+        GROSS_TRAP_TRIPPED: near(meanDaily, T.grossTrap, 0.05),
+        net_identity_fails: netIdentityFails,        // target: 0 across all rows
+        overdraft_column_found: overdraft >= 0,
+        cent_columns_found: { round_up: cru >= 0, round_down: crd >= 0 },
+        note: 'GROSS_TRAP_TRIPPED=true means the base is being read as GROSS — 33% wrong. Overdraft is an EARNING (inside Total Allowances), never a deduction.',
+      };
+    }
+  }
+
   const out = {
     file: path.basename(inPath), kind, header_row: hi + 1, data_rows: rows.length,
     columns_found: Object.fromEntries(Object.entries(col).map(([k, v]) => [k, hdr[v]])),
     as_at_dates: [...new Set(asAt)],
     pf: { distinct: pfCount.size, blank_pf_rows: pfBlank, collisions: pfCollisions },
     nida, tin, leave_over_100: Object.keys(over100).length ? over100 : null,
+    ratification,
     all_headers: unmapped,
   };
   console.log(JSON.stringify(out, null, 2));

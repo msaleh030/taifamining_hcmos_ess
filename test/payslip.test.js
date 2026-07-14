@@ -39,8 +39,8 @@ function aliceRow(over = {}) {
   const r = Array(N).fill('0');
   r[0] = 'E-A-0001'; r[1] = 'Alice Admin'; r[3] = '2020-01-01'; r[4] = 'Admin';
   r[12] = '900000';  // BASIC SALARY
-  r[13] = '150000';  // HOUSING ALLOWANCE
-  r[20] = '150000';  // TRANSPORT
+  r[13] = '150000';  // Housing Allowance (Fixed)
+  r[20] = '150000';  // Transport Allowance(Fixed)
   for (const [k, v] of Object.entries(over)) r[k] = v;
   r[28] = '1200000'; // GROSS (file label TOTAL ALLOWANCE) — served as total_pay
   r[31] = '120000';  // NSSF
@@ -91,7 +91,7 @@ test('E6: payslip appears only after publish + ESS push; own-only; wording pinne
 
     // Earnings/deductions itemize the nonzero component columns (not the totals).
     const labels = (xs) => xs.map((x) => x.label).sort();
-    assert.deepEqual(labels(got.payslip.earnings), ['BASIC SALARY', 'HOUSING ALLOWANCE', 'TRANSPORT']);
+    assert.deepEqual(labels(got.payslip.earnings), ['Basic Salary', 'Housing Allowance (Fixed)', 'Transport Allowance(Fixed)']);
     assert.deepEqual(labels(got.payslip.deductions), ['NSSF', 'PAYE']);
     assert.ok(!labels(got.payslip.earnings).includes('TOTAL ALLOWANCE'), 'gross column is a total, not an earning line');
 

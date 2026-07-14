@@ -31,23 +31,29 @@ const NAMED = {
   7:  ['identity', 'NIDA', true],
   9:  ['identity', 'TIN', true],
   10: ['identity', 'PENSION/NSSF NO', true],
-  // EX-2 earnings/allowance components. Column POSITIONS confirmed against the
-  // real Exact export are `pinned`; the fixed-pay components whose exact position
-  // is not yet confirmed are provisional (not pinned) — but the daily-rate base is
-  // resolved BY NAME (src/exact.js), so a position change is caught by the
-  // name-keyed test rather than silently moving money.
-  11: ['allowances', 'ROTATION', true],           // CONFIRMED — EXCLUDED from base
-  12: ['allowances', 'BASIC SALARY', false],       // include (position provisional)
-  13: ['allowances', 'HOUSING ALLOWANCE', false],  // include (position provisional)
-  14: ['allowances', 'RESPONSIBILITY', false],     // include (position provisional)
-  15: ['allowances', 'PROJECT', false],            // include (position provisional)
-  16: ['allowances', 'MEDICAL', false],            // include (position provisional)
-  17: ['allowances', 'HOUSING ALL', false],        // include (position provisional)
-  19: ['allowances', 'FIXED OVERTIME', true],      // CONFIRMED — INCLUDED in base
-  20: ['allowances', 'TRANSPORT', true],           // CONFIRMED — INCLUDED in base
-  21: ['allowances', 'OVERTIME NORMAL', true],     // CONFIRMED — EXCLUDED from base
-  24: ['allowances', 'OVERTIME HOLIDAY', true],    // CONFIRMED — EXCLUDED from base
-  26: ['allowances', 'NIGHT SHIFT', true],         // CONFIRMED — EXCLUDED from base
+  // EX-2 earnings/allowance components — headers RATIFIED against the OFFICIAL
+  // North Mara Exact export (Kira, 2026-07-14, arithmetic over all 285 rows).
+  // The prior provisional abbreviations (HOUSING ALLOWANCE / HOUSING ALL /
+  // TRANSPORT / MEDICAL) were AMBIGUOUS against a contract that carries BOTH a
+  // Fixed and a Variable housing and transport column — and MEDICAL was a
+  // phantom (no such component exists). Exact header strings below, character
+  // for character (matching is exact-after-normalisation, never substring).
+  // Positions of the not-yet-position-confirmed components stay provisional
+  // (not pinned); the base resolves BY NAME (src/exact.js).
+  11: ['allowances', 'Rotation Allowance', true],            // EXCLUDED from base
+  12: ['allowances', 'Basic Salary', false],                 // INCLUDE (position provisional)
+  13: ['allowances', 'Housing Allowance (Fixed)', false],    // INCLUDE (position provisional)
+  14: ['allowances', 'Responsibility Allowance', false],     // INCLUDE (position provisional)
+  15: ['allowances', 'Project Allowance', false],            // INCLUDE (position provisional)
+  // 16: MEDICAL removed — PHANTOM (Kira 2026-07-14): the official contract has
+  // no medical component. Position 16 reverts to an un-named allowance slot;
+  // money appearing there flags as unclassified (fail-closed), never summed.
+  17: ['allowances', 'House Allowance(Variable)', false],    // EXCLUDED (position provisional)
+  19: ['allowances', 'Fixed Overtime', true],                // INCLUDED in base
+  20: ['allowances', 'Transport Allowance(Fixed)', true],    // INCLUDED in base (no space before bracket)
+  21: ['allowances', 'Overtime - Normal Days', true],        // EXCLUDED from base
+  24: ['allowances', 'Overtime - Holidays', true],           // EXCLUDED from base
+  26: ['allowances', 'Night Allowance', true],               // EXCLUDED from base
   // v1.5 (North Mara reconciliation, supersedes EX-4): the file's label at 28 is
   // 'TOTAL ALLOWANCE' but the column is actually GROSS PAY (basic + ALL
   // allowances). It is mapped as GROSS (exact.col.gross) — NEVER also summed with

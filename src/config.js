@@ -217,8 +217,15 @@ const DEFAULT_CONFIG = {
   // silently drift. INCLUDE = the fixed-pay set; EXCLUDE = the variable
   // overtime/rotation/night components. This is the single base used by payroll
   // and by leave pay/liability.
-  'exact.dailyrate.include_names': 'BASIC SALARY,HOUSING ALLOWANCE,RESPONSIBILITY,PROJECT,MEDICAL,HOUSING ALL,FIXED OVERTIME,TRANSPORT',
-  'exact.dailyrate.exclude_names': 'ROTATION,OVERTIME NORMAL,OVERTIME HOLIDAY,NIGHT SHIFT',
+  // RATIFIED (Kira 2026-07-14, official NM export, 285 rows / 231 complete):
+  // exactly SIX base components — the Fixed housing/transport columns, never the
+  // Variable ones; MEDICAL was a phantom and is gone. Matching is exact-after-
+  // normalisation (uppercase + whitespace-collapse), never substring.
+  'exact.dailyrate.include_names': 'Basic Salary,Fixed Overtime,Project Allowance,Responsibility Allowance,Housing Allowance (Fixed),Transport Allowance(Fixed)',
+  'exact.dailyrate.exclude_names': 'Rotation Allowance,Night Allowance,Overtime - Normal Days,Overtime - Holidays,Transport Allowance(variable),House Allowance(Variable),Gross Salary Arrears,Terminal Dues,Overdraft',
+  // PENDING CECILIA (do not guess): money in these components blocks the figure,
+  // NAMING them. Impact at 20 days outstanding ≈ TZS 3.7M across 231 people.
+  'exact.dailyrate.pending_names': 'Local Conveyance,TSF Allowance',
   // The GROSS/TOTAL earnings column — a total, never a base component.
   'exact.dailyrate.gross_name': 'TOTAL ALLOWANCE',
   // EX-2 governance gate (Kira 2026-07-14): the leave-pay/liability figure is

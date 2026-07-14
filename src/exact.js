@@ -320,15 +320,19 @@ async function unclassifiedPayComponents(session, cells) {
   const co = session.company_id;
   const include = new Set((await cfg.getConfig(co, 'exact.dailyrate.include_names', '', null)).split(',').map(norm).filter(Boolean));
   const exclude = new Set((await cfg.getConfig(co, 'exact.dailyrate.exclude_names', '', null)).split(',').map(norm).filter(Boolean));
+  // PENDING (Cecilia): classified as neither include nor exclude YET — a ruling
+  // is outstanding. Reported separately so the block NAMES the governance hold.
+  const pending = new Set((await cfg.getConfig(co, 'exact.dailyrate.pending_names', '', null)).split(',').map(norm).filter(Boolean));
   const gross = norm(await cfg.getConfig(co, 'exact.dailyrate.gross_name', 'TOTAL ALLOWANCE', null));
   const version = await cfg.getConfig(co, 'exact.contract.version', 'v1.2', null);
   const cols = (await db.query(
     "SELECT position, header FROM exact_column WHERE version=$1 AND section='allowances'", [version])).rows;
-  const out = [];
+  const out = { unclassified: [], pending: [] };
   for (const c of cols) {
     const h = norm(c.header);
     if (!h || h === gross || include.has(h) || exclude.has(h)) continue;
-    if (num(cells[c.position]) !== 0) out.push(c.header);
+    if (num(cells[c.position]) === 0) continue;
+    (pending.has(h) ? out.pending : out.unclassified).push(c.header);
   }
   return out;
 }
@@ -341,10 +345,11 @@ async function unclassifiedPayComponents(session, cells) {
 //   2. the classification is not RATIFIED (exact.dailyrate.classification.ratified
 //      ≠ 'true') → block until Cecilia signs off.
 async function baseUnavailableReason(session, cells) {
-  const unclassified = await unclassifiedPayComponents(session, cells);
-  if (unclassified.length) return `unclassified pay component(s) pending EX-2 classification: ${unclassified.join(', ')}`;
+  const found = await unclassifiedPayComponents(session, cells);
+  if (found.pending.length) return `pay component(s) pending Cecilia's ruling (do not guess): ${found.pending.join(', ')}`;
+  if (found.unclassified.length) return `unclassified pay component(s) pending EX-2 classification: ${found.unclassified.join(', ')}`;
   const ratified = norm(await cfg.getConfig(session.company_id, 'exact.dailyrate.classification.ratified', '__TBC__', null));
-  if (ratified !== 'TRUE') return 'leave-pay base pending EX-2 classification ratification (Cecilia)';
+  if (ratified !== 'TRUE') return 'leave-pay base pending EX-2 classification ratification';
   return null;
 }
 

@@ -125,13 +125,17 @@ test('EX-3 net check: computed net equals col AS, and a wrong col AS is flagged'
 // INCLUDE = Basic(12) Housing(13) Responsibility(14) Project(15) Medical(16)
 // Housing All(17) Fixed Overtime(19) Transport(20); EXCLUDE = Rotation(11)
 // Overtime-normal(21) Overtime-holiday(24) Night Shift(26).
-test('EX-2 daily-rate base includes the fixed set (incl. Fixed Overtime + Transport); excludes Rotation/OT/Night', async () => {
+test('EX-2 daily-rate base is the SIX RATIFIED components; Variable house + Rotation/OT/Night excluded (Kira 2026-07-14)', async () => {
   const cells = Array(N).fill('0');
-  for (const p of [12, 13, 14, 15, 16, 17, 19, 20]) cells[p] = '100'; // 8 included → 800
-  cells[11] = '999';                 // Rotation      — EXCLUDED
-  cells[21] = '999'; cells[24] = '999'; // overtime    — EXCLUDED
-  cells[26] = '999';                 // Night Shift   — EXCLUDED
-  assert.equal(await exact.dailyRateBase(session, cells), 800, 'only the fixed-pay components contribute');
+  // The ratified six: Basic Salary(12), Housing Allowance (Fixed)(13),
+  // Responsibility Allowance(14), Project Allowance(15), Fixed Overtime(19),
+  // Transport Allowance(Fixed)(20) → 600.
+  for (const p of [12, 13, 14, 15, 19, 20]) cells[p] = '100';
+  cells[11] = '999';                    // Rotation Allowance        — EXCLUDED
+  cells[17] = '999';                    // House Allowance(Variable) — EXCLUDED
+  cells[21] = '999'; cells[24] = '999'; // Overtime Normal/Holidays  — EXCLUDED
+  cells[26] = '999';                    // Night Allowance           — EXCLUDED
+  assert.equal(await exact.dailyRateBase(session, cells), 600, 'exactly the six ratified components contribute');
 });
 
 // Name-keyed guard: excludes/includes resolve BY NAME via the contract, so a
@@ -141,12 +145,12 @@ test('EX-2 base is name-keyed — excluded columns never enter it; Fixed Overtim
     `SELECT header, position FROM exact_column WHERE version='v1.2'`))).rows;
   const pos = Object.fromEntries(rows.map((row) => [row.header, Number(row.position)]));
   // the confirmed real-export anchors
-  assert.equal(pos['ROTATION'], 11);
-  assert.equal(pos['FIXED OVERTIME'], 19);
-  assert.equal(pos['TRANSPORT'], 20);
-  assert.equal(pos['OVERTIME NORMAL'], 21);
-  assert.equal(pos['OVERTIME HOLIDAY'], 24);
-  assert.equal(pos['NIGHT SHIFT'], 26);
+  assert.equal(pos['Rotation Allowance'], 11);
+  assert.equal(pos['Fixed Overtime'], 19);
+  assert.equal(pos['Transport Allowance(Fixed)'], 20);
+  assert.equal(pos['Overtime - Normal Days'], 21);
+  assert.equal(pos['Overtime - Holidays'], 24);
+  assert.equal(pos['Night Allowance'], 26);
 
   const onlyExcluded = Array(N).fill('0');
   for (const p of [11, 21, 24, 26]) onlyExcluded[p] = '1000';
