@@ -67,7 +67,9 @@ async function upload(token, period, csv) {
     // 1 ── production lists resolve one-to-one
     const { include, exclude, pending } = await exact.classificationPositions(CO);
     const fmt = (m) => [...m.entries()].map(([k, v]) => `${k}@${v}`).join(' ');
-    say(include.size === 6 && exclude.size === 9 && pending.size === 2,
+    // exclude = the ratified NINE + the FOUR cent-round columns (Kira
+    // 2026-07-14: rounding carries are not earned pay — 25, 28, 41, 43).
+    say(include.size === 6 && exclude.size === 13 && pending.size === 2,
       'ratified lists resolve 1:1 vs v2.0',
       `include(${include.size}): ${fmt(include)} | exclude(${exclude.size}): ${fmt(exclude)} | pending(${pending.size}): ${fmt(pending)}`);
 
