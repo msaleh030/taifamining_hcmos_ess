@@ -623,11 +623,16 @@ EOF
 say "post-restart security re-verification (rank lattice / leave cycle / MFA toggle — live process)"
 MFA_SETUP_PHASE=${MFA_SETUP_PHASE:-1} UAT_COMPANY=$UAT_CO hcmos-run node scripts/probe-security.js
 
-# ── expat CRUD gate (Kira 2026-07-12): only the Head of HR mutates expats ────
-# Live probe against the running process: a CENTRAL non-R11 maker (R04) must be
-# refused a field change on an is_expat employee; R11 must get a pending change
-# (declined immediately — the probe leaves no residue). FAILS the deploy.
-say "expat CRUD gate probe: non-R11 refused, R11 allowed (live process)"
+# ── expat field-change gate (Kira 2026-07-14): MAKER = R03 (site HR), CHECKER =
+# R11 (Head of HR); the CEO (R14) is read-only everywhere. Live probe of the
+# fail-closed direction (needs no site-matched maker and leaves ZERO residue):
+# every role that must NOT raise an expat change is refused —
+#   • R04 (central HR Manager) → 403, message names site HR (R03);
+#   • R11 (Head of HR) → 403 — R11 is now the CHECKER, no longer the maker;
+#   • R14 (CEO) → 403 — read-only everywhere.
+# The positive R03-raises / R11-decides path is pinned by test/expat_gate.test.js.
+# FAILS the deploy.
+say "expat field-change gate probe: R04/R11/R14 all refused as maker (live process)"
 EXPAT_ID=$(sudo -u postgres psql -d hcmos -Atc \
   "SELECT id FROM employee WHERE company_id='$UAT_CO' AND is_expat=true LIMIT 1")
 if [ -z "$EXPAT_ID" ]; then
@@ -651,27 +656,20 @@ const change = (tok, body) => fetch(`http://127.0.0.1:3000/employees/${process.e
   method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${tok}` },
   signal: T(), body: JSON.stringify(body) });
 (async () => {
-  const r04 = await login('baraka.nsemwa@taifamining.tz');   // central HR Manager — a maker role
-  const r11 = await login('omid.karambeck@taifamining.tz');  // Head of HR — the ONLY expat maker
-  const r14 = await login('richard.tainton@taifamining.tz'); // CEO/Executive — the ONLY expat checker
-  const refused = await change(r04, { field: 'phone', value: '0700000000' });
-  const refusedBody = await refused.json();
-  const allowed = await change(r11, { field: 'phone', value: '0700000000' });
-  const allowedBody = await allowed.json();
-  let r11DecideStatus = 'n/a', cleanup = 'no pending change to clean';
-  if (allowed.status === 200 && allowedBody.id) {
-    const decide = (tok) => fetch(`http://127.0.0.1:3000/field-change/${allowedBody.id}/decline`, {
-      method: 'POST', headers: { authorization: `Bearer ${tok}` }, signal: T() });
-    r11DecideStatus = (await decide(r11)).status;             // Kira: R14 decides, not R11
-    const d = await decide(r14);                              // Richard declines — zero residue
-    cleanup = `declined by R14 (${d.status})`;
-  }
-  const pass = refused.status === 403 && /Head of HR/.test(refusedBody.error || '')
-    && allowed.status === 200 && r11DecideStatus === 403 && /\(200\)/.test(cleanup);
-  console.log(`R04 change on expat: ${refused.status} (want 403) — "${refusedBody.error || ''}"`);
-  console.log(`R11 change on expat: ${allowed.status} (want 200, pending)`);
-  console.log(`R11 deciding it    : ${r11DecideStatus} (want 403 — Omid raises, Richard decides) — ${cleanup}`);
-  console.log(pass ? 'EXPAT CRUD GATE PROBE PASS' : 'EXPAT CRUD GATE PROBE FAIL');
+  const r04 = await login('baraka.nsemwa@taifamining.tz');   // central HR Manager — NOT an expat maker
+  const r11 = await login('omid.karambeck@taifamining.tz');  // Head of HR — now the CHECKER, not the maker
+  const r14 = await login('richard.tainton@taifamining.tz'); // CEO/Executive — read-only everywhere
+  const body = { field: 'phone', value: '0700000000' };
+  const r04res = await change(r04, body); const r04b = await r04res.json();
+  const r11res = await change(r11, body);                     // R11 is no longer a maker → 403
+  const r14res = await change(r14, body);                     // R14 read-only → 403
+  // All three MUST be refused; R04's refusal names the new maker (site HR / R03).
+  const pass = r04res.status === 403 && /site HR|R03/.test(r04b.error || '')
+    && r11res.status === 403 && r14res.status === 403;
+  console.log(`R04 change on expat: ${r04res.status} (want 403) — "${r04b.error || ''}"`);
+  console.log(`R11 change on expat: ${r11res.status} (want 403 — R11 is the CHECKER, not the maker)`);
+  console.log(`R14 change on expat: ${r14res.status} (want 403 — CEO read-only everywhere)`);
+  console.log(pass ? 'EXPAT FIELD-CHANGE GATE PROBE PASS' : 'EXPAT FIELD-CHANGE GATE PROBE FAIL');
   process.exit(pass ? 0 : 1);
 })().catch((e) => { console.error('PROBE ERROR:', e.message); process.exit(1); });
 EOF
