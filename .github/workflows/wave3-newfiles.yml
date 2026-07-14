@@ -1,0 +1,121 @@
+name: Wave3 New-Files Forensic (report only)
+
+# Wave 3 (Kira 2026-07-13): three source files have landed on the box. REPORT
+# ONLY — read them with the loader's own reader, print row counts, PF
+# collisions, NIDA-stored-as-number precision loss, missing TINs, leave
+# accruals over 100 days, and any 'as at' date. NOTHING is loaded, NO CSV is
+# written, the DB is only read. Sentinel: .github/RUN-WAVE3.
+on:
+  workflow_dispatch:
+  push:
+    branches: [claude/nifty-goodall-poihi4]
+    paths: ['.github/RUN-WAVE3']
+
+concurrency: { group: wave3, cancel-in-progress: false }
+
+jobs:
+  forensic:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      UAT_IP: 152.239.121.249
+      UAT_CO: 11111111-1111-1111-1111-111111111111
+    steps:
+      - uses: actions/checkout@v4
+      - name: SSH path — tunnel first, direct fallback
+        env:
+          CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+          CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
+        run: |
+          mkdir -p ~/.ssh && printf '%s\n' "${{ secrets.UAT_SSH_PRIVATE_KEY }}" > ~/.ssh/uat && chmod 600 ~/.ssh/uat
+          sudo curl -sSL -o /usr/local/bin/cloudflared \
+            https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 \
+            && sudo chmod +x /usr/local/bin/cloudflared || true
+          cat > ~/.ssh/config <<EOF
+          Host uat-tunnel
+            HostName ssh.uat.taifamining.tz
+            User root
+            IdentityFile ~/.ssh/uat
+            StrictHostKeyChecking accept-new
+            ProxyCommand /usr/local/bin/cloudflared access ssh --hostname %h --service-token-id $CF_ACCESS_CLIENT_ID --service-token-secret $CF_ACCESS_CLIENT_SECRET
+          Host uat-direct
+            HostName $UAT_IP
+            User root
+            IdentityFile ~/.ssh/uat
+            StrictHostKeyChecking accept-new
+            ConnectTimeout 10
+          EOF
+          chmod 600 ~/.ssh/config
+          if timeout 30 ssh uat-tunnel true 2>/dev/null; then echo uat-tunnel > /tmp/ssh_host; echo tunnel; exit 0; fi
+          for i in $(seq 1 100); do
+            ssh uat-direct true 2>/dev/null && { echo uat-direct > /tmp/ssh_host; echo direct; exit 0; }
+            echo "waiting ($i/100)"; sleep 15
+          done
+          echo FATAL; exit 1
+
+      - name: BUILD_SHA at START + ship the read-only forensic (no load, no CSV)
+        run: |
+          SSH="ssh $(cat /tmp/ssh_host)"; HOST="$(cat /tmp/ssh_host)"
+          echo "── BUILD_SHA (running process) at START of Wave 3 ──"
+          $SSH "curl -fsS http://127.0.0.1:3000/health 2>/dev/null | head -c 400; echo; cat /opt/hcmos/BUILD_SHA 2>/dev/null | head -c 40; echo"
+          # Self-contained forensic dir on the box: the forensic + the loader's
+          # reader ONLY. require('./xlsx-to-master.js') resolves inside /root/wave3.
+          $SSH "mkdir -p /root/wave3"
+          scp -q scripts/wave3-file-forensic.js "$HOST:/root/wave3/wave3-file-forensic.js"
+          scp -q scripts/xlsx-to-master.js      "$HOST:/root/wave3/xlsx-to-master.js"
+          echo "── files present in /root/uat-data (name + size + mtime; NO contents) ──"
+          $SSH "ls -la --time-style=long-iso /root/uat-data/ | grep -iE 'leave|payroll|dar|airwick|l&h|north_mara' || echo '(no matching files)'"
+
+      - name: 3.x — read-only forensic on the three target files (raw JSON)
+        run: |
+          SSH="ssh $(cat /tmp/ssh_host)"
+          run_one () {
+            local label="$1" pat="$2" kind="$3"
+            echo; echo "══════════ $label  (kind=$kind) ══════════"
+            local f
+            f=$($SSH "ls -1 /root/uat-data/$pat 2>/dev/null | head -1")
+            if [ -z "$f" ]; then echo "BLOCKED: no file matching '$pat' in /root/uat-data — cannot exercise, reporting BLOCKED."; return; fi
+            echo "resolved file: $f"
+            $SSH "cd /root/wave3 && node wave3-file-forensic.js '$f' --kind $kind" || echo "FORENSIC ERROR on $f"
+          }
+          # Globs are single-bracket safe; the '&' in L&H is quoted through SSH.
+          run_one "Leave — Dar Yard"        "Leave*Dar*Yard*.xlsx"       leave
+          run_one "Leave — L&H / Airwick"   "Leave*[Aa]irwick*.xlsx"     leave
+          run_one "Payroll — North Mara"    "Payroll*North_Mara*.xlsx"   payroll
+
+      - name: "3.x — NM payroll — does the file match what is LOADED? (SELECT only)"
+        run: |
+          SSH="ssh $(cat /tmp/ssh_host)"
+          echo "── NM payroll currently in the DB: rows attached to the L&H/Airstrip site ──"
+          $SSH "sudo -u postgres psql -d hcmos <<'SQL'
+          \echo -- employees at the North Mara L&H site (the payroll-file site) --
+          SELECT s.name AS site, count(*) AS employee_rows
+            FROM employee e JOIN site s ON s.id=e.site_id
+           WHERE e.company_id='$UAT_CO' AND s.name='North Mara - L&H and Airstrip Project'
+           GROUP BY s.name;
+          \echo -- pay rows loaded for that site (compare to the file data_rows above vs 285) --
+          SELECT count(*) AS employee_pay_rows,
+                 count(*) FILTER (WHERE ep.basic_pay IS NOT NULL) AS with_basic_pay
+            FROM employee_pay ep JOIN employee e ON e.id=ep.employee_id JOIN site s ON s.id=e.site_id
+           WHERE e.company_id='$UAT_CO' AND s.name='North Mara - L&H and Airstrip Project';
+          SQL" 2>&1 | head -40 || echo "(employee_pay table shape differs — see raw above)"
+
+      - name: BUILD_SHA at END + audit-chain extension (read-only)
+        if: always()
+        run: |
+          SSH="ssh $(cat /tmp/ssh_host)"
+          echo "── BUILD_SHA (running process) at END of Wave 3 — must equal START ──"
+          $SSH "curl -fsS http://127.0.0.1:3000/health 2>/dev/null | head -c 400; echo; cat /opt/hcmos/BUILD_SHA 2>/dev/null | head -c 40; echo"
+          echo "── audit chain: head must still EXTEND from seq 638 / d492031865, never break ──"
+          $SSH "sudo -u postgres psql -d hcmos -c \"
+            SELECT (SELECT max(seq) FROM audit WHERE company_id='$UAT_CO') AS head_seq,
+                   bool_and(hash = encode(sha256(convert_to(prev_hash || concat_ws('|',
+                     company_id::text, coalesce(actor,''), coalesce(role,''), action,
+                     coalesce(entity,''), coalesce(entity_id,''), ts::text,
+                     coalesce(before::text,''), coalesce(after::text,'')), 'UTF8')),'hex')) AS recompute_ok
+              FROM audit WHERE company_id='$UAT_CO';
+            SELECT count(*) AS linkage_breaks FROM (
+              SELECT prev_hash, lag(hash) OVER (PARTITION BY company_id ORDER BY seq) AS expect FROM audit) x
+             WHERE (expect IS NULL AND prev_hash <> repeat('0',64)) OR (expect IS NOT NULL AND prev_hash <> expect)\""
+          echo "── cleanup: remove the shipped forensic (leave no tool on the box) ──"
+          $SSH "rm -rf /root/wave3"

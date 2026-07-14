@@ -1,0 +1,87 @@
+name: Wave0 MFA Incident (read-only)
+
+# Wave 0 (Kira 2026-07-13): forensic on the two super accounts — DID anyone use
+# the pre-b186953 password-only window? Every query is a SELECT; the box is not
+# written or restarted. Sentinel: .github/RUN-WAVE0.
+on:
+  workflow_dispatch:
+  push:
+    branches: [claude/nifty-goodall-poihi4]
+    paths: ['.github/RUN-WAVE0']
+
+concurrency: { group: wave0, cancel-in-progress: false }
+
+jobs:
+  forensic:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      UAT_IP: 152.239.121.249
+      UAT_CO: 11111111-1111-1111-1111-111111111111
+    steps:
+      - uses: actions/checkout@v4
+      - name: SSH path — tunnel first, direct fallback
+        env:
+          CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+          CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
+        run: |
+          mkdir -p ~/.ssh && printf '%s\n' "${{ secrets.UAT_SSH_PRIVATE_KEY }}" > ~/.ssh/uat && chmod 600 ~/.ssh/uat
+          sudo curl -sSL -o /usr/local/bin/cloudflared \
+            https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 \
+            && sudo chmod +x /usr/local/bin/cloudflared || true
+          cat > ~/.ssh/config <<EOF
+          Host uat-tunnel
+            HostName ssh.uat.taifamining.tz
+            User root
+            IdentityFile ~/.ssh/uat
+            StrictHostKeyChecking accept-new
+            ProxyCommand /usr/local/bin/cloudflared access ssh --hostname %h --service-token-id $CF_ACCESS_CLIENT_ID --service-token-secret $CF_ACCESS_CLIENT_SECRET
+          Host uat-direct
+            HostName $UAT_IP
+            User root
+            IdentityFile ~/.ssh/uat
+            StrictHostKeyChecking accept-new
+            ConnectTimeout 10
+          EOF
+          chmod 600 ~/.ssh/config
+          if timeout 30 ssh uat-tunnel true 2>/dev/null; then echo uat-tunnel > /tmp/ssh_host; echo "SSH via tunnel"; exit 0; fi
+          for i in $(seq 1 100); do
+            ssh uat-direct true 2>/dev/null && { echo uat-direct > /tmp/ssh_host; echo "SSH direct"; exit 0; }
+            echo "waiting for ssh ($i/100)"; sleep 15
+          done
+          echo "FATAL: unreachable"; exit 1
+
+      - name: 0.1/0.2/0.3 — super-account forensic (SELECT only)
+        run: |
+          SSH="ssh $(cat /tmp/ssh_host)"
+          $SSH "sudo -u postgres psql -d hcmos <<'SQL'
+          \echo ── the two super accounts: exist? MFA enrolled? (0.3) ──
+          SELECT email, role_code, is_super_admin,
+                 (mfa_secret IS NOT NULL) AS mfa_secret_enrolled,
+                 (password_hash IS NOT NULL) AS has_password,
+                 status, created_at
+            FROM app_user
+           WHERE company_id='$UAT_CO' AND (is_super_admin OR lower(email) IN
+                 ('mohammed@railgrid.tz','admin@taifamining.tz'))
+           ORDER BY email;
+          \echo ── 0.1 EVERY auth.signin for the supers (ts + payload; note: IP not captured by schema) ──
+          SELECT a.seq, a.ts, a.actor, a.role, a.after
+            FROM audit a
+           WHERE a.company_id='$UAT_CO' AND a.action='auth.signin'
+             AND lower(a.actor) IN ('mohammed@railgrid.tz','admin@taifamining.tz')
+           ORDER BY a.ts;
+          \echo ── corroborate: any SESSION ever minted for a super account? ──
+          SELECT s.id, s.created_at, s.expires_at, s.device_id, u.email
+            FROM session s JOIN app_user u ON u.id = s.user_id
+           WHERE u.company_id='$UAT_CO' AND u.is_super_admin
+           ORDER BY s.created_at;
+          \echo ── every action EVER taken under a super actor (not just signin) ──
+          SELECT action, count(*), min(ts) AS first, max(ts) AS last
+            FROM audit
+           WHERE company_id='$UAT_CO'
+             AND lower(actor) IN ('mohammed@railgrid.tz','admin@taifamining.tz')
+           GROUP BY action ORDER BY action;
+          \echo ── does the audit schema even have an IP column? (0.1/0.2 feasibility) ──
+          SELECT column_name FROM information_schema.columns
+           WHERE table_schema='public' AND table_name='audit' ORDER BY ordinal_position;
+          SQL"

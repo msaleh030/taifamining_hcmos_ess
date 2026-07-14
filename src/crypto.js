@@ -52,16 +52,36 @@ function totpAt(secretB32, counter) {
 
 // Verify with a +/-1 step window for clock drift.
 function verifyTotp(token, secretB32, atMs = Date.now()) {
-  if (!secretB32 || !token) return false;
-  const step = Math.floor(atMs / 1000 / 30);
-  const t = String(token).trim();
-  for (const c of [step - 1, step, step + 1]) {
-    if (crypto.timingSafeEqual(Buffer.from(totpAt(secretB32, c)), Buffer.from(t.padStart(6, '0').slice(-6)))) {
-      return true;
-    }
-  }
-  return false;
+  return verifyTotpStep(token, secretB32, atMs) >= 0;
 }
+
+// Verify and return the MATCHED counter (>= 0), or -1 on no match. `minStep`
+// enforces single-use: a candidate counter must be strictly greater than the
+// last-consumed one, so a captured code cannot be replayed within its window.
+// The window is [step-1, step] — the current step plus one prior for clock
+// drift; a code from the FUTURE (step+1) is never accepted.
+function verifyTotpStep(token, secretB32, atMs = Date.now(), minStep = -1) {
+  if (!secretB32 || !token) return -1;
+  // bughunt-B #14b: only 1-6 DIGITS may proceed (a client may strip a leading
+  // zero, hence 1-6 then re-pad). Anything else — letters, multibyte characters
+  // — must fail verification, never reach timingSafeEqual, whose length check
+  // would THROW on a multibyte token and turn bad input into a 500.
+  const raw = String(token).trim();
+  if (!/^\d{1,6}$/.test(raw)) return -1;
+  const step = Math.floor(atMs / 1000 / 30);
+  const t = Buffer.from(raw.padStart(6, '0'));
+  for (const c of [step - 1, step]) {
+    if (c <= minStep) continue; // already consumed — replay refused
+    if (crypto.timingSafeEqual(Buffer.from(totpAt(secretB32, c)), t)) return c;
+  }
+  return -1;
+}
+
+// A syntactically valid scrypt hash of random bytes, computed once. Verifying a
+// password against it always fails but does the SAME scrypt work as a real hash,
+// so the login path spends equal time whether or not the account exists — no
+// account-enumeration timing oracle.
+const DUMMY_HASH = hashSecret(crypto.randomBytes(32).toString('base64'));
 
 // Convenience for seeds/tests: produce the current code for a secret.
 function currentTotp(secretB32, atMs = Date.now()) {
@@ -73,7 +93,7 @@ function newToken() { return crypto.randomBytes(32).toString('base64url'); }
 function tokenHash(token) { return crypto.createHash('sha256').update(token).digest('hex'); }
 
 module.exports = {
-  hashSecret, verifySecret,
-  verifyTotp, currentTotp, base32Decode,
+  hashSecret, verifySecret, DUMMY_HASH,
+  verifyTotp, verifyTotpStep, currentTotp, base32Decode,
   newToken, tokenHash,
 };

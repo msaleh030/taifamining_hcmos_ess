@@ -1,0 +1,10 @@
+/* Load order is contractual: fonts → canonical design system (hcmos.css,
+ * Part 2 = F7 promotions) → flow-component kit. Tailwind after, for layout
+ * glue only — every visual decision lives in the canonical sheets. */
+@import './fonts.css';
+@import './hcmos.css';
+@import './flows.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;

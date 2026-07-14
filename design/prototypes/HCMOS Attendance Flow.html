@@ -1,0 +1,713 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light" data-surface="mobile">
+<head>
+<meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>HCMOS · Slice 5 Attendance — clock in/out, geofence & offline (E3)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
+<style>
+:root{--green:#1FA24A;--blue:#0094D4;--yellow:#FBC02D;--red:#E5484D;--font:'IBM Plex Sans',system-ui,sans-serif;--mono:'IBM Plex Mono',monospace;--r:12px;}
+*{box-sizing:border-box;}html,body{margin:0;height:100%;}body{font-family:var(--font);background:#0b0f13;-webkit-font-smoothing:antialiased;display:flex;flex-direction:column;}
+.num{font-family:var(--mono);font-variant-numeric:tabular-nums;}
+[data-theme="light"]{--bg:#EEF1F3;--surface:#fff;--surface2:#F6F8F9;--text:#15191D;--muted:#5C6770;--faint:#8A949C;--border:#E2E7EA;--field:#F6F8F9;--card-bd:#E2E7EA;--blur:0px;--card-bg:#fff;--shadow:0 8px 30px rgba(16,24,32,.08);}
+[data-theme="dark"]{--bg:#0C1115;--surface:#141B20;--surface2:#1A2228;--text:#E7EDF1;--muted:#94A2AC;--faint:#697680;--border:#26313A;--field:#1A2228;--card-bd:#26313A;--blur:0px;--card-bg:#141B20;--shadow:0 12px 40px rgba(0,0,0,.5);}
+[data-theme="glass"]{--bg:linear-gradient(135deg,#0E4D34,#08311E 60%,#0a2a4a);--surface:rgba(255,255,255,.14);--surface2:rgba(255,255,255,.10);--text:#F2F6F4;--muted:rgba(242,246,244,.8);--faint:rgba(242,246,244,.55);--border:rgba(255,255,255,.22);--field:rgba(255,255,255,.12);--card-bd:rgba(255,255,255,.28);--blur:16px;--card-bg:rgba(255,255,255,.12);--shadow:0 18px 60px rgba(0,0,0,.35);}
+[data-theme="reduced"]{--bg:#06271A;--surface:#0C3B27;--surface2:#0A3220;--text:#fff;--muted:#CFE6DA;--faint:#9FC3B0;--border:#1C6A47;--field:#0A3220;--card-bd:#2C8A5E;--blur:0px;--card-bg:#0C3B27;--shadow:none;}
+.stage{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;padding:22px;overflow:auto;background:var(--bg);}
+.frame{position:relative;background:var(--bg);border-radius:18px;overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.45);display:flex;flex-direction:column;color:var(--text);}
+[data-surface="desktop"] .frame{width:1120px;height:660px;}
+[data-surface="tablet"] .frame{width:760px;height:600px;}
+[data-surface="mobile"] .frame{width:390px;height:760px;border-radius:30px;font-size:14px;}
+[data-surface="kiosk"] .frame{width:720px;height:840px;font-size:17px;}
+.svg{width:16px;height:16px;}
+
+/* app chrome */
+.app{flex:1;display:flex;flex-direction:column;min-height:0;background:var(--surface);}
+.topbar{display:flex;align-items:center;gap:10px;padding:14px 16px;border-bottom:1px solid var(--border);background:var(--surface);}
+[data-surface="mobile"] .topbar{padding-top:26px;}
+.topbar .tt{font-size:15px;font-weight:700;}
+.topbar .ts{font-size:10.5px;color:var(--faint);margin-top:1px;}
+.topbar .net{margin-left:auto;display:inline-flex;align-items:center;gap:5px;font:600 10px var(--mono);padding:3px 8px;border-radius:20px;background:var(--surface2);color:var(--muted);border:1px solid var(--border);}
+.topbar .net.off{background:rgba(251,192,45,.16);color:#9A6B00;border-color:rgba(251,192,45,.5);}
+[data-theme="dark"] .topbar .net.off,[data-theme="glass"] .topbar .net.off,[data-theme="reduced"] .topbar .net.off{color:var(--yellow);}
+.body{flex:1;overflow:auto;padding:16px;display:flex;flex-direction:column;gap:13px;}
+[data-surface="kiosk"] .body{padding:22px;gap:16px;}
+
+/* shift context strip */
+.shiftbar{display:flex;align-items:center;gap:12px;padding:13px 14px;border-radius:13px;background:var(--surface2);border:1px solid var(--card-bd);}
+.shiftbar .av{width:40px;height:40px;border-radius:50%;background:var(--green);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;flex-shrink:0;}
+.shiftbar .nm{font-weight:700;font-size:14px;}
+.shiftbar .mt{font:600 11px var(--mono);color:var(--muted);margin-top:1px;}
+.shiftbar .st{margin-left:auto;text-align:right;}
+.shiftbar .st .lbl{font-size:9.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--faint);font-weight:700;}
+.shiftbar .st .val{font-weight:700;font-size:13px;}
+.stat3{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--border);border:1px solid var(--card-bd);border-radius:12px;overflow:hidden;}
+.stat3 .c{background:var(--surface);padding:11px 13px;}
+.stat3 .c .lbl{font-size:9.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--faint);font-weight:700;}
+.stat3 .c .val{font:700 16px var(--mono);margin-top:3px;}
+.stat3 .c .val.g{color:var(--green);}
+
+/* geofence radar */
+.geo{position:relative;height:186px;border-radius:14px;overflow:hidden;border:1px solid var(--card-bd);background:
+ repeating-linear-gradient(0deg,transparent,transparent 21px,color-mix(in srgb,var(--border) 55%,transparent) 21px,color-mix(in srgb,var(--border) 55%,transparent) 22px),
+ repeating-linear-gradient(90deg,transparent,transparent 21px,color-mix(in srgb,var(--border) 55%,transparent) 21px,color-mix(in srgb,var(--border) 55%,transparent) 22px),
+ radial-gradient(circle at 50% 52%,var(--surface2),var(--field));display:flex;align-items:center;justify-content:center;}
+[data-surface="kiosk"] .geo{height:220px;}
+.geo .bound{position:absolute;left:50%;top:52%;transform:translate(-50%,-50%);width:150px;height:150px;border-radius:50%;border:2.5px dashed var(--green);background:rgba(31,162,74,.08);}
+.geo .bound.bad{border-color:var(--red);background:rgba(229,72,77,.07);}
+.geo .you{position:absolute;left:50%;top:52%;transform:translate(-50%,-50%);width:16px;height:16px;border-radius:50%;background:var(--blue);border:2px solid #fff;box-shadow:0 0 0 6px rgba(0,148,212,.22);z-index:2;}
+.geo .you.out{left:82%;top:26%;background:var(--red);box-shadow:0 0 0 6px rgba(229,72,77,.22);}
+@media (prefers-reduced-motion:no-preference){[data-deck] .geo .you{}.geo .pulse{position:absolute;left:50%;top:52%;transform:translate(-50%,-50%);width:16px;height:16px;border-radius:50%;background:rgba(0,148,212,.4);animation:ping 2.4s ease-out infinite;}.geo .pulse.out{left:82%;top:26%;background:rgba(229,72,77,.4);}}
+@keyframes ping{0%{width:16px;height:16px;opacity:.6;}100%{width:150px;height:150px;opacity:0;}}
+.geo .gtag{position:absolute;left:12px;bottom:11px;display:inline-flex;align-items:center;gap:6px;font-weight:700;font-size:12px;padding:6px 11px;border-radius:20px;background:var(--card-bg);border:1px solid var(--card-bd);}
+.geo .gtag.ok{color:var(--green);}.geo .gtag.bad{color:var(--red);}
+.geo .gtag.warn{color:#9A6B00;}
+[data-theme="dark"] .geo .gtag.warn,[data-theme="glass"] .geo .gtag.warn,[data-theme="reduced"] .geo .gtag.warn{color:var(--yellow);}
+.geo .gtag .dot{width:7px;height:7px;border-radius:50%;background:currentColor;}
+.geo .locbadge{position:absolute;right:12px;top:11px;font:600 9.5px var(--mono);color:var(--muted);background:var(--card-bg);border:1px solid var(--card-bd);border-radius:6px;padding:3px 7px;}
+.geo .locbadge.bad{color:#9A6B00;border-color:rgba(251,192,45,.5);}
+[data-theme="dark"] .geo .locbadge.bad,[data-theme="glass"] .geo .locbadge.bad,[data-theme="reduced"] .geo .locbadge.bad{color:var(--yellow);}
+.geo .bound.warn{border-color:var(--yellow);background:rgba(251,192,45,.07);}
+.geo .you.coarse{background:var(--yellow);box-shadow:0 0 0 6px rgba(251,192,45,.22);}
+/* uncertainty ring wider than the boundary — fix acquired but too coarse to decide */
+.geo .halo{position:absolute;left:50%;top:52%;transform:translate(-50%,-50%);width:212px;height:212px;border-radius:50%;border:2px dashed var(--yellow);background:radial-gradient(circle,rgba(251,192,45,.16),rgba(251,192,45,.04));}
+[data-surface="kiosk"] .geo .halo{width:250px;height:250px;}
+
+/* capture receipt */
+.receipt{border:1px solid var(--card-bd);border-radius:13px;background:var(--surface2);overflow:hidden;}
+.receipt .rh{display:flex;align-items:center;gap:8px;padding:10px 13px;border-bottom:1px solid var(--card-bd);font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:700;}
+.receipt .rr{display:flex;align-items:center;gap:10px;padding:9px 13px;font-size:12.5px;border-bottom:1px solid color-mix(in srgb,var(--border) 60%,transparent);}
+.receipt .rr:last-child{border-bottom:none;}
+.receipt .rr .k{color:var(--muted);}
+.receipt .rr .v{margin-left:auto;font:600 12px var(--mono);text-align:right;}
+.receipt .rr .v.d{color:var(--faint);font-weight:500;}
+
+/* flag pill for [SS-3 Open] */
+.flag{display:inline-flex;align-items:center;gap:5px;font:700 10px var(--mono);letter-spacing:.03em;padding:3px 8px;border-radius:6px;background:rgba(251,192,45,.18);color:#9A6B00;border:1px solid rgba(251,192,45,.5);}
+[data-theme="dark"] .flag,[data-theme="glass"] .flag,[data-theme="reduced"] .flag{color:var(--yellow);}
+.flag .dot{width:6px;height:6px;border-radius:50%;background:currentColor;}
+
+/* big punch button */
+.punch{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;border:none;border-radius:15px;padding:17px;font-weight:700;font-size:16px;cursor:pointer;color:#fff;}
+[data-surface="kiosk"] .punch{padding:22px;font-size:20px;}
+.punch.in{background:var(--green);}
+.punch.out{background:var(--surface);color:var(--red);border:1.5px solid var(--red);}
+.punch:disabled{opacity:.5;cursor:default;}
+.punch.wait{background:var(--surface2);color:var(--muted);border:1px solid var(--card-bd);}
+
+/* result seal (success/error/offline hero) */
+.seal{display:flex;flex-direction:column;align-items:center;text-align:center;gap:6px;padding:6px 6px 2px;}
+.seal .disc{width:66px;height:66px;border-radius:50%;display:flex;align-items:center;justify-content:center;}
+.seal .disc.ok{background:rgba(31,162,74,.15);color:var(--green);}
+.seal .disc.err{background:rgba(229,72,77,.14);color:var(--red);}
+.seal .disc.off{background:rgba(251,192,45,.18);color:#9A6B00;}
+[data-theme="dark"] .seal .disc.off,[data-theme="glass"] .seal .disc.off,[data-theme="reduced"] .seal .disc.off{color:var(--yellow);}
+.seal .disc .svg{width:32px;height:32px;}
+.seal h3{margin:2px 0 0;font-size:19px;}
+.seal .big{font:700 30px var(--mono);letter-spacing:-.01em;}
+.seal p{margin:0;font-size:12.5px;color:var(--muted);max-width:300px;line-height:1.45;}
+
+/* banners + notes (kit) */
+.banner{padding:11px 13px;border-radius:11px;font-size:12px;display:flex;gap:9px;align-items:flex-start;line-height:1.45;}
+.banner.off{background:rgba(251,192,45,.16);color:#9A6B00;border:1px solid rgba(251,192,45,.5);}
+.banner.err{background:rgba(229,72,77,.14);color:var(--red);border:1px solid rgba(229,72,77,.4);}
+.banner.ok{background:rgba(31,162,74,.15);color:var(--green);border:1px solid rgba(31,162,74,.4);}
+.banner.info{background:rgba(0,148,212,.1);color:var(--blue);border:1px solid rgba(0,148,212,.3);}
+[data-theme="dark"] .banner.off,[data-theme="glass"] .banner.off,[data-theme="reduced"] .banner.off{color:var(--yellow);}
+.banner.warn{background:rgba(251,192,45,.16);color:#9A6B00;border:1px solid rgba(251,192,45,.5);}
+[data-theme="dark"] .banner.warn,[data-theme="glass"] .banner.warn,[data-theme="reduced"] .banner.warn{color:var(--yellow);}
+.banner .svg{flex-shrink:0;margin-top:1px;}
+.note{display:flex;gap:8px;align-items:flex-start;font-size:11px;color:var(--muted);line-height:1.5;padding:2px 2px;}
+.note .svg{flex-shrink:0;margin-top:1px;color:var(--faint);}
+.shead{font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:700;display:flex;align-items:center;gap:7px;margin:2px 0;}
+
+/* audit chip */
+.audit{display:flex;align-items:center;gap:8px;padding:9px 12px;border-radius:10px;background:rgba(0,148,212,.08);border:1px solid rgba(0,148,212,.26);font-size:11px;color:var(--muted);line-height:1.4;}
+.audit .svg{color:var(--blue);flex-shrink:0;}
+.audit .h{font:600 10px var(--mono);color:var(--blue);margin-left:auto;flex-shrink:0;}
+
+/* recent punches list */
+.plist{display:flex;flex-direction:column;gap:7px;}
+.pitem{display:flex;align-items:center;gap:11px;padding:10px 12px;border-radius:11px;background:var(--surface2);border:1px solid var(--card-bd);}
+.pitem .pi{width:30px;height:30px;border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.pitem .pi.in{background:rgba(31,162,74,.14);color:var(--green);}
+.pitem .pi.out{background:rgba(0,148,212,.12);color:var(--blue);}
+.pitem .pt{font-size:12.5px;font-weight:600;}
+.pitem .pd{font-size:10.5px;color:var(--muted);margin-top:1px;}
+.pitem .ptime{margin-left:auto;font:700 13px var(--mono);}
+
+/* lock / empty states (kit) */
+.center{display:flex;flex-direction:column;align-items:center;justify-content:center;flex:1;text-align:center;padding:30px;gap:12px;color:var(--muted);}
+.center .ic{width:56px;height:56px;border-radius:16px;display:flex;align-items:center;justify-content:center;background:var(--surface2);color:var(--faint);}
+.center .ic.warn{background:rgba(251,192,45,.16);color:#9A6B00;}
+.center .ic.err{background:rgba(229,72,77,.13);color:var(--red);}
+[data-theme="dark"] .center .ic.warn,[data-theme="glass"] .center .ic.warn,[data-theme="reduced"] .center .ic.warn{color:var(--yellow);}
+.center .ic .svg{width:26px;height:26px;}
+.center h3{margin:0;color:var(--text);font-size:17px;}
+.center p{margin:0;font-size:12.5px;max-width:320px;line-height:1.5;}
+.center .why{font:600 11px var(--mono);background:var(--surface2);border:1px solid var(--border);border-radius:7px;padding:6px 10px;color:var(--muted);}
+.center .btn{margin-top:4px;}
+
+/* skeleton */
+.skelrow{height:16px;border-radius:6px;background:linear-gradient(90deg,var(--surface2),var(--field),var(--surface2));background-size:200% 100%;animation:sh 1.2s linear infinite;}
+@keyframes sh{to{background-position:-200% 0;}}
+
+/* buttons */
+.btn{border:none;border-radius:10px;padding:11px 16px;font-weight:600;font-size:13px;cursor:pointer;display:inline-flex;align-items:center;gap:7px;justify-content:center;}
+.btn.p{background:var(--green);color:#fff;}.btn.g{background:transparent;border:1px solid var(--border);color:var(--text);}
+.btn.b{background:var(--blue);color:#fff;}.btn.w{background:var(--yellow);color:#5a3d00;}
+.btn.block{width:100%;}
+.btn:disabled{opacity:.5;}
+
+/* roster (large-data / kiosk assisted) */
+.rsearch{display:flex;align-items:center;gap:9px;padding:11px 13px;border-radius:12px;background:var(--field);border:1px solid var(--border);color:var(--faint);font-size:13px;}
+.rmeta{display:flex;align-items:center;justify-content:space-between;font-size:11px;color:var(--muted);}
+.rmeta .cnt{font:600 11px var(--mono);}
+.roster{border:1px solid var(--card-bd);border-radius:13px;overflow:hidden;background:var(--surface);}
+.rrow{display:flex;align-items:center;gap:11px;padding:11px 13px;border-bottom:1px solid var(--border);}
+.rrow:last-child{border-bottom:none;}
+.rrow .av{width:34px;height:34px;border-radius:50%;background:var(--surface2);color:var(--muted);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px;flex-shrink:0;border:1px solid var(--card-bd);}
+.rrow .rn{font-size:13px;font-weight:600;}
+.rrow .rs{font:600 10.5px var(--mono);color:var(--faint);margin-top:1px;}
+.rrow .rb{margin-left:auto;font-size:11.5px;font-weight:600;color:var(--green);border:1px solid var(--card-bd);border-radius:8px;padding:6px 12px;background:var(--surface2);flex-shrink:0;}
+.vhint{text-align:center;font:600 10px var(--mono);color:var(--faint);padding:9px;background:var(--surface2);}
+
+/* sync queue */
+.qitem{border:1px solid var(--card-bd);border-radius:12px;background:var(--surface2);padding:11px 13px;display:flex;align-items:center;gap:11px;}
+.qitem .qi{width:32px;height:32px;border-radius:9px;display:flex;align-items:center;justify-content:center;flex-shrink:0;background:var(--card-bg);border:1px solid var(--border);color:var(--muted);}
+.qitem .qt{font-size:12.5px;font-weight:600;}
+.qitem .qd{font:600 10.5px var(--mono);color:var(--faint);margin-top:2px;}
+.qitem .qs{margin-left:auto;flex-shrink:0;display:inline-flex;align-items:center;gap:6px;font:700 10px var(--mono);letter-spacing:.03em;padding:4px 9px;border-radius:20px;}
+.qs.queued{background:rgba(251,192,45,.16);color:#9A6B00;}
+.qs.syncing{background:rgba(0,148,212,.12);color:var(--blue);}
+.qs.synced{background:rgba(31,162,74,.14);color:var(--green);}
+.qs.conflict{background:rgba(229,72,77,.14);color:var(--red);}
+[data-theme="dark"] .qs.queued,[data-theme="glass"] .qs.queued,[data-theme="reduced"] .qs.queued{color:var(--yellow);}
+.qs .dot{width:6px;height:6px;border-radius:50%;background:currentColor;}
+@media (prefers-reduced-motion:no-preference){.qs.syncing .dot{animation:blink 1s ease-in-out infinite;}}
+@keyframes blink{50%{opacity:.3;}}
+.qitem.conflict{border-color:rgba(229,72,77,.5);}
+
+/* conflict resolution */
+.confhead{display:flex;align-items:center;gap:12px;padding:13px 14px;border-radius:13px;background:rgba(229,72,77,.1);border:1px solid rgba(229,72,77,.3);}
+.confhead .seal2{width:42px;height:42px;border-radius:11px;background:rgba(229,72,77,.16);color:var(--red);display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.confhead .ht{font-weight:700;font-size:14.5px;}
+.confhead .hs{font-size:11px;color:var(--muted);margin-top:2px;line-height:1.4;}
+.versus{display:grid;grid-template-columns:1fr 1fr;gap:11px;}
+[data-surface="mobile"] .versus{grid-template-columns:1fr;}
+.ver{border:1px solid var(--card-bd);border-radius:12px;background:var(--surface2);padding:12px;}
+.ver.dev{border-color:rgba(0,148,212,.4);}
+.ver .vl{font:700 9.5px var(--mono);letter-spacing:.04em;text-transform:uppercase;color:var(--muted);margin-bottom:9px;display:flex;align-items:center;gap:6px;}
+.ver.dev .vl{color:var(--blue);}
+.ver .vtime{font:700 22px var(--mono);}
+.ver .vsub{font-size:11px;color:var(--muted);margin-top:3px;line-height:1.4;}
+.ver .vkey{margin-top:9px;font:600 10px var(--mono);color:var(--faint);padding-top:9px;border-top:1px solid var(--border);}
+.choices{display:flex;flex-direction:column;gap:8px;}
+.choice{display:flex;align-items:center;gap:11px;padding:12px 13px;border:1.5px solid var(--card-bd);border-radius:11px;cursor:default;}
+.choice.sel{border-color:var(--blue);background:rgba(0,148,212,.07);}
+.choice .rad{width:17px;height:17px;border-radius:50%;border:2px solid var(--card-bd);flex-shrink:0;}
+.choice.sel .rad{border-color:var(--blue);background:radial-gradient(circle,var(--blue) 42%,transparent 46%);}
+.choice .ct{font-size:12.5px;font-weight:600;}
+.choice .cd{font-size:10.5px;color:var(--muted);margin-top:1px;}
+
+/* two-up showcase (geofence screen) */
+.showgrid{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+[data-surface="mobile"] .showgrid{grid-template-columns:1fr;}
+.showcard{border:1px solid var(--card-bd);border-radius:14px;background:var(--surface);overflow:hidden;display:flex;flex-direction:column;}
+.showcard .sc-h{padding:11px 13px;font-weight:700;font-size:13px;display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--border);}
+.showcard .sc-h.ok{color:var(--green);}.showcard .sc-h.bad{color:var(--red);}
+.showcard .sc-b{padding:13px;display:flex;flex-direction:column;gap:11px;}
+
+/* switcher bar (kit) */
+.bar{display:flex;flex-wrap:wrap;gap:12px;align-items:center;padding:9px 14px;background:#11161b;color:#cfd8de;border-bottom:1px solid #1e262d;font-size:11.5px;}
+.bar .grp{display:flex;align-items:center;gap:5px;}
+.bar .lbl{color:#7c8893;font-weight:600;text-transform:uppercase;letter-spacing:.05em;font-size:9.5px;}
+.bar button{border:1px solid #2a333b;background:#1a2127;color:#aeb9c1;border-radius:6px;padding:4px 8px;cursor:pointer;font:inherit;font-size:11px;}
+.bar button.on{background:var(--green);color:#fff;border-color:var(--green);}
+.bar .ac{margin-left:auto;color:#6f7c85;}.bar .ac b{color:#9FE3BD;}
+</style>
+</head>
+<body>
+<template id="__bundler_thumbnail" data-bg-color="#0E4D34"><svg viewBox="0 0 1200 800" xmlns="http://www.w3.org/2000/svg"><rect width="1200" height="800" fill="#0E4D34"/><circle cx="600" cy="330" r="120" fill="none" stroke="#FBC02D" stroke-width="10" stroke-dasharray="18 16"/><circle cx="600" cy="330" r="20" fill="#9FE3BD"/><path d="M600 250v-34M600 444v34M486 330h-34M714 330h34" stroke="#9FE3BD" stroke-width="8"/><text x="600" y="640" text-anchor="middle" font-family="monospace" font-size="34" font-weight="700" fill="#fff" letter-spacing="5">ATTENDANCE</text><text x="600" y="688" text-anchor="middle" font-family="monospace" font-size="22" fill="#9FE3BD" letter-spacing="5">GEOFENCE · OFFLINE · E3</text></svg></template>
+
+<div class="bar">
+ <div class="grp"><span class="lbl">Screen</span><span id="screens"></span></div>
+ <div class="grp"><span class="lbl">State</span><span id="states"></span></div>
+ <div class="grp"><span class="lbl">Viewer</span><span id="roles"></span></div>
+ <div class="grp"><span class="lbl">Theme</span><span id="themes"></span></div>
+ <div class="grp"><span class="lbl">Surface</span><span id="surfaces"></span></div>
+ <div class="grp"><span class="lbl">Lang</span><span id="langs"></span></div>
+ <div class="ac" id="acline"></div>
+</div>
+<div class="stage"><div class="frame" id="frame"></div></div>
+
+<script>
+// Slice 5 · E3 Attendance (clock in/out · geofence · offline) — bilingual strings
+// AC-UNI-07: no key/placeholder string is ever visible; both languages are stored.
+const T={en:{
+ // registry + directory
+ dir:'Crew roster', reg:'RTL/CR/TM/001/2026',
+ // screen titles
+ clockin:'Clock in', clockinSub:'Attendance capture · geofence-validated · E3',
+ clockout:'Clock out', clockoutSub:'Attendance capture · shift close · E3',
+ geofence:'Geofence treatment', geofenceSub:'Device-side capture · pass / fail · SS-3',
+ sync:'Offline sync', syncSub:'Capture queue · conflict resolution · UNI-01',
+ // shift context
+ shift:'Shift', dayShift:'Day shift', shiftWindow:'07:00 – 17:00', site:'Mwadui',
+ onShift:'On shift', offShift:'Off shift', since:'Since', todayLbl:'Today',
+ statusLbl:'Status', greeting:'Habari', workerRole:'General Labour',
+ // geofence panel + capture receipt
+ geoWithin:'Within Mwadui boundary', geoOutside:'Outside boundary — flagged',
+ geoLocating:'Locating you…', youAreHere:'You',
+ geoCoarse:'Accuracy too low to confirm',
+ capAccBadVal:'±140 m · too coarse',
+ lowAccTitle:'Location accuracy too low — cannot confirm boundary',
+ lowAccBody:"The device has a fix, but its accuracy is wider than the site's boundary tolerance — so it cannot confirm whether you are inside. You are not outside; the reading is just too coarse. Nothing is captured. Move to open sky and retry.",
+ accTol:'Boundary tolerance', accTolVal:'±100 m required · SS-3 [Open]',
+ retryFix:'Retry — get a clearer fix',
+ lowAccNote:'A coarse fix is never auto-accepted or auto-rejected — the punch is held for a clearer reading, and the server makes the trust decision on sync. The ±100 m tolerance is a placeholder pending SS-3.',
+ coarseCardNote:'Fix acquired, but its error circle is wider than the boundary — indeterminate, not a rejection. Held for a better reading.',
+ capTitle:'Capture receipt', capTime:'Captured at', capFix:'Location fix',
+ capFixVal:'captured on device', capAcc:'Accuracy', capAccVal:'±8 m',
+ capBoundary:'Site boundary', capServer:'Server re-validates on sync',
+ boundaryField:'Site boundary radius', boundaryVal:'unresolved',
+ ssTag:'SS-3 · Open',
+ ssNote:'The geofence radius is unresolved in the criteria register (SS-3). The field and the pass / fail rule are drawn against a placeholder boundary — the value is pending, not invented.',
+ deviceOnly:'Device-side capture only',
+ deviceOnlyNote:'The device records the punch and shows an advisory pass / fail. The trust decision is the server re-validating the fix on sync — it is not made here.',
+ // buttons
+ clockInNow:'Clock in now', clockOutNow:'Clock out now', retry:'Retry',
+ enableLoc:'Open location settings', cancel:'Cancel', close:'Close',
+ queuedBtn:'Captured · queued', capturing:'Capturing…',
+ resolve:'Resolve conflict', keepDevice:'Keep device punch', keepServer:'Keep server punch',
+ keepBoth:'Keep both · flag for timekeeper', syncNow:'Sync now', retrySync:'Retry sync',
+ punchIn:'Punch in', selectWorker:'Select',
+ // recent punches
+ recent:'Recent punches', rIn:'Clock in', rOut:'Clock out', rInside:'inside boundary',
+ // states — clock in / out
+ emptyInTitle:'No shift scheduled today',
+ emptyInBody:'You have no rostered shift today, so clock-in is closed. Nothing is captured. A shift must be assigned before you can punch in.',
+ emptyOutTitle:'You are not clocked in',
+ emptyOutBody:'There is no open punch to close. Clock in first — clock-out only captures against an open shift.',
+ loadingTitle:'Capturing punch…',
+ loadingBody:'Getting a location fix and a timestamp on the device.',
+ successInTitle:'Clocked in', successInSub:'Punch captured and recorded on the device.',
+ successOutTitle:'Clocked out', successOutSub:'Shift closed. Hours recorded against the roster.',
+ worked:'worked', at:'at',
+ errTitle:'Capture failed',
+ errBody:'The device could not get a location fix in time. Nothing was captured — your shift is unaffected. Try again when you have a clearer signal.',
+ noPermTitle:'Location permission needed',
+ noPermBody:'Attendance capture needs device location to check the site boundary. Turn location on for this app to clock in — nothing is captured until it is enabled.',
+ noPermWhy:'ATT-03 · geofence needs a device fix',
+ offTitle:'Offline — punch captured on device',
+ offBody:'You are offline. The punch is stored on the device with an idempotency key and syncs on reconnect. Nothing is posted to the server yet.',
+ offKey:'Idempotency key',
+ conflictInline:'This punch clashed on sync and is waiting for a decision.',
+ goToSync:'Open sync queue',
+ // kiosk assisted / large-data roster
+ kioskTitle:'Assisted clock-in', kioskSub:'Shared device · staff without a smartphone',
+ operator:'Operator', rosterSearch:'Search name or staff number',
+ rosterHint:'Pick a worker to capture their punch on this shared device.',
+ rosterCount:'5,214 staff · Mwadui', rosterShown:'showing 40 of 5,214 · virtualised',
+ assistNote:'Assisted punch — the operator captures on behalf of the worker and is named in the audit entry (UNI-06).',
+ // sync screen
+ syncQueueTitle:'Capture queue',
+ queuedBanner:'Offline — punches captured on this device, awaiting sync. Nothing is posted to the server yet.',
+ syncingBanner:'Reconnected — syncing captured punches. The server re-validates each geofence fix.',
+ syncedBanner:'All punches synced. The server re-validated the geofence and extended the audit chain.',
+ syncErrTitle:'Sync failed — will retry',
+ syncErrBody:'The server could not be reached. Punches stay queued on the device with their keys, so nothing is lost. Sync retries automatically on reconnect.',
+ syncEmptyTitle:'Queue is empty',
+ syncEmptyBody:'Every captured punch has synced. New punches appear here while the device is offline.',
+ stQueued:'queued', stSyncing:'syncing…', stSynced:'synced', stConflict:'conflict', stFlagged:'flagged',
+ largeBatchTitle:'Offline kiosk session',
+ largeBatchBody:'A shared kiosk collected a full crew offline. 148 punches are queued as one batch and sync together on reconnect — each still keyed and re-validated individually.',
+ batchCount:'148 punches · 1 batch', serverRef:'server ref', auditRef:'audit',
+ dedupeNote:'Deduplicated on the idempotency key — a retried sync commits each punch once.',
+ // conflict resolution
+ conflictTitle:'Sync conflict — needs resolution',
+ conflictBody:'This punch clashes with a record already on the server. Choose which version to keep. The decision is audited (UNI-06) and the server stays the source of truth.',
+ conflictKind:'Duplicate clock-in — two open punches with no clock-out between them.',
+ verDevice:'Device · captured offline', verServer:'Server · already recorded',
+ verVia:'via', viaKiosk:'kiosk (assisted)', viaPhone:'ESS phone',
+ resolveHint:'Pick a resolution to continue the sync.',
+ auditExt:'Audit chain extended · actor, role, before / after · UNI-06',
+ // shared
+ flagOpen:'Open', na:'—'
+},
+sw:{
+ dir:'Orodha ya wafanyakazi', reg:'RTL/CR/TM/001/2026',
+ clockin:'Ingia kazini', clockinSub:'Rekodi ya mahudhurio · imethibitishwa kwa eneo · E3',
+ clockout:'Toka kazini', clockoutSub:'Rekodi ya mahudhurio · kufunga zamu · E3',
+ geofence:'Mpaka wa eneo', geofenceSub:'Rekodi ya kifaa · imepita / imekataliwa · SS-3',
+ sync:'Usawazishaji nje ya mtandao', syncSub:'Foleni ya rekodi · utatuzi wa mgongano · UNI-01',
+ shift:'Zamu', dayShift:'Zamu ya mchana', shiftWindow:'07:00 – 17:00', site:'Mwadui',
+ onShift:'Yupo kazini', offShift:'Hayupo kazini', since:'Tangu', todayLbl:'Leo',
+ statusLbl:'Hali', greeting:'Habari', workerRole:'Kibarua',
+ geoWithin:'Ndani ya mpaka wa Mwadui', geoOutside:'Nje ya mpaka — imeorodheshwa',
+ geoLocating:'Inakutafuta…', youAreHere:'Wewe',
+ geoCoarse:'Usahihi hautoshi kuthibitisha',
+ capAccBadVal:'±140 m · pana mno',
+ lowAccTitle:'Usahihi wa eneo ni mdogo mno — mpaka hauwezi kuthibitishwa',
+ lowAccBody:'Kifaa kina nafasi, lakini usahihi wake ni mpana kuliko ruhusa ya mpaka wa eneo — hivyo hakiwezi kuthibitisha kama uko ndani. Hauko nje; usomaji ni mpana mno tu. Hakuna kilichorekodiwa. Nenda mahali wazi na ujaribu tena.',
+ accTol:'Ruhusa ya mpaka', accTolVal:'±100 m inahitajika · SS-3 [Wazi]',
+ retryFix:'Jaribu tena — pata nafasi bora',
+ lowAccNote:'Nafasi pana haikubaliwi wala kukataliwa kiotomatiki — rekodi inasubiri usomaji bora, na seva hufanya uamuzi wa kuaminika wakati wa usawazishaji. Ruhusa ya ±100 m ni ya mfano inasubiri SS-3.',
+ coarseCardNote:'Nafasi imepatikana, lakini duara la hitilafu ni pana kuliko mpaka — haijaamuliwa, si kukataliwa. Inasubiri usomaji bora.',
+ capTitle:'Risiti ya rekodi', capTime:'Imerekodiwa saa', capFix:'Nafasi ya eneo',
+ capFixVal:'imerekodiwa kwenye kifaa', capAcc:'Usahihi', capAccVal:'±8 m',
+ capBoundary:'Mpaka wa eneo', capServer:'Seva itathibitisha wakati wa usawazishaji',
+ boundaryField:'Kipenyo cha mpaka wa eneo', boundaryVal:'haijakamilika',
+ ssTag:'SS-3 · Wazi',
+ ssNote:'Kipenyo cha mpaka hakijakamilika kwenye rejista ya vigezo (SS-3). Sehemu na kanuni ya kupita / kukataliwa vimechorwa kwa mpaka wa mfano — thamani inasubiri, haijabuniwa.',
+ deviceOnly:'Rekodi ya kifaa pekee',
+ deviceOnlyNote:'Kifaa hurekodi na kuonyesha ushauri wa kupita / kukataliwa. Uamuzi wa kuaminika ni seva kuthibitisha nafasi wakati wa usawazishaji — haufanyiki hapa.',
+ clockInNow:'Ingia kazini sasa', clockOutNow:'Toka kazini sasa', retry:'Jaribu tena',
+ enableLoc:'Fungua mipangilio ya eneo', cancel:'Ghairi', close:'Funga',
+ queuedBtn:'Imerekodiwa · imesubiri', capturing:'Inarekodi…',
+ resolve:'Tatua mgongano', keepDevice:'Tumia rekodi ya kifaa', keepServer:'Tumia rekodi ya seva',
+ keepBoth:'Weka zote · arifu mhasibu wa muda', syncNow:'Sawazisha sasa', retrySync:'Jaribu tena kusawazisha',
+ punchIn:'Ingiza', selectWorker:'Chagua',
+ recent:'Rekodi za hivi karibuni', rIn:'Ingia kazini', rOut:'Toka kazini', rInside:'ndani ya mpaka',
+ emptyInTitle:'Hakuna zamu iliyopangwa leo',
+ emptyInBody:'Huna zamu iliyopangwa leo, hivyo kuingia kazini kumefungwa. Hakuna kinachorekodiwa. Zamu lazima ipangwe kabla ya kuingia.',
+ emptyOutTitle:'Hujaingia kazini',
+ emptyOutBody:'Hakuna rekodi iliyo wazi ya kufunga. Ingia kazini kwanza — kutoka kunarekodiwa dhidi ya zamu iliyo wazi tu.',
+ loadingTitle:'Inarekodi kuingia…',
+ loadingBody:'Inapata nafasi ya eneo na muda kwenye kifaa.',
+ successInTitle:'Umeingia kazini', successInSub:'Kuingia kumerekodiwa kwenye kifaa.',
+ successOutTitle:'Umetoka kazini', successOutSub:'Zamu imefungwa. Masaa yamerekodiwa.',
+ worked:'imefanya kazi', at:'saa',
+ errTitle:'Kurekodi kumeshindwa',
+ errBody:'Kifaa hakikuweza kupata nafasi ya eneo kwa wakati. Hakuna kilichorekodiwa — zamu yako haijaathirika. Jaribu tena ukiwa na mtandao bora.',
+ noPermTitle:'Ruhusa ya eneo inahitajika',
+ noPermBody:'Kurekodi mahudhurio kunahitaji eneo la kifaa kuangalia mpaka. Washa eneo kwa programu hii ili kuingia — hakuna kinachorekodiwa hadi liwashwe.',
+ noPermWhy:'ATT-03 · mpaka unahitaji nafasi ya kifaa',
+ offTitle:'Nje ya mtandao — kuingia kumerekodiwa kwenye kifaa',
+ offBody:'Uko nje ya mtandao. Rekodi imehifadhiwa kwenye kifaa na ufunguo wa kipekee na itasawazishwa ukirejea mtandaoni. Hakuna kilichotumwa kwa seva bado.',
+ offKey:'Ufunguo wa kipekee',
+ conflictInline:'Rekodi hii iligongana wakati wa usawazishaji na inasubiri uamuzi.',
+ goToSync:'Fungua foleni ya usawazishaji',
+ kioskTitle:'Kuingiza kwa msaada', kioskSub:'Kifaa cha pamoja · wafanyakazi wasio na simu',
+ operator:'Mwendeshaji', rosterSearch:'Tafuta jina au namba ya mfanyakazi',
+ rosterHint:'Chagua mfanyakazi kurekodi kuingia kwake kwenye kifaa hiki cha pamoja.',
+ rosterCount:'Wafanyakazi 5,214 · Mwadui', rosterShown:'inaonyesha 40 kati ya 5,214 · imepunguzwa',
+ assistNote:'Kuingiza kwa msaada — mwendeshaji anarekodi kwa niaba ya mfanyakazi na anatajwa kwenye rekodi ya ukaguzi (UNI-06).',
+ syncQueueTitle:'Foleni ya rekodi',
+ queuedBanner:'Nje ya mtandao — rekodi zimehifadhiwa kwenye kifaa, zinasubiri usawazishaji. Hakuna kilichotumwa kwa seva bado.',
+ syncingBanner:'Umerejea mtandaoni — inasawazisha rekodi. Seva inathibitisha kila nafasi ya mpaka.',
+ syncedBanner:'Rekodi zote zimesawazishwa. Seva imethibitisha mpaka na kuongeza mnyororo wa ukaguzi.',
+ syncErrTitle:'Usawazishaji umeshindwa — utajaribu tena',
+ syncErrBody:'Seva haikuweza kufikiwa. Rekodi zinabaki kwenye foleni ya kifaa na funguo zao, hivyo hakuna kilichopotea. Usawazishaji unajaribu tena wenyewe.',
+ syncEmptyTitle:'Foleni haina kitu',
+ syncEmptyBody:'Kila rekodi imesawazishwa. Rekodi mpya zinaonekana hapa kifaa kikiwa nje ya mtandao.',
+ stQueued:'imesubiri', stSyncing:'inasawazisha…', stSynced:'imesawazishwa', stConflict:'mgongano', stFlagged:'imeorodheshwa',
+ largeBatchTitle:'Kikao cha kiosk nje ya mtandao',
+ largeBatchBody:'Kiosk cha pamoja kilikusanya kikundi kizima nje ya mtandao. Rekodi 148 zimesubiri kama fungu moja na zinasawazishwa pamoja — kila moja bado ina ufunguo na inathibitishwa peke yake.',
+ batchCount:'Rekodi 148 · fungu 1', serverRef:'kumb. ya seva', auditRef:'ukaguzi',
+ dedupeNote:'Zimeondolewa marudio kwa ufunguo wa kipekee — usawazishaji uliojaribiwa tena hurekodi kila moja mara moja.',
+ conflictTitle:'Mgongano wa usawazishaji — unahitaji utatuzi',
+ conflictBody:'Rekodi hii inagongana na rekodi iliyopo tayari kwenye seva. Chagua toleo la kuweka. Uamuzi unarekodiwa (UNI-06) na seva inabaki chanzo cha ukweli.',
+ conflictKind:'Kuingia mara mbili — rekodi mbili wazi bila kutoka katikati.',
+ verDevice:'Kifaa · imerekodiwa nje ya mtandao', verServer:'Seva · imerekodiwa tayari',
+ verVia:'kupitia', viaKiosk:'kiosk (msaada)', viaPhone:'simu ya ESS',
+ resolveHint:'Chagua utatuzi ili kuendelea na usawazishaji.',
+ auditExt:'Mnyororo wa ukaguzi umeongezwa · mtendaji, jukumu, kabla / baada · UNI-06',
+ flagOpen:'Wazi', na:'—'
+}};
+window.T=T;
+
+</script>
+<script>
+// Slice 5 · E3 Attendance (clock in/out · geofence · offline) — flow logic (reuses Slice-4 kit)
+function t(k){return window.T[cur.lang][k];}
+
+const ic={
+ clock:'<svg class="svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>',
+ target:'<svg class="svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/><path d="M12 1v3M12 20v3M23 12h-3M4 12H1"/></svg>',
+ pin:'<svg class="svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0z"/><circle cx="12" cy="10" r="2.5"/></svg>',
+ check:'<svg class="svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6 9 17l-5-5"/></svg>',
+ x:'<svg class="svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M18 6 6 18M6 6l12 12"/></svg>',
+ warn:'<svg class="svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></svg>',
+ off:'<svg class="svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M1 1l22 22M16.7 11.1A6 6 0 0 0 5 12M8.5 8.5A6 6 0 0 0 5 12M2 8.8A11 11 0 0 1 6 6M22 8.8a11 11 0 0 0-4.6-3.3M12 20h.01"/></svg>',
+ wifi:'<svg class="svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 12a10 10 0 0 1 14 0M8.5 15.5a5 5 0 0 1 7 0M12 19h.01"/></svg>',
+ sync:'<svg class="svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 12a9 9 0 1 1-3-6.7L21 8M21 3v5h-5"/></svg>',
+ cloud:'<svg class="svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M18 18a4 4 0 0 0 0-8 6 6 0 0 0-11.6-1.5A4.5 4.5 0 0 0 6.5 18z"/></svg>',
+ shield:'<svg class="svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>',
+ lock:'<svg class="svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="5" y="11" width="14" height="9" rx="1"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>',
+ search:'<svg class="svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>',
+ users:'<svg class="svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8M22 21v-2a4 4 0 0 0-3-3.87M16 3.13A4 4 0 0 1 16 11"/></svg>',
+ calendar:'<svg class="svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>',
+ login:'<svg class="svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4M10 17l5-5-5-5M15 12H3"/></svg>',
+ logout:'<svg class="svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>',
+ device:'<svg class="svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="6" y="2" width="12" height="20" rx="2.5"/><path d="M11 18h2"/></svg>'};
+
+const initials=n=>n.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
+
+let cur={screen:'clockin',state:'success',role:'R13',theme:'light',surface:'mobile',lang:'en'};
+
+const WORKER={n:'Peter Komba',no:'TMCL-MW-2210'};
+const OPERATOR={n:'Grace Ndaki',r:'Site Supervisor'};
+const DATE='29 Jun 2026';
+const T_IN='07:02', T_OUT='17:04', WORKED='10h 02m';
+const isOut=()=>cur.screen==='clockout';
+
+// ── app shell ──
+function app(title,sub,netOff,bodyHTML,operator){
+ const net=netOff
+  ?`<span class="net off">${ic.off}${cur.lang==='en'?'Offline':'Nje ya mtandao'}</span>`
+  :`<span class="net">${ic.wifi}${cur.lang==='en'?'Online':'Mtandaoni'}</span>`;
+ const op=operator&&cur.surface==='kiosk'
+  ?`<div class="shiftbar" style="border-color:rgba(0,148,212,.3);background:rgba(0,148,212,.06)"><span class="av" style="background:var(--blue)">${initials(OPERATOR.n)}</span><div><div class="nm">${OPERATOR.n}</div><div class="mt">${t('operator')} · ${OPERATOR.r}</div></div><span class="flag" style="margin-left:auto;background:rgba(0,148,212,.12);color:var(--blue);border-color:rgba(0,148,212,.3)">${ic.users}${t('kioskTitle')}</span></div>`
+  :'';
+ return `<div class="app"><div class="topbar">${ic.clock}<div><div class="tt">${title}</div><div class="ts">${sub}</div></div>${net}</div>
+  <div class="body">${op}${bodyHTML}</div></div>`;
+}
+
+// ── shift context ──
+function shiftBar(status){
+ const on=status!=='off';
+ return `<div class="shiftbar"><span class="av" style="${on?'':'background:var(--faint)'}">${initials(WORKER.n)}</span>
+  <div><div class="nm">${WORKER.n}</div><div class="mt">${WORKER.no} · ${t('workerRole')}</div></div>
+  <div class="st"><div class="lbl">${t('shift')}</div><div class="val">${t('dayShift')}</div></div></div>
+  <div class="stat3"><div class="c"><div class="lbl">${t('statusLbl')}</div><div class="val ${on?'g':''}">${on?t('onShift'):t('offShift')}</div></div>
+   <div class="c"><div class="lbl">${t('since')}</div><div class="val num">${on?T_IN:t('na')}</div></div>
+   <div class="c"><div class="lbl">${t('todayLbl')}</div><div class="val num">${on?WORKED:'0h'}</div></div></div>`;
+}
+
+// ── geofence radar ──
+function geoPanel(mode){ // 'pass' | 'fail' | 'locating' | 'coarse'
+ const bad=mode==='fail', loc=mode==='locating', coarse=mode==='coarse';
+ return `<div class="geo">
+  ${loc||coarse?'':`<div class="pulse ${bad?'out':''}"></div>`}
+  ${coarse?'<div class="halo"></div>':''}
+  <div class="bound ${bad?'bad':''} ${coarse?'warn':''}"></div>
+  ${loc?`<div class="skelrow" style="width:120px;height:120px;border-radius:50%"></div>`:`<div class="you ${bad?'out':''} ${coarse?'coarse':''}"></div>`}
+  <div class="locbadge ${coarse?'bad':''}">${loc?t('geoLocating'):coarse?t('capAccBadVal'):t('capAcc')+' '+t('capAccVal')}</div>
+  ${loc?'':coarse?`<div class="gtag warn"><span class="dot"></span>${t('geoCoarse')}</div>`:`<div class="gtag ${bad?'bad':'ok'}"><span class="dot"></span>${bad?t('geoOutside'):t('geoWithin')}</div>`}
+ </div>`;
+}
+const ssFlag=()=>`<span class="flag"><span class="dot"></span>${t('ssTag')}</span>`;
+
+// ── capture receipt ──
+function receipt(opts){ // {offline, out}
+ const rows=[
+  [t('capTime'),`${DATE} · ${opts.out?T_OUT:T_IN}`,false],
+  [t('capFix'),t('capFixVal'),true],
+  [t('capAcc'),t('capAccVal'),false],
+  [t('capBoundary'),ssFlag(),false]
+ ];
+ if(opts.offline) rows.push([t('offKey'),'att-1f9c-77e2',false]);
+ return `<div class="receipt"><div class="rh">${ic.pin} ${t('capTitle')}</div>
+  ${rows.map(([k,v,d])=>`<div class="rr"><span class="k">${k}</span><span class="v ${d?'d':''}">${v}</span></div>`).join('')}</div>`;
+}
+function auditRow(){return `<div class="audit">${ic.shield}<span>${t('auditExt')}</span><span class="h">#7b2e…c4</span></div>`;}
+function ssNote(){return `<div class="note">${ic.warn}<span>${t('ssNote')}</span></div>`;}
+
+// ── recent punches ──
+function recent(){
+ const items=[['out',t('rOut'),'yesterday',T_OUT],['in',t('rIn'),`yesterday · ${t('rInside')}`,T_IN]];
+ return `<div class="shead">${ic.clock} ${t('recent')}</div><div class="plist">${items.map(([k,lbl,sub,tm])=>
+  `<div class="pitem"><span class="pi ${k}">${k==='in'?ic.login:ic.logout}</span>
+   <div style="flex:1"><div class="pt">${lbl}</div><div class="pd">${sub}</div></div><span class="ptime num">${tm}</span></div>`).join('')}</div>`;
+}
+
+// ── large-data assisted roster ──
+function rosterBody(){
+ const crew=[['Peter Komba','TMCL-MW-2210'],['Amina Juma','TMCL-MW-3341'],['Joseph Mlimani','TMCL-MW-4821'],
+  ['Fatuma Chacha','TMCL-MW-4110'],['Salum Rajabu','TMCL-MW-5507'],['Neema Kije','TMCL-MW-6018'],['Hamisi Ally','TMCL-MW-6642']];
+ return `<div class="rsearch">${ic.search}<span>${t('rosterSearch')}</span></div>
+  <div class="rmeta"><span>${t('rosterHint')}</span><span class="cnt">${t('rosterCount')}</span></div>
+  <div class="roster">${crew.map(([n,no])=>`<div class="rrow"><span class="av">${initials(n)}</span>
+   <div style="flex:1"><div class="rn">${n}</div><div class="rs">${no}</div></div><span class="rb">${t('punchIn')}</span></div>`).join('')}
+   <div class="vhint">${t('rosterShown')}</div></div>
+  <div class="note">${ic.shield}<span>${t('assistNote')}</span></div>`;
+}
+
+// ── center-panel helper (empty / lock / error) ──
+function center(icCls,icon,title,body,extra){
+ return `<div class="center"><span class="ic ${icCls||''}">${icon}</span><h3>${title}</h3><p>${body}</p>${extra||''}</div>`;
+}
+
+// ── clock in / out screen ──
+function clockScreen(){
+ const out=isOut();
+ const title=out?t('clockout'):t('clockin'), sub=out?t('clockoutSub'):t('clockinSub');
+ const wrap=b=>app(title,sub,cur.state==='offline',b,true);
+ switch(cur.state){
+  case 'empty':
+   return wrap(center('',ic.calendar,out?t('emptyOutTitle'):t('emptyInTitle'),out?t('emptyOutBody'):t('emptyInBody')));
+  case 'loading':
+   return wrap(`${shiftBar(out?'on':'off')}${geoPanel('locating')}
+    <div class="receipt"><div class="rh">${ic.pin} ${t('capTitle')}</div>
+     ${'<div class="rr"><div class="skelrow" style="width:100%"></div></div>'.repeat(3)}</div>
+    <button class="punch wait" disabled>${ic.sync} ${t('capturing')}</button>`);
+  case 'success':{
+   const disc=out?'ok':'ok';
+   return wrap(`<div class="seal"><span class="disc ${disc}">${ic.check}</span>
+     <h3>${out?t('successOutTitle'):t('successInTitle')}</h3>
+     <div class="big">${out?T_OUT:T_IN}</div>
+     <p>${out?`${t('successOutSub')} · ${WORKED} ${t('worked')}.`:t('successInSub')}</p></div>
+    ${geoPanel('pass')}${receipt({out})}${auditRow()}${recent()}`);
+  }
+  case 'error':
+   return wrap(`${shiftBar(out?'on':'off')}
+    <div class="banner err">${ic.warn}<div><b>${t('errTitle')}</b><br>${t('errBody')}</div></div>
+    ${geoPanel('locating')}
+    <button class="btn p block" style="background:var(--red)">${ic.sync} ${t('retry')}</button>`);
+  case 'low-accuracy':
+   return wrap(`${shiftBar(out?'on':'off')}
+    <div class="banner warn">${ic.warn}<div><b>${t('lowAccTitle')}</b><br>${t('lowAccBody')}</div></div>
+    ${geoPanel('coarse')}
+    <div class="receipt"><div class="rh">${ic.target} ${t('capTitle')}</div>
+     <div class="rr"><span class="k">${t('capAcc')}</span><span class="v" style="color:#9A6B00">${t('capAccBadVal')}</span></div>
+     <div class="rr"><span class="k">${t('accTol')}</span><span class="v d">${t('accTolVal')}</span></div>
+     <div class="rr"><span class="k">${t('capBoundary')}</span><span class="v">${ssFlag()}</span></div></div>
+    <div class="note">${ic.shield}<span>${t('lowAccNote')}</span></div>
+    <button class="btn w block">${ic.sync} ${t('retryFix')}</button>`);
+  case 'no-permission':
+   return wrap(center('warn',ic.pin,t('noPermTitle'),t('noPermBody'),
+    `<div class="why">${t('noPermWhy')}</div><button class="btn b">${ic.target} ${t('enableLoc')}</button>`));
+  case 'offline':
+   return wrap(`<div class="banner off">${ic.off}<div><b>${t('offTitle')}</b><br>${t('offBody')}</div></div>
+    ${geoPanel('pass')}${receipt({out,offline:true})}
+    <button class="punch wait" disabled>${ic.cloud} ${t('queuedBtn')}</button>
+    <div class="note">${ic.shield}<span>${t('capServer')} · ${t('auditExt')}</span></div>`);
+  case 'large-data':
+   return app(t('kioskTitle'),t('kioskSub'),false,rosterBody(),true);
+  case 'conflict':
+   return wrap(`${shiftBar(out?'on':'off')}
+    <div class="banner err">${ic.warn}<div>${t('conflictInline')}</div></div>
+    <div class="qitem conflict"><span class="qi">${ic.login}</span>
+     <div style="flex:1"><div class="qt">${WORKER.n} · ${t('rIn')}</div><div class="qd">${DATE} · ${T_IN} · att-1f9c-77e2</div></div>
+     <span class="qs conflict"><span class="dot"></span>${t('stConflict')}</span></div>
+    <button class="btn b block" onclick="cur.screen='sync';cur.state='conflict';sync()">${ic.sync} ${t('goToSync')}</button>`);
+  default:
+   return wrap(`${shiftBar(out?'on':'off')}${geoPanel('pass')}${receipt({out})}
+    <button class="punch ${out?'out':'in'}">${out?ic.logout:ic.login} ${out?t('clockOutNow'):t('clockInNow')}</button>`);
+ }
+}
+
+// ── geofence treatment showcase ──
+function geoScreen(){
+ const passCard=`<div class="showcard"><div class="sc-h ok">${ic.check} ${t('geoWithin')}</div>
+   <div class="sc-b">${geoPanel('pass')}
+    <div class="receipt"><div class="rr"><span class="k">${t('capFix')}</span><span class="v d">${t('capFixVal')}</span></div>
+     <div class="rr"><span class="k">${t('capAcc')}</span><span class="v">${t('capAccVal')}</span></div>
+     <div class="rr"><span class="k">${t('capBoundary')}</span><span class="v">${ssFlag()}</span></div></div></div></div>`;
+ const failCard=`<div class="showcard"><div class="sc-h bad">${ic.warn} ${t('geoOutside')}</div>
+   <div class="sc-b">${geoPanel('fail')}
+    <div class="note">${ic.warn}<span>${t('deviceOnlyNote')}</span></div></div></div>`;
+ const coarseCard=`<div class="showcard"><div class="sc-h" style="color:#9A6B00">${ic.warn} ${t('geoCoarse')}</div>
+   <div class="sc-b">${geoPanel('coarse')}
+    <div class="note">${ic.shield}<span>${t('coarseCardNote')}</span></div></div></div>`;
+ const boundaryBlock=`<div class="receipt"><div class="rh">${ic.target} ${t('boundaryField')}</div>
+   <div class="rr"><span class="k">${t('capBoundary')}</span><span class="v">${ssFlag()}</span></div>
+   <div class="rr"><span class="k">${t('boundaryField')}</span><span class="v d">${t('boundaryVal')}</span></div></div>`;
+ return app(t('geofence'),t('geofenceSub'),false,
+  `<div class="showgrid">${passCard}${failCard}${coarseCard}</div>
+   ${boundaryBlock}${ssNote()}
+   <div class="banner info">${ic.shield}<div><b>${t('deviceOnly')}.</b> ${t('deviceOnlyNote')}</div></div>`);
+}
+
+// ── sync queue + conflict ──
+const QUEUE=[
+ {who:'Peter Komba',kind:'in',time:`${DATE} · ${T_IN}`,key:'att-1f9c-77e2',ref:'ATT-2026-08841'},
+ {who:'Amina Juma',kind:'in',time:`${DATE} · 07:05`,key:'att-2a03-40b1',ref:'ATT-2026-08842'},
+ {who:'Joseph Mlimani',kind:'out',time:`${DATE} · ${T_OUT}`,key:'att-9c7d-1e55',ref:'ATT-2026-08843'}];
+function qitem(p,status){
+ const lbl={queued:t('stQueued'),syncing:t('stSyncing'),synced:t('stSynced'),conflict:t('stConflict')}[status];
+ const meta=status==='synced'?`${t('serverRef')} ${p.ref}`:`${t('offKey')} ${p.key}`;
+ return `<div class="qitem ${status==='conflict'?'conflict':''}"><span class="qi">${p.kind==='in'?ic.login:ic.logout}</span>
+  <div style="flex:1"><div class="qt">${p.who} · ${p.kind==='in'?t('rIn'):t('rOut')}</div><div class="qd">${meta}</div></div>
+  <span class="qs ${status}"><span class="dot"></span>${lbl}</span></div>`;
+}
+function conflictBody(){
+ return `<div class="confhead"><span class="seal2">${ic.warn}</span>
+   <div><div class="ht">${t('conflictTitle')}</div><div class="hs">${t('conflictKind')}</div></div></div>
+  <div class="banner info">${ic.shield}<div>${t('conflictBody')}</div></div>
+  <div class="versus">
+   <div class="ver dev"><div class="vl">${ic.device} ${t('verDevice')}</div><div class="vtime num">${T_IN}</div>
+    <div class="vsub">${t('verVia')} ${t('viaPhone')}</div><div class="vkey">att-1f9c-77e2</div></div>
+   <div class="ver"><div class="vl">${ic.cloud} ${t('verServer')}</div><div class="vtime num">06:58</div>
+    <div class="vsub">${t('verVia')} ${t('viaKiosk')}</div><div class="vkey">ATT-2026-08822</div></div></div>
+  <div class="choices">
+   <div class="choice sel"><span class="rad"></span><div><div class="ct">${t('keepDevice')}</div><div class="cd">${DATE} · ${T_IN} · ESS</div></div></div>
+   <div class="choice"><span class="rad"></span><div><div class="ct">${t('keepServer')}</div><div class="cd">${DATE} · 06:58 · kiosk</div></div></div>
+   <div class="choice"><span class="rad"></span><div><div class="ct">${t('keepBoth')}</div><div class="cd">${t('resolveHint')}</div></div></div></div>
+  <div class="audit">${ic.shield}<span>${t('auditExt')}</span></div>
+  <button class="btn b block">${ic.check} ${t('resolve')}</button>`;
+}
+function syncScreen(){
+ const wrap=(netOff,b)=>app(t('sync'),t('syncSub'),netOff,b,false);
+ switch(cur.state){
+  case 'empty':
+   return wrap(false,center('',ic.cloud,t('syncEmptyTitle'),t('syncEmptyBody')));
+  case 'offline':
+   return wrap(true,`<div class="banner off">${ic.off}<div>${t('queuedBanner')}</div></div>
+    ${QUEUE.map(p=>qitem(p,'queued')).join('')}
+    <button class="btn g block" disabled>${ic.sync} ${t('syncNow')}</button>`);
+  case 'loading':
+   return wrap(false,`<div class="banner info">${ic.sync}<div>${t('syncingBanner')}</div></div>
+    ${qitem(QUEUE[0],'synced')}${qitem(QUEUE[1],'syncing')}${qitem(QUEUE[2],'queued')}`);
+  case 'success':
+   return wrap(false,`<div class="banner ok">${ic.check}<div>${t('syncedBanner')}</div></div>
+    ${QUEUE.map(p=>qitem(p,'synced')).join('')}${auditRow()}
+    <div class="note">${ic.shield}<span>${t('dedupeNote')}</span></div>`);
+  case 'error':
+   return wrap(false,`<div class="banner err">${ic.warn}<div><b>${t('syncErrTitle')}</b><br>${t('syncErrBody')}</div></div>
+    ${QUEUE.map(p=>qitem(p,'queued')).join('')}
+    <button class="btn b block">${ic.sync} ${t('retrySync')}</button>`);
+  case 'no-permission':
+   return wrap(true,`<div class="banner off">${ic.off}<div>${t('queuedBanner')}</div></div>
+    ${QUEUE.map(p=>qitem(p,'queued')).join('')}
+    <div class="note">${ic.pin}<span>${t('noPermBody')}</span></div>`);
+  case 'large-data':
+   return wrap(true,`<div class="banner info">${ic.cloud}<div><b>${t('largeBatchTitle')}.</b> ${t('largeBatchBody')}</div></div>
+    <div class="qitem"><span class="qi">${ic.users}</span><div style="flex:1"><div class="qt">${t('largeBatchTitle')} · Mwadui</div>
+     <div class="qd">${t('batchCount')}</div></div><span class="qs queued"><span class="dot"></span>${t('stQueued')}</span></div>
+    ${qitem(QUEUE[0],'queued')}${qitem(QUEUE[1],'queued')}
+    <div class="vhint">+ 146 ${cur.lang==='en'?'more · batched':'zaidi · fungu'}</div>
+    <button class="btn g block" disabled>${ic.sync} ${t('syncNow')}</button>
+    <div class="note">${ic.shield}<span>${t('dedupeNote')}</span></div>`);
+  case 'conflict':
+   return wrap(false,conflictBody());
+  default:
+   return wrap(true,`<div class="banner off">${ic.off}<div>${t('queuedBanner')}</div></div>${QUEUE.map(p=>qitem(p,'queued')).join('')}`);
+ }
+}
+
+// ── render ──
+function render(){
+ let html;
+ if(cur.screen==='geofence') html=geoScreen();
+ else if(cur.screen==='sync') html=syncScreen();
+ else html=clockScreen();
+ document.querySelector('.stage').innerHTML=`<div class="frame">${html}</div>`;
+}
+
+// ── switcher bar ──
+function seg(id,items,key){const el=document.getElementById(id);el.innerHTML=items.map(it=>{const v=Array.isArray(it)?it[0]:it,l=Array.isArray(it)?it[1]:it;return `<button data-v="${v}">${l}</button>`;}).join('');el.querySelectorAll('button').forEach(b=>b.onclick=()=>{cur[key]=b.getAttribute('data-v');sync();});}
+const AC={
+ clockin:'AC-ATT-01 · UNI-01 offline · UNI-06',
+ clockout:'AC-ATT-02 · UNI-01 offline · UNI-06',
+ geofence:'AC-ATT-03 · SS-3 [Open] · device-side capture',
+ sync:'AC-UNI-01 offline queue · UNI-06 audit'};
+function sync(){
+ document.documentElement.setAttribute('data-theme',cur.theme);
+ document.documentElement.setAttribute('data-surface',cur.surface);
+ [['screens','screen'],['states','state'],['roles','role'],['themes','theme'],['surfaces','surface'],['langs','lang']].forEach(([id,k])=>document.querySelectorAll('#'+id+' button').forEach(b=>b.classList.toggle('on',b.getAttribute('data-v')===cur[k])));
+ document.getElementById('acline').innerHTML=`Covers <b>${AC[cur.screen]}</b> · ${cur.theme}/${cur.surface} · viewer ${cur.role} · reg ${t('reg')}`;
+ render();
+}
+seg('screens',[['clockin','Clock in'],['clockout','Clock out'],['geofence','Geofence'],['sync','Offline sync']],'screen');
+seg('states',[['empty','empty'],['loading','loading'],['success','success'],['error','error'],['low-accuracy','low-acc'],['no-permission','no-perm'],['offline','offline'],['large-data','large-data'],['conflict','conflict']],'state');
+seg('roles',['R01','R02','R03','R04','R05','R06','R07','R08','R09','R10','R11','R12','R13'].map(r=>[r,r]),'role');
+seg('themes',[['light','Light'],['dark','Dark'],['glass','Glass'],['reduced','Reduced']],'theme');
+seg('surfaces',[['desktop','Desk'],['tablet','Tablet'],['mobile','Mobile'],['kiosk','Kiosk']],'surface');
+seg('langs',[['en','EN'],['sw','SW']],'lang');
+sync();
+
+</script>
+</body>
+</html>

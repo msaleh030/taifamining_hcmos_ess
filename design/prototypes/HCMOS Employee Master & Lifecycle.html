@@ -1,0 +1,900 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light" data-surface="desktop">
+<head>
+<meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>HCMOS · Slice 11 Employee master & lifecycle (C4·C5·C6·C7·C9 · MOV-02)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
+<style>
+:root{--green:#1FA24A;--blue:#0094D4;--yellow:#FBC02D;--red:#E5484D;--font:'IBM Plex Sans',system-ui,sans-serif;--mono:'IBM Plex Mono',monospace;--r:12px;}
+*{box-sizing:border-box;}html,body{margin:0;height:100%;}body{font-family:var(--font);background:#0b0f13;-webkit-font-smoothing:antialiased;display:flex;flex-direction:column;}
+.num{font-family:var(--mono);font-variant-numeric:tabular-nums;}
+[data-theme="light"]{--bg:#EEF1F3;--surface:#fff;--surface2:#F6F8F9;--text:#15191D;--muted:#5C6770;--faint:#8A949C;--border:#E2E7EA;--field:#F6F8F9;--card-bd:#E2E7EA;--blur:0px;--card-bg:#fff;--shadow:0 8px 30px rgba(16,24,32,.08);}
+[data-theme="dark"]{--bg:#0C1115;--surface:#141B20;--surface2:#1A2228;--text:#E7EDF1;--muted:#94A2AC;--faint:#697680;--border:#26313A;--field:#1A2228;--card-bd:#26313A;--blur:0px;--card-bg:#141B20;--shadow:0 12px 40px rgba(0,0,0,.5);}
+[data-theme="glass"]{--bg:linear-gradient(135deg,#0E4D34,#08311E 60%,#0a2a4a);--surface:rgba(255,255,255,.14);--surface2:rgba(255,255,255,.10);--text:#F2F6F4;--muted:rgba(242,246,244,.8);--faint:rgba(242,246,244,.55);--border:rgba(255,255,255,.22);--field:rgba(255,255,255,.12);--card-bd:rgba(255,255,255,.28);--blur:16px;--card-bg:rgba(255,255,255,.12);--shadow:0 18px 60px rgba(0,0,0,.35);}
+[data-theme="reduced"]{--bg:#06271A;--surface:#0C3B27;--surface2:#0A3220;--text:#fff;--muted:#CFE6DA;--faint:#9FC3B0;--border:#1C6A47;--field:#0A3220;--card-bd:#2C8A5E;--blur:0px;--card-bg:#0C3B27;--shadow:none;}
+.stage{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;padding:22px;overflow:auto;background:var(--bg);}
+.frame{position:relative;background:var(--bg);border-radius:18px;overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.45);display:flex;flex-direction:column;color:var(--text);}
+[data-surface="desktop"] .frame{width:1120px;height:660px;}
+[data-surface="tablet"] .frame{width:760px;height:600px;}
+[data-surface="mobile"] .frame{width:390px;height:760px;border-radius:30px;font-size:14px;}
+[data-surface="kiosk"] .frame{width:720px;height:840px;font-size:17px;}
+.svg{width:16px;height:16px;}
+
+/* app chrome */
+.app{flex:1;display:flex;flex-direction:column;min-height:0;background:var(--surface);}
+.topbar{display:flex;align-items:center;gap:10px;padding:14px 16px;border-bottom:1px solid var(--border);background:var(--surface);}
+[data-surface="mobile"] .topbar{padding-top:26px;}
+.topbar .tt{font-size:15px;font-weight:700;}
+.topbar .ts{font-size:10.5px;color:var(--faint);margin-top:1px;}
+.topbar .net{margin-left:auto;display:inline-flex;align-items:center;gap:5px;font:600 10px var(--mono);padding:3px 8px;border-radius:20px;background:var(--surface2);color:var(--muted);border:1px solid var(--border);}
+.topbar .net.off{background:rgba(251,192,45,.16);color:#9A6B00;border-color:rgba(251,192,45,.5);}
+[data-theme="dark"] .topbar .net.off,[data-theme="glass"] .topbar .net.off,[data-theme="reduced"] .topbar .net.off{color:var(--yellow);}
+.body{flex:1;overflow:auto;padding:16px;display:flex;flex-direction:column;gap:13px;}
+[data-surface="kiosk"] .body{padding:22px;gap:16px;}
+
+/* shift context strip */
+.shiftbar{display:flex;align-items:center;gap:12px;padding:13px 14px;border-radius:13px;background:var(--surface2);border:1px solid var(--card-bd);}
+.shiftbar .av{width:40px;height:40px;border-radius:50%;background:var(--green);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;flex-shrink:0;}
+.shiftbar .nm{font-weight:700;font-size:14px;}
+.shiftbar .mt{font:600 11px var(--mono);color:var(--muted);margin-top:1px;}
+.shiftbar .st{margin-left:auto;text-align:right;}
+.shiftbar .st .lbl{font-size:9.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--faint);font-weight:700;}
+.shiftbar .st .val{font-weight:700;font-size:13px;}
+.stat3{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--border);border:1px solid var(--card-bd);border-radius:12px;overflow:hidden;}
+.stat3 .c{background:var(--surface);padding:11px 13px;}
+.stat3 .c .lbl{font-size:9.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--faint);font-weight:700;}
+.stat3 .c .val{font:700 16px var(--mono);margin-top:3px;}
+.stat3 .c .val.g{color:var(--green);}
+
+/* geofence radar */
+.geo{position:relative;height:186px;border-radius:14px;overflow:hidden;border:1px solid var(--card-bd);background:
+ repeating-linear-gradient(0deg,transparent,transparent 21px,color-mix(in srgb,var(--border) 55%,transparent) 21px,color-mix(in srgb,var(--border) 55%,transparent) 22px),
+ repeating-linear-gradient(90deg,transparent,transparent 21px,color-mix(in srgb,var(--border) 55%,transparent) 21px,color-mix(in srgb,var(--border) 55%,transparent) 22px),
+ radial-gradient(circle at 50% 52%,var(--surface2),var(--field));display:flex;align-items:center;justify-content:center;}
+[data-surface="kiosk"] .geo{height:220px;}
+.geo .bound{position:absolute;left:50%;top:52%;transform:translate(-50%,-50%);width:150px;height:150px;border-radius:50%;border:2.5px dashed var(--green);background:rgba(31,162,74,.08);}
+.geo .bound.bad{border-color:var(--red);background:rgba(229,72,77,.07);}
+.geo .you{position:absolute;left:50%;top:52%;transform:translate(-50%,-50%);width:16px;height:16px;border-radius:50%;background:var(--blue);border:2px solid #fff;box-shadow:0 0 0 6px rgba(0,148,212,.22);z-index:2;}
+.geo .you.out{left:82%;top:26%;background:var(--red);box-shadow:0 0 0 6px rgba(229,72,77,.22);}
+@media (prefers-reduced-motion:no-preference){[data-deck] .geo .you{}.geo .pulse{position:absolute;left:50%;top:52%;transform:translate(-50%,-50%);width:16px;height:16px;border-radius:50%;background:rgba(0,148,212,.4);animation:ping 2.4s ease-out infinite;}.geo .pulse.out{left:82%;top:26%;background:rgba(229,72,77,.4);}}
+@keyframes ping{0%{width:16px;height:16px;opacity:.6;}100%{width:150px;height:150px;opacity:0;}}
+.geo .gtag{position:absolute;left:12px;bottom:11px;display:inline-flex;align-items:center;gap:6px;font-weight:700;font-size:12px;padding:6px 11px;border-radius:20px;background:var(--card-bg);border:1px solid var(--card-bd);}
+.geo .gtag.ok{color:var(--green);}.geo .gtag.bad{color:var(--red);}
+.geo .gtag .dot{width:7px;height:7px;border-radius:50%;background:currentColor;}
+.geo .locbadge{position:absolute;right:12px;top:11px;font:600 9.5px var(--mono);color:var(--muted);background:var(--card-bg);border:1px solid var(--card-bd);border-radius:6px;padding:3px 7px;}
+
+/* capture receipt */
+.receipt{border:1px solid var(--card-bd);border-radius:13px;background:var(--surface2);overflow:hidden;}
+.receipt .rh{display:flex;align-items:center;gap:8px;padding:10px 13px;border-bottom:1px solid var(--card-bd);font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:700;}
+.receipt .rr{display:flex;align-items:center;gap:10px;padding:9px 13px;font-size:12.5px;border-bottom:1px solid color-mix(in srgb,var(--border) 60%,transparent);}
+.receipt .rr:last-child{border-bottom:none;}
+.receipt .rr .k{color:var(--muted);}
+.receipt .rr .v{margin-left:auto;font:600 12px var(--mono);text-align:right;}
+.receipt .rr .v.d{color:var(--faint);font-weight:500;}
+
+/* flag pill for [SS-3 Open] */
+.flag{display:inline-flex;align-items:center;gap:5px;font:700 10px var(--mono);letter-spacing:.03em;padding:3px 8px;border-radius:6px;background:rgba(251,192,45,.18);color:#9A6B00;border:1px solid rgba(251,192,45,.5);}
+[data-theme="dark"] .flag,[data-theme="glass"] .flag,[data-theme="reduced"] .flag{color:var(--yellow);}
+.flag .dot{width:6px;height:6px;border-radius:50%;background:currentColor;}
+
+/* big punch button */
+.punch{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;border:none;border-radius:15px;padding:17px;font-weight:700;font-size:16px;cursor:pointer;color:#fff;}
+[data-surface="kiosk"] .punch{padding:22px;font-size:20px;}
+.punch.in{background:var(--green);}
+.punch.out{background:var(--surface);color:var(--red);border:1.5px solid var(--red);}
+.punch:disabled{opacity:.5;cursor:default;}
+.punch.wait{background:var(--surface2);color:var(--muted);border:1px solid var(--card-bd);}
+
+/* result seal (success/error/offline hero) */
+.seal{display:flex;flex-direction:column;align-items:center;text-align:center;gap:6px;padding:6px 6px 2px;}
+.seal .disc{width:66px;height:66px;border-radius:50%;display:flex;align-items:center;justify-content:center;}
+.seal .disc.ok{background:rgba(31,162,74,.15);color:var(--green);}
+.seal .disc.err{background:rgba(229,72,77,.14);color:var(--red);}
+.seal .disc.off{background:rgba(251,192,45,.18);color:#9A6B00;}
+[data-theme="dark"] .seal .disc.off,[data-theme="glass"] .seal .disc.off,[data-theme="reduced"] .seal .disc.off{color:var(--yellow);}
+.seal .disc .svg{width:32px;height:32px;}
+.seal h3{margin:2px 0 0;font-size:19px;}
+.seal .big{font:700 30px var(--mono);letter-spacing:-.01em;}
+.seal p{margin:0;font-size:12.5px;color:var(--muted);max-width:300px;line-height:1.45;}
+
+/* banners + notes (kit) */
+.banner{padding:11px 13px;border-radius:11px;font-size:12px;display:flex;gap:9px;align-items:flex-start;line-height:1.45;}
+.banner.off{background:rgba(251,192,45,.16);color:#9A6B00;border:1px solid rgba(251,192,45,.5);}
+.banner.err{background:rgba(229,72,77,.14);color:var(--red);border:1px solid rgba(229,72,77,.4);}
+.banner.ok{background:rgba(31,162,74,.15);color:var(--green);border:1px solid rgba(31,162,74,.4);}
+.banner.info{background:rgba(0,148,212,.1);color:var(--blue);border:1px solid rgba(0,148,212,.3);}
+[data-theme="dark"] .banner.off,[data-theme="glass"] .banner.off,[data-theme="reduced"] .banner.off{color:var(--yellow);}
+.banner .svg{flex-shrink:0;margin-top:1px;}
+.note{display:flex;gap:8px;align-items:flex-start;font-size:11px;color:var(--muted);line-height:1.5;padding:2px 2px;}
+.note .svg{flex-shrink:0;margin-top:1px;color:var(--faint);}
+.shead{font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:700;display:flex;align-items:center;gap:7px;margin:2px 0;}
+
+/* audit chip */
+.audit{display:flex;align-items:center;gap:8px;padding:9px 12px;border-radius:10px;background:rgba(0,148,212,.08);border:1px solid rgba(0,148,212,.26);font-size:11px;color:var(--muted);line-height:1.4;}
+.audit .svg{color:var(--blue);flex-shrink:0;}
+.audit .h{font:600 10px var(--mono);color:var(--blue);margin-left:auto;flex-shrink:0;}
+
+/* recent punches list */
+.plist{display:flex;flex-direction:column;gap:7px;}
+.pitem{display:flex;align-items:center;gap:11px;padding:10px 12px;border-radius:11px;background:var(--surface2);border:1px solid var(--card-bd);}
+.pitem .pi{width:30px;height:30px;border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.pitem .pi.in{background:rgba(31,162,74,.14);color:var(--green);}
+.pitem .pi.out{background:rgba(0,148,212,.12);color:var(--blue);}
+.pitem .pt{font-size:12.5px;font-weight:600;}
+.pitem .pd{font-size:10.5px;color:var(--muted);margin-top:1px;}
+.pitem .ptime{margin-left:auto;font:700 13px var(--mono);}
+
+/* lock / empty states (kit) */
+.center{display:flex;flex-direction:column;align-items:center;justify-content:center;flex:1;text-align:center;padding:30px;gap:12px;color:var(--muted);}
+.center .ic{width:56px;height:56px;border-radius:16px;display:flex;align-items:center;justify-content:center;background:var(--surface2);color:var(--faint);}
+.center .ic.warn{background:rgba(251,192,45,.16);color:#9A6B00;}
+.center .ic.err{background:rgba(229,72,77,.13);color:var(--red);}
+[data-theme="dark"] .center .ic.warn,[data-theme="glass"] .center .ic.warn,[data-theme="reduced"] .center .ic.warn{color:var(--yellow);}
+.center .ic .svg{width:26px;height:26px;}
+.center h3{margin:0;color:var(--text);font-size:17px;}
+.center p{margin:0;font-size:12.5px;max-width:320px;line-height:1.5;}
+.center .why{font:600 11px var(--mono);background:var(--surface2);border:1px solid var(--border);border-radius:7px;padding:6px 10px;color:var(--muted);}
+.center .btn{margin-top:4px;}
+
+/* skeleton */
+.skelrow{height:16px;border-radius:6px;background:linear-gradient(90deg,var(--surface2),var(--field),var(--surface2));background-size:200% 100%;animation:sh 1.2s linear infinite;}
+@keyframes sh{to{background-position:-200% 0;}}
+
+/* buttons */
+.btn{border:none;border-radius:10px;padding:11px 16px;font-weight:600;font-size:13px;cursor:pointer;display:inline-flex;align-items:center;gap:7px;justify-content:center;}
+.btn.p{background:var(--green);color:#fff;}.btn.g{background:transparent;border:1px solid var(--border);color:var(--text);}
+.btn.b{background:var(--blue);color:#fff;}.btn.w{background:var(--yellow);color:#5a3d00;}
+.btn.block{width:100%;}
+.btn:disabled{opacity:.5;}
+
+/* roster (large-data / kiosk assisted) */
+.rsearch{display:flex;align-items:center;gap:9px;padding:11px 13px;border-radius:12px;background:var(--field);border:1px solid var(--border);color:var(--faint);font-size:13px;}
+.rmeta{display:flex;align-items:center;justify-content:space-between;font-size:11px;color:var(--muted);}
+.rmeta .cnt{font:600 11px var(--mono);}
+.roster{border:1px solid var(--card-bd);border-radius:13px;overflow:hidden;background:var(--surface);}
+.rrow{display:flex;align-items:center;gap:11px;padding:11px 13px;border-bottom:1px solid var(--border);}
+.rrow:last-child{border-bottom:none;}
+.rrow .av{width:34px;height:34px;border-radius:50%;background:var(--surface2);color:var(--muted);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px;flex-shrink:0;border:1px solid var(--card-bd);}
+.rrow .rn{font-size:13px;font-weight:600;}
+.rrow .rs{font:600 10.5px var(--mono);color:var(--faint);margin-top:1px;}
+.rrow .rb{margin-left:auto;font-size:11.5px;font-weight:600;color:var(--green);border:1px solid var(--card-bd);border-radius:8px;padding:6px 12px;background:var(--surface2);flex-shrink:0;}
+.vhint{text-align:center;font:600 10px var(--mono);color:var(--faint);padding:9px;background:var(--surface2);}
+
+/* sync queue */
+.qitem{border:1px solid var(--card-bd);border-radius:12px;background:var(--surface2);padding:11px 13px;display:flex;align-items:center;gap:11px;}
+.qitem .qi{width:32px;height:32px;border-radius:9px;display:flex;align-items:center;justify-content:center;flex-shrink:0;background:var(--card-bg);border:1px solid var(--border);color:var(--muted);}
+.qitem .qt{font-size:12.5px;font-weight:600;}
+.qitem .qd{font:600 10.5px var(--mono);color:var(--faint);margin-top:2px;}
+.qitem .qs{margin-left:auto;flex-shrink:0;display:inline-flex;align-items:center;gap:6px;font:700 10px var(--mono);letter-spacing:.03em;padding:4px 9px;border-radius:20px;}
+.qs.queued{background:rgba(251,192,45,.16);color:#9A6B00;}
+.qs.syncing{background:rgba(0,148,212,.12);color:var(--blue);}
+.qs.synced{background:rgba(31,162,74,.14);color:var(--green);}
+.qs.conflict{background:rgba(229,72,77,.14);color:var(--red);}
+[data-theme="dark"] .qs.queued,[data-theme="glass"] .qs.queued,[data-theme="reduced"] .qs.queued{color:var(--yellow);}
+.qs .dot{width:6px;height:6px;border-radius:50%;background:currentColor;}
+@media (prefers-reduced-motion:no-preference){.qs.syncing .dot{animation:blink 1s ease-in-out infinite;}}
+@keyframes blink{50%{opacity:.3;}}
+.qitem.conflict{border-color:rgba(229,72,77,.5);}
+
+/* conflict resolution */
+.confhead{display:flex;align-items:center;gap:12px;padding:13px 14px;border-radius:13px;background:rgba(229,72,77,.1);border:1px solid rgba(229,72,77,.3);}
+.confhead .seal2{width:42px;height:42px;border-radius:11px;background:rgba(229,72,77,.16);color:var(--red);display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.confhead .ht{font-weight:700;font-size:14.5px;}
+.confhead .hs{font-size:11px;color:var(--muted);margin-top:2px;line-height:1.4;}
+.versus{display:grid;grid-template-columns:1fr 1fr;gap:11px;}
+[data-surface="mobile"] .versus{grid-template-columns:1fr;}
+.ver{border:1px solid var(--card-bd);border-radius:12px;background:var(--surface2);padding:12px;}
+.ver.dev{border-color:rgba(0,148,212,.4);}
+.ver .vl{font:700 9.5px var(--mono);letter-spacing:.04em;text-transform:uppercase;color:var(--muted);margin-bottom:9px;display:flex;align-items:center;gap:6px;}
+.ver.dev .vl{color:var(--blue);}
+.ver .vtime{font:700 22px var(--mono);}
+.ver .vsub{font-size:11px;color:var(--muted);margin-top:3px;line-height:1.4;}
+.ver .vkey{margin-top:9px;font:600 10px var(--mono);color:var(--faint);padding-top:9px;border-top:1px solid var(--border);}
+.choices{display:flex;flex-direction:column;gap:8px;}
+.choice{display:flex;align-items:center;gap:11px;padding:12px 13px;border:1.5px solid var(--card-bd);border-radius:11px;cursor:default;}
+.choice.sel{border-color:var(--blue);background:rgba(0,148,212,.07);}
+.choice .rad{width:17px;height:17px;border-radius:50%;border:2px solid var(--card-bd);flex-shrink:0;}
+.choice.sel .rad{border-color:var(--blue);background:radial-gradient(circle,var(--blue) 42%,transparent 46%);}
+.choice .ct{font-size:12.5px;font-weight:600;}
+.choice .cd{font-size:10.5px;color:var(--muted);margin-top:1px;}
+
+/* two-up showcase (geofence screen) */
+.showgrid{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+[data-surface="mobile"] .showgrid{grid-template-columns:1fr;}
+.showcard{border:1px solid var(--card-bd);border-radius:14px;background:var(--surface);overflow:hidden;display:flex;flex-direction:column;}
+.showcard .sc-h{padding:11px 13px;font-weight:700;font-size:13px;display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--border);}
+.showcard .sc-h.ok{color:var(--green);}.showcard .sc-h.bad{color:var(--red);}
+.showcard .sc-b{padding:13px;display:flex;flex-direction:column;gap:11px;}
+
+/* ── Slice-6 leave additions ── */
+/* balance tiles */
+.tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:11px;}
+[data-surface="mobile"] .tiles{grid-template-columns:1fr;}
+.tile{border:1px solid var(--card-bd);border-radius:14px;background:var(--surface2);padding:13px 14px;display:flex;flex-direction:column;gap:3px;}
+.tile.hi{border-color:rgba(31,162,74,.4);background:rgba(31,162,74,.06);}
+.tile.sick{border-color:rgba(0,148,212,.35);background:rgba(0,148,212,.06);}
+.tile.carry{border-color:rgba(251,192,45,.45);background:rgba(251,192,45,.08);}
+.tile .tl{font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:700;display:flex;align-items:center;gap:6px;}
+.tile .big{font:700 30px var(--mono);line-height:1.05;letter-spacing:-.01em;}
+.tile .big small{font-size:13px;font-weight:600;color:var(--muted);letter-spacing:0;}
+.tile.hi .big{color:var(--green);}.tile.sick .big{color:var(--blue);}
+.tile .sub{font-size:10.5px;color:var(--muted);line-height:1.4;}
+.tile .split{display:flex;gap:12px;margin-top:2px;}
+.tile .split div .n{font:700 16px var(--mono);}.tile .split div .k{font-size:9.5px;color:var(--faint);text-transform:uppercase;letter-spacing:.04em;font-weight:700;}
+
+/* form fields */
+.fg{display:grid;grid-template-columns:1fr 1fr;gap:12px 13px;}
+[data-surface="mobile"] .fg{grid-template-columns:1fr;}
+.field label{display:block;font-size:10.5px;color:var(--muted);margin-bottom:5px;font-weight:600;}
+.field .req{color:var(--red);}
+.field input,.field select,.field textarea{width:100%;border:1px solid var(--border);border-radius:9px;padding:10px 11px;background:var(--field);color:var(--text);font:inherit;font-size:13px;resize:none;}
+.field textarea{min-height:60px;line-height:1.5;}
+.field .full,.full{grid-column:1/-1;}
+
+/* leave type segmented */
+.ltypes{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+.ltype{border:1.5px solid var(--card-bd);border-radius:12px;padding:12px 13px;display:flex;gap:10px;align-items:center;}
+.ltype.sel-a{border-color:var(--green);background:rgba(31,162,74,.07);}
+.ltype.sel-s{border-color:var(--blue);background:rgba(0,148,212,.07);}
+.ltype .li{width:32px;height:32px;border-radius:9px;display:flex;align-items:center;justify-content:center;flex-shrink:0;background:var(--surface2);color:var(--faint);}
+.ltype.sel-a .li{background:rgba(31,162,74,.16);color:var(--green);}
+.ltype.sel-s .li{background:rgba(0,148,212,.14);color:var(--blue);}
+.ltype .tt{font-weight:700;font-size:13.5px;}.ltype .td{font-size:10px;color:var(--muted);margin-top:1px;}
+.ltype .rad{margin-left:auto;width:16px;height:16px;border-radius:50%;border:2px solid var(--card-bd);flex-shrink:0;}
+.ltype.sel-a .rad{border-color:var(--green);background:radial-gradient(circle,var(--green) 42%,transparent 46%);}
+.ltype.sel-s .rad{border-color:var(--blue);background:radial-gradient(circle,var(--blue) 42%,transparent 46%);}
+
+/* submission checks */
+.checks{display:flex;flex-direction:column;gap:8px;}
+.chk{display:flex;gap:11px;align-items:flex-start;padding:10px 12px;border-radius:11px;background:var(--surface2);border:1px solid var(--card-bd);}
+.chk .ci{width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.chk.ok .ci{background:rgba(31,162,74,.16);color:var(--green);}
+.chk.bad .ci{background:rgba(229,72,77,.14);color:var(--red);}
+.chk.warn .ci{background:rgba(251,192,45,.2);color:#9A6B00;}
+[data-theme="dark"] .chk.warn .ci,[data-theme="glass"] .chk.warn .ci,[data-theme="reduced"] .chk.warn .ci{color:var(--yellow);}
+.chk .ct{font-size:12.5px;font-weight:600;}.chk .cd{font-size:10.5px;color:var(--muted);margin-top:2px;line-height:1.4;}
+.chk .ci .svg{width:14px;height:14px;}
+.hoh{margin-top:2px;padding:11px 13px;border-radius:11px;background:rgba(251,192,45,.12);border:1px solid rgba(251,192,45,.45);font-size:11.5px;line-height:1.45;display:flex;gap:9px;align-items:flex-start;color:#7a5600;}
+[data-theme="dark"] .hoh,[data-theme="glass"] .hoh,[data-theme="reduced"] .hoh{color:var(--yellow);}
+.hoh .svg{flex-shrink:0;margin-top:1px;color:var(--yellow);}
+.hoh b{font-weight:700;}
+
+/* request detail (approve) */
+.reqcard{border:1px solid var(--card-bd);border-radius:14px;background:var(--surface);overflow:hidden;}
+.reqcard .rq-h{display:flex;align-items:center;gap:12px;padding:13px 14px;border-bottom:1px solid var(--border);}
+.reqcard .rq-h .av{width:40px;height:40px;border-radius:50%;background:var(--green);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;flex-shrink:0;}
+.reqcard .rq-h .nm{font-weight:700;font-size:14px;}.reqcard .rq-h .mt{font:600 11px var(--mono);color:var(--muted);margin-top:1px;}
+.reqcard .rq-b{padding:6px 4px;}
+
+/* coverage meter */
+.cov{border:1px solid var(--card-bd);border-radius:13px;background:var(--surface2);padding:13px 14px;}
+.cov.warn{border-color:rgba(251,192,45,.5);background:rgba(251,192,45,.08);}
+.cov .cvh{display:flex;align-items:center;gap:8px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-bottom:10px;}
+.cov .cvrow{display:flex;align-items:center;gap:11px;}
+.cov .cvrole{font-size:12.5px;font-weight:600;}
+.cov .cvsub{font-size:10.5px;color:var(--muted);margin-top:1px;}
+.cov .cvcount{margin-left:auto;text-align:right;flex-shrink:0;}
+.cov .cvcount .n{font:700 18px var(--mono);}.cov.warn .cvcount .n{color:var(--red);}
+.cov .cvcount .k{font-size:9.5px;color:var(--faint);text-transform:uppercase;letter-spacing:.04em;font-weight:700;}
+.cov .cvbar{margin-top:11px;height:7px;border-radius:5px;background:var(--border);overflow:hidden;}
+.cov .cvbar i{display:block;height:100%;background:var(--green);}
+.cov.warn .cvbar i{background:var(--red);}
+
+/* acknowledge override */
+.ack{margin-top:11px;border:1px solid rgba(229,72,77,.3);border-radius:12px;background:rgba(229,72,77,.05);padding:12px 13px;}
+.ack .akt{font-weight:700;font-size:12.5px;display:flex;align-items:center;gap:7px;}
+.ack .akb{font-size:11px;color:var(--muted);margin:3px 0 10px;line-height:1.45;}
+.ackchk{display:flex;align-items:center;gap:9px;font-size:12px;font-weight:600;}
+.ackchk .box{width:18px;height:18px;border-radius:5px;border:2px solid var(--card-bd);display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.ackchk .box.on{background:var(--red);border-color:var(--red);color:#fff;}
+.ackchk .box .svg{width:12px;height:12px;}
+
+/* liability table */
+.ltable{border:1px solid var(--card-bd);border-radius:13px;overflow:hidden;background:var(--surface);}
+.lhead,.lrow{display:grid;grid-template-columns:1.6fr .9fr .9fr .9fr;gap:8px;padding:10px 13px;align-items:center;}
+.lhead{background:var(--surface2);border-bottom:1px solid var(--card-bd);font-size:9.5px;text-transform:uppercase;letter-spacing:.04em;color:var(--faint);font-weight:700;}
+.lrow{border-bottom:1px solid var(--border);font-size:12.5px;}
+.lrow:last-child{border-bottom:none;}
+[data-surface="mobile"] .lhead,[data-surface="mobile"] .lrow{grid-template-columns:1.4fr 1fr;}
+[data-surface="mobile"] .lhead .hide,[data-surface="mobile"] .lrow .hide{display:none;}
+.lrow .who .nm{font-weight:600;}.lrow .who .rl{font:600 10px var(--mono);color:var(--faint);margin-top:1px;}
+.lrow .num{font-family:var(--mono);font-variant-numeric:tabular-nums;text-align:right;}
+.lrow .liab{font-weight:700;text-align:right;}
+.lrow.excl{opacity:.55;}
+.lrow.excl .liab{color:var(--faint);font-weight:600;font-size:11px;}
+.lna{display:inline-flex;align-items:center;gap:5px;font:700 10px var(--mono);color:#9A6B00;background:rgba(251,192,45,.16);border:1px solid rgba(251,192,45,.45);border-radius:6px;padding:2px 7px;}
+[data-theme="dark"] .lna,[data-theme="glass"] .lna,[data-theme="reduced"] .lna{color:var(--yellow);}
+.ltotal{display:flex;align-items:center;gap:12px;padding:14px;border-radius:13px;background:var(--surface2);border:1px solid var(--card-bd);}
+.ltotal .tk{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:700;}
+.ltotal .tv{font:700 26px var(--mono);letter-spacing:-.01em;margin-top:2px;}
+[data-surface="kiosk"] .ltotal .tv{font-size:30px;}
+.ltotal .tmeta{margin-left:auto;text-align:right;font-size:10.5px;color:var(--muted);line-height:1.5;flex-shrink:0;}
+.moneybig{font:700 32px var(--mono);letter-spacing:-.01em;}
+.formula{display:inline-flex;align-items:center;gap:6px;font:600 10.5px var(--mono);color:var(--muted);background:var(--surface2);border:1px solid var(--border);border-radius:7px;padding:5px 9px;}
+
+/* ── Slice-7 KPI scorecard ── */
+/* RAG summary bar */
+.ragbar{display:flex;flex-wrap:wrap;gap:9px;align-items:center;}
+.ragpill{display:inline-flex;align-items:center;gap:7px;padding:7px 13px;border-radius:11px;border:1px solid var(--card-bd);background:var(--surface2);font-size:12px;font-weight:600;}
+.ragpill .n{font:700 16px var(--mono);}
+.ragpill.g{border-color:rgba(31,162,74,.4);}.ragpill.g .n{color:var(--green);}
+.ragpill.a{border-color:rgba(251,192,45,.5);}.ragpill.a .n{color:#9A6B00;}
+.ragpill.r{border-color:rgba(229,72,77,.4);}.ragpill.r .n{color:var(--red);}
+.ragpill.na .n{color:var(--faint);}
+[data-theme="dark"] .ragpill.a .n,[data-theme="glass"] .ragpill.a .n,[data-theme="reduced"] .ragpill.a .n{color:var(--yellow);}
+.ragdot{width:9px;height:9px;border-radius:50%;flex-shrink:0;}
+.ragdot.g{background:var(--green);}.ragdot.a{background:var(--yellow);}.ragdot.r{background:var(--red);}.ragdot.na{background:var(--faint);}
+.scope{display:inline-flex;align-items:center;gap:6px;font:600 10.5px var(--mono);color:var(--muted);background:var(--surface2);border:1px solid var(--border);border-radius:7px;padding:5px 9px;}
+
+/* category header */
+.kcat{font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:700;display:flex;align-items:center;gap:8px;margin:4px 0 2px;}
+.kcat .ln{flex:1;height:1px;background:var(--border);}
+
+/* KPI grid + card */
+.kgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;}
+[data-surface="tablet"] .kgrid{grid-template-columns:repeat(2,1fr);}
+[data-surface="mobile"] .kgrid{grid-template-columns:1fr;}
+[data-surface="kiosk"] .kgrid{grid-template-columns:repeat(2,1fr);}
+.kcard{border:1px solid var(--card-bd);border-left-width:4px;border-radius:13px;background:var(--surface);padding:13px 14px;display:flex;flex-direction:column;gap:7px;position:relative;}
+.kcard.g{border-left-color:var(--green);}.kcard.a{border-left-color:var(--yellow);}.kcard.r{border-left-color:var(--red);}.kcard.n{border-left-color:var(--faint);}
+.kcard.na{border-left-color:var(--yellow);background:repeating-linear-gradient(135deg,color-mix(in srgb,var(--yellow) 7%,transparent),color-mix(in srgb,var(--yellow) 7%,transparent) 10px,transparent 10px,transparent 20px);}
+.kcard .khead{display:flex;align-items:flex-start;gap:9px;}
+.kcard .kn{font-size:12.5px;font-weight:700;line-height:1.3;flex:1;}
+.kcard .kstat{flex-shrink:0;display:inline-flex;align-items:center;gap:5px;font:700 9.5px var(--mono);letter-spacing:.04em;padding:3px 8px;border-radius:20px;text-transform:uppercase;}
+.kstat.g{background:rgba(31,162,74,.14);color:var(--green);}.kstat.a{background:rgba(251,192,45,.18);color:#9A6B00;}.kstat.r{background:rgba(229,72,77,.14);color:var(--red);}.kstat.n{background:var(--surface2);color:var(--faint);}
+.kstat.na{background:rgba(251,192,45,.16);color:#9A6B00;}
+[data-theme="dark"] .kstat.a,[data-theme="glass"] .kstat.a,[data-theme="reduced"] .kstat.a,[data-theme="dark"] .kstat.na,[data-theme="glass"] .kstat.na,[data-theme="reduced"] .kstat.na{color:var(--yellow);}
+.kcard .kv{font:700 27px var(--mono);letter-spacing:-.01em;line-height:1;}
+[data-surface="kiosk"] .kcard .kv{font-size:31px;}
+.kcard .kv.navb{font-size:15px;color:#9A6B00;display:inline-flex;align-items:center;gap:7px;}
+[data-theme="dark"] .kcard .kv.navb,[data-theme="glass"] .kcard .kv.navb,[data-theme="reduced"] .kcard .kv.navb{color:var(--yellow);}
+.kcard .ksub{font-size:10.5px;color:var(--faint);}
+.kcard .kfoot{margin-top:auto;padding-top:8px;border-top:1px solid var(--border);display:flex;flex-direction:column;gap:4px;}
+.kcard .krow{display:flex;align-items:center;gap:8px;font-size:10.5px;}
+.kcard .krow .kk{color:var(--faint);text-transform:uppercase;letter-spacing:.04em;font-weight:700;font-size:9px;width:52px;flex-shrink:0;}
+.kcard .krow .kf{font:600 10.5px var(--mono);color:var(--muted);}
+.kcard .krow .kt{margin-left:auto;font:700 11px var(--mono);}
+.kcard .naband{display:inline-flex;align-items:center;gap:6px;font:700 10px var(--mono);color:#9A6B00;}
+[data-theme="dark"] .kcard .naband,[data-theme="glass"] .kcard .naband,[data-theme="reduced"] .kcard .naband{color:var(--yellow);}
+
+/* ESS my-kpi headline */
+.myhead{display:flex;align-items:center;gap:12px;padding:14px;border-radius:14px;background:var(--surface2);border:1px solid var(--card-bd);}
+.myhead .av{width:42px;height:42px;border-radius:50%;background:var(--green);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;flex-shrink:0;}
+.myhead .nm{font-weight:700;font-size:14px;}.myhead .mt{font:600 11px var(--mono);color:var(--muted);margin-top:1px;}
+
+/* ── Slice-8 Exact / Asset / Payslip ── */
+/* pipeline stepper */
+.pipe{display:flex;align-items:flex-start;gap:0;padding:4px 0 2px;}
+.pstep{flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;position:relative;text-align:center;}
+.pstep::before{content:"";position:absolute;top:15px;left:-50%;width:100%;height:2px;background:var(--border);z-index:0;}
+.pstep:first-child::before{display:none;}
+.pstep.done::before,.pstep.active::before{background:var(--green);}
+.pstep.fail.active::before{background:var(--red);}
+.pnode{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:var(--surface2);border:2px solid var(--border);color:var(--faint);z-index:1;font:700 12px var(--mono);}
+.pstep.done .pnode{background:var(--green);border-color:var(--green);color:#fff;}
+.pstep.active .pnode{background:var(--card-bg);border-color:var(--green);color:var(--green);}
+.pstep.fail .pnode{background:var(--red);border-color:var(--red);color:#fff;}
+.pstep.queued .pnode{opacity:.6;}
+.pstep .plbl{font-size:10px;font-weight:600;color:var(--muted);line-height:1.3;}
+.pstep.active .plbl{color:var(--text);font-weight:700;}
+.pstep .psvg .svg{width:15px;height:15px;}
+
+/* dropzone */
+.drop{border:2px dashed var(--card-bd);border-radius:16px;background:var(--surface2);padding:34px 20px;display:flex;flex-direction:column;align-items:center;gap:11px;text-align:center;}
+.drop .di{width:56px;height:56px;border-radius:15px;background:var(--card-bg);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;color:var(--blue);}
+.drop .di .svg{width:26px;height:26px;}
+.drop h3{margin:0;font-size:16px;}.drop p{margin:0;font-size:12.5px;color:var(--muted);max-width:360px;line-height:1.5;}
+
+/* match-key chip row */
+.mkey{display:flex;align-items:center;gap:9px;padding:10px 13px;border-radius:11px;background:rgba(0,148,212,.07);border:1px solid rgba(0,148,212,.26);font-size:12px;flex-wrap:wrap;}
+.mkey .kk{font-weight:700;color:var(--blue);}
+.mkey .kv{font:600 11.5px var(--mono);}
+
+/* validation offending rows */
+.vlist{border:1px solid rgba(229,72,77,.3);border-radius:12px;overflow:hidden;}
+.vhead,.vrow{display:grid;grid-template-columns:.6fr 1fr 2fr;gap:9px;padding:9px 13px;align-items:center;font-size:12px;}
+.vhead{background:rgba(229,72,77,.08);font:700 9.5px var(--mono);text-transform:uppercase;letter-spacing:.04em;color:var(--red);}
+.vrow{border-top:1px solid var(--border);}
+.vrow .vr{font:700 11px var(--mono);color:var(--red);}
+.vrow .vf{font:600 11px var(--mono);color:var(--text);}
+.vrow .vm{color:var(--muted);font-size:11.5px;}
+
+/* reconciliation buckets */
+.recon{display:flex;flex-direction:column;gap:9px;}
+.rbucket{border:1px solid var(--card-bd);border-radius:12px;background:var(--surface2);padding:11px 13px;display:flex;gap:11px;align-items:flex-start;}
+.rbucket .rbi{width:30px;height:30px;border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.rbucket.unknown .rbi{background:rgba(229,72,77,.14);color:var(--red);}
+.rbucket.missing .rbi{background:rgba(251,192,45,.18);color:#9A6B00;}
+.rbucket.leaver .rbi{background:rgba(0,148,212,.12);color:var(--blue);}
+[data-theme="dark"] .rbucket.missing .rbi,[data-theme="glass"] .rbucket.missing .rbi,[data-theme="reduced"] .rbucket.missing .rbi{color:var(--yellow);}
+.rbucket .rt{font-size:12.5px;font-weight:700;}.rbucket .rd{font-size:11px;color:var(--muted);margin-top:2px;line-height:1.4;}
+.rbucket .rn{margin-left:auto;font:700 15px var(--mono);flex-shrink:0;}
+.rbucket.unknown .rn{color:var(--red);}.rbucket.missing .rn{color:#9A6B00;}.rbucket.leaver .rn{color:var(--blue);}
+[data-theme="dark"] .rbucket.missing .rn,[data-theme="glass"] .rbucket.missing .rn,[data-theme="reduced"] .rbucket.missing .rn{color:var(--yellow);}
+
+/* control-totals table */
+.ctot{border:1px solid var(--card-bd);border-radius:12px;overflow:hidden;}
+.cthead,.ctrow{display:grid;grid-template-columns:1.2fr 1fr 1fr .8fr;gap:8px;padding:10px 13px;align-items:center;}
+.cthead{background:var(--surface2);border-bottom:1px solid var(--card-bd);font:700 9.5px var(--mono);text-transform:uppercase;letter-spacing:.04em;color:var(--faint);}
+.ctrow{border-bottom:1px solid var(--border);font-size:12.5px;}
+.ctrow:last-child{border-bottom:none;}
+.ctrow .num{font-family:var(--mono);font-variant-numeric:tabular-nums;text-align:right;}
+.ctrow .d0{color:var(--green);font-weight:700;text-align:right;}
+.ctrow.bad{background:rgba(229,72,77,.06);}
+.ctrow.bad .dx{color:var(--red);font-weight:700;text-align:right;}
+
+/* publish summary */
+.pub{display:flex;flex-direction:column;gap:8px;}
+.pubrow{display:flex;align-items:center;gap:10px;padding:10px 13px;border-radius:10px;background:var(--surface2);border:1px solid var(--card-bd);font-size:12.5px;}
+.pubrow .pi{color:var(--green);flex-shrink:0;}
+
+/* asset table */
+.atable{border:1px solid var(--card-bd);border-radius:13px;overflow:hidden;background:var(--surface);}
+.ahead,.arow{display:grid;grid-template-columns:1.6fr 1fr 1fr 1fr;gap:9px;padding:10px 13px;align-items:center;}
+.ahead{background:var(--surface2);border-bottom:1px solid var(--card-bd);font:700 9.5px var(--mono);text-transform:uppercase;letter-spacing:.04em;color:var(--faint);}
+.arow{border-bottom:1px solid var(--border);font-size:12.5px;}
+.arow:last-child{border-bottom:none;}
+[data-surface="mobile"] .ahead,[data-surface="mobile"] .arow{grid-template-columns:1.4fr 1fr;}
+[data-surface="mobile"] .ahead .hide,[data-surface="mobile"] .arow .hide{display:none;}
+.arow .an{font-weight:600;}.arow .ac{font:600 10px var(--mono);color:var(--faint);margin-top:1px;}
+.astat{display:inline-flex;align-items:center;gap:5px;font:700 9.5px var(--mono);letter-spacing:.03em;padding:3px 8px;border-radius:20px;text-transform:uppercase;}
+.astat.assigned{background:rgba(0,148,212,.12);color:var(--blue);}
+.astat.available{background:rgba(31,162,74,.14);color:var(--green);}
+.astat.returned{background:var(--surface2);color:var(--faint);}
+.astat.clearance{background:rgba(229,72,77,.14);color:var(--red);}
+.astat .dot{width:6px;height:6px;border-radius:50%;background:currentColor;}
+.arow .ab{font-size:11.5px;font-weight:600;color:var(--blue);border:1px solid var(--card-bd);border-radius:8px;padding:5px 11px;background:var(--surface2);flex-shrink:0;justify-self:end;}
+
+/* custody timeline */
+.custody{position:relative;padding-left:26px;}
+.custody::before{content:"";position:absolute;left:9px;top:6px;bottom:8px;width:2px;background:var(--border);}
+.cevent{position:relative;padding:7px 0;}
+.cevent::before{content:"";position:absolute;left:-21px;top:11px;width:11px;height:11px;border-radius:50%;background:var(--blue);border:2px solid var(--card-bg);}
+.cevent.ret::before{background:var(--faint);}
+.cevent .ce{font-size:12px;font-weight:600;}.cevent .cm{font:600 10px var(--mono);color:var(--faint);margin-top:1px;}
+
+/* payslip */
+.pay{border:1px solid var(--card-bd);border-radius:14px;overflow:hidden;background:var(--surface);}
+.pay .ph{padding:13px 15px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;background:var(--surface2);}
+.pay .ph .pt{font-weight:700;font-size:14px;}.pay .ph .pm{font:600 11px var(--mono);color:var(--muted);margin-top:1px;}
+.pay .psec{padding:6px 15px;}
+.pay .psh{font-size:9.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--faint);font-weight:700;padding:9px 0 5px;}
+.payr{display:flex;align-items:center;padding:6px 0;font-size:12.5px;border-bottom:1px solid color-mix(in srgb,var(--border) 55%,transparent);}
+.payr:last-child{border-bottom:none;}
+.payr .pk{color:var(--muted);}.payr .pv{margin-left:auto;font:600 12.5px var(--mono);}
+.paytot{display:flex;align-items:center;padding:10px 15px;border-top:1px solid var(--card-bd);font-weight:700;font-size:13px;}
+.paytot .pv{margin-left:auto;font:700 14px var(--mono);}
+.paynet{display:flex;flex-direction:column;gap:2px;padding:13px 15px;background:rgba(31,162,74,.08);border-top:1px solid var(--card-bd);}
+.paynet .nrow{display:flex;align-items:center;}
+.paynet .nk{font-weight:700;font-size:14px;}.paynet .nv{margin-left:auto;font:700 22px var(--mono);color:var(--green);}
+.paynet .nd{font-size:10.5px;color:var(--muted);}
+
+/* ── Slice-9 governance / ESS ── */
+/* control card (C20) */
+.ctrl{border:1px solid var(--card-bd);border-left-width:4px;border-radius:13px;background:var(--surface);padding:13px 14px;display:flex;flex-direction:column;gap:9px;}
+.ctrl.pass{border-left-color:var(--green);}.ctrl.fail{border-left-color:var(--red);}
+.ctrl .ch{display:flex;align-items:center;gap:10px;}
+.ctrl .cih{width:32px;height:32px;border-radius:9px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.ctrl.pass .cih{background:rgba(31,162,74,.14);color:var(--green);}.ctrl.fail .cih{background:rgba(229,72,77,.14);color:var(--red);}
+.ctrl .cn{font-size:13px;font-weight:700;}.ctrl .cd{font-size:10.5px;color:var(--muted);margin-top:1px;}
+.ctrl .cb{margin-left:auto;flex-shrink:0;display:inline-flex;align-items:center;gap:6px;font:700 10px var(--mono);letter-spacing:.03em;padding:4px 10px;border-radius:20px;text-transform:uppercase;}
+.cb.pass{background:rgba(31,162,74,.14);color:var(--green);}.cb.fail{background:rgba(229,72,77,.14);color:var(--red);}
+.cb .dot{width:6px;height:6px;border-radius:50%;background:currentColor;}
+.offend{border:1px solid rgba(229,72,77,.28);border-radius:10px;overflow:hidden;}
+.offend .orow{display:flex;align-items:center;gap:10px;padding:8px 12px;font-size:11.5px;border-top:1px solid var(--border);}
+.offend .orow:first-child{border-top:none;}
+.offend .oid{font:700 10.5px var(--mono);color:var(--red);flex-shrink:0;}
+.offend .ov{color:var(--muted);}
+.offend .otag{margin-left:auto;font:600 9.5px var(--mono);color:var(--faint);background:var(--surface2);border:1px solid var(--border);border-radius:5px;padding:2px 6px;flex-shrink:0;}
+.runhead{display:flex;align-items:center;gap:11px;padding:12px 14px;border-radius:12px;background:var(--surface2);border:1px solid var(--card-bd);}
+.runhead .rt{font-weight:700;font-size:13px;}.runhead .rs{font:600 10.5px var(--mono);color:var(--muted);margin-top:1px;}
+
+/* expiry alerts */
+.leadset{display:flex;flex-wrap:wrap;gap:8px;align-items:center;}
+.lead{font:700 11px var(--mono);padding:6px 11px;border-radius:20px;border:1px solid var(--card-bd);background:var(--surface2);color:var(--muted);}
+.lead.on{border-color:var(--blue);color:var(--blue);background:rgba(0,148,212,.08);}
+.alertrow{display:flex;align-items:center;gap:11px;padding:11px 13px;border-radius:11px;background:var(--surface2);border:1px solid var(--card-bd);}
+.alertrow .ai{width:30px;height:30px;border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.alertrow.due .ai{background:rgba(251,192,45,.18);color:#9A6B00;}
+.alertrow.over .ai{background:rgba(229,72,77,.14);color:var(--red);}
+.alertrow.cleared{opacity:.6;}
+.alertrow.cleared .ai{background:var(--surface);color:var(--faint);}
+[data-theme="dark"] .alertrow.due .ai,[data-theme="glass"] .alertrow.due .ai,[data-theme="reduced"] .alertrow.due .ai{color:var(--yellow);}
+.alertrow .at{font-size:12.5px;font-weight:600;}.alertrow .am{font:600 10px var(--mono);color:var(--faint);margin-top:1px;}
+.alertrow .aw{margin-left:auto;flex-shrink:0;font:700 10px var(--mono);}
+.alertrow.due .aw{color:#9A6B00;}.alertrow.over .aw{color:var(--red);}.alertrow.cleared .aw{color:var(--green);}
+[data-theme="dark"] .alertrow.due .aw,[data-theme="glass"] .alertrow.due .aw,[data-theme="reduced"] .alertrow.due .aw{color:var(--yellow);}
+
+/* policy */
+.polcard{border:1px solid var(--card-bd);border-radius:14px;background:var(--surface);overflow:hidden;}
+.polcard .plh{padding:14px 15px;border-bottom:1px solid var(--border);background:var(--surface2);}
+.polcard .pltitle{font-weight:700;font-size:15px;}
+.polcard .plver{display:inline-flex;align-items:center;gap:6px;font:700 10px var(--mono);background:rgba(0,148,212,.12);color:var(--blue);border-radius:6px;padding:2px 8px;margin-top:6px;}
+.polbody{padding:14px 15px;font-size:12px;line-height:1.6;color:var(--muted);}
+.polbody .pl{height:7px;border-radius:4px;background:var(--surface2);margin:7px 0;}
+.polbody .pl.s{width:72%;}.polbody .pl.m{width:92%;}
+.ackbig{display:flex;align-items:center;gap:9px;padding:12px 15px;border-top:1px solid var(--card-bd);font-size:12px;}
+.ackbig .box{width:19px;height:19px;border-radius:5px;border:2px solid var(--card-bd);display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.ackbig .box.on{background:var(--green);border-color:var(--green);color:#fff;}
+.ackbig .box .svg{width:13px;height:13px;}
+.trackbar{display:flex;gap:9px;align-items:center;}
+.trackbar .tp{flex:1;height:9px;border-radius:6px;background:var(--border);overflow:hidden;}
+.trackbar .tp i{display:block;height:100%;background:var(--green);}
+.trackbar .tv{font:700 12px var(--mono);flex-shrink:0;}
+
+/* ── Slice-10 tenant wizard ── */
+.wrail{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:2px;}
+.wstep{display:flex;align-items:center;gap:7px;padding:6px 11px;border-radius:20px;border:1px solid var(--card-bd);background:var(--surface2);font-size:11px;color:var(--muted);}
+.wstep .wn{width:18px;height:18px;border-radius:50%;background:var(--card-bg);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font:700 9px var(--mono);flex-shrink:0;}
+.wstep.done{border-color:rgba(31,162,74,.4);color:var(--green);}
+.wstep.done .wn{background:var(--green);border-color:var(--green);color:#fff;}
+.wstep.active{border-color:var(--blue);color:var(--blue);background:rgba(0,148,212,.08);font-weight:700;}
+.wstep.active .wn{background:var(--blue);border-color:var(--blue);color:#fff;}
+.wstep .wn .svg{width:11px;height:11px;}
+.seedgrid{display:grid;grid-template-columns:repeat(2,1fr);gap:11px;}
+[data-surface="mobile"] .seedgrid{grid-template-columns:1fr;}
+.seedtile{border:1px solid var(--card-bd);border-radius:12px;background:var(--surface2);padding:12px 13px;display:flex;gap:11px;align-items:center;}
+.seedtile.rb{opacity:.62;border-style:dashed;}
+.seedtile .si{width:34px;height:34px;border-radius:9px;background:var(--card-bg);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;color:var(--blue);flex-shrink:0;}
+.seedtile.rb .si{color:var(--faint);}
+.seedtile .sl{font-size:11.5px;font-weight:600;}
+.seedtile .sc{font:700 17px var(--mono);margin-top:1px;}
+.seedtile .sok{margin-left:auto;color:var(--green);flex-shrink:0;}
+.seedtile.rb .sok{color:var(--red);}
+.regchip{display:inline-flex;align-items:center;gap:6px;font:600 10px var(--mono);background:rgba(0,148,212,.1);color:var(--blue);border:1px solid rgba(0,148,212,.28);border-radius:6px;padding:4px 9px;}
+.idmint{display:flex;align-items:center;gap:11px;padding:13px 14px;border-radius:12px;background:rgba(31,162,74,.07);border:1px solid rgba(31,162,74,.3);}
+.idmint .im{width:38px;height:38px;border-radius:10px;background:rgba(31,162,74,.15);color:var(--green);display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.idmint .il{font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;font-weight:700;}
+.idmint .iv{font:700 15px var(--mono);}
+
+/* ── Slice-11 employee master ── */
+.dirtable{border:1px solid var(--card-bd);border-radius:13px;overflow:hidden;background:var(--surface);}
+.dhead,.drow{display:grid;grid-template-columns:1.7fr 1fr 1fr .9fr;gap:9px;padding:10px 13px;align-items:center;}
+.dhead{background:var(--surface2);border-bottom:1px solid var(--card-bd);font:700 9.5px var(--mono);text-transform:uppercase;letter-spacing:.04em;color:var(--faint);}
+.drow{border-bottom:1px solid var(--border);font-size:12.5px;}
+.drow:last-child{border-bottom:none;}
+[data-surface="mobile"] .dhead,[data-surface="mobile"] .drow{grid-template-columns:1.5fr auto;}
+[data-surface="mobile"] .dhead .hide,[data-surface="mobile"] .drow .hide{display:none;}
+.drow .who2{display:flex;align-items:center;gap:10px;min-width:0;}
+.drow .av2{width:30px;height:30px;border-radius:50%;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:11px;flex-shrink:0;}
+.drow .nm2{font-weight:600;}.drow .no2{font:600 10px var(--mono);color:var(--faint);margin-top:1px;}
+.badge{display:inline-flex;align-items:center;gap:5px;font:700 9.5px var(--mono);letter-spacing:.03em;padding:3px 9px;border-radius:20px;text-transform:uppercase;justify-self:end;}
+.badge .dot{width:6px;height:6px;border-radius:50%;background:currentColor;}
+.badge.active{background:rgba(31,162,74,.14);color:var(--green);}
+.badge.suspended{background:rgba(251,192,45,.18);color:#9A6B00;}
+.badge.terminated{background:rgba(229,72,77,.14);color:var(--red);}
+.badge.rehire{background:rgba(0,148,212,.14);color:var(--blue);}
+[data-theme="dark"] .badge.suspended,[data-theme="glass"] .badge.suspended,[data-theme="reduced"] .badge.suspended{color:var(--yellow);}
+/* profile drawer */
+.profhd{display:flex;align-items:center;gap:14px;padding:15px;border:1px solid var(--card-bd);border-radius:14px;background:var(--surface2);}
+.profhd .pav{width:56px;height:56px;border-radius:50%;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:19px;flex-shrink:0;}
+.profhd h3{margin:0;font-size:17px;}.profhd .pmeta{font:600 11.5px var(--mono);color:var(--muted);margin-top:2px;}
+.proftabs{display:flex;gap:5px;flex-wrap:wrap;}
+.ptab{font-size:11.5px;padding:6px 12px;border-radius:8px;border:1px solid var(--card-bd);background:var(--surface2);color:var(--muted);}
+.ptab.on{background:var(--blue);color:#fff;border-color:var(--blue);font-weight:600;}
+.confabs{display:flex;gap:8px;align-items:flex-start;padding:11px 13px;border-radius:10px;background:var(--surface2);border:1px dashed var(--card-bd);font-size:11px;color:var(--faint);line-height:1.45;}
+/* id card */
+.idcard{border-radius:16px;overflow:hidden;border:1px solid var(--card-bd);background:linear-gradient(135deg,#0E4D34,#08311E);color:#EAF3EE;padding:0;max-width:360px;margin:0 auto;box-shadow:var(--shadow);}
+.idcard .ic-h{display:flex;align-items:center;gap:10px;padding:13px 15px;border-bottom:1px solid rgba(255,255,255,.15);}
+.idcard .ic-logo{width:30px;height:30px;border-radius:8px;background:#FBC02D;color:#0E4D34;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:13px;}
+.idcard .ic-co{font-weight:700;font-size:12.5px;letter-spacing:.03em;}.idcard .ic-sub{font-size:9px;color:#9FC3B0;}
+.idcard .ic-b{display:flex;gap:14px;padding:15px;}
+.idcard .ic-photo{width:78px;height:96px;border-radius:9px;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.2);display:flex;align-items:center;justify-content:center;color:#9FC3B0;font:700 10px var(--mono);flex-shrink:0;text-align:center;line-height:1.4;}
+.idcard .ic-nm{font-weight:700;font-size:16px;}.idcard .ic-rl{font-size:11.5px;color:#9FC3B0;margin-bottom:8px;}
+.idcard .ic-f{font-size:10px;color:#9FC3B0;margin-top:6px;}.idcard .ic-v{font:600 12px var(--mono);color:#fff;}
+.idcard .ic-strip{display:flex;align-items:center;justify-content:space-between;padding:9px 15px;background:rgba(0,0,0,.2);font:600 9.5px var(--mono);color:#9FC3B0;}
+/* switcher bar (kit) */
+.bar{display:flex;flex-wrap:wrap;gap:12px;align-items:center;padding:9px 14px;background:#11161b;color:#cfd8de;border-bottom:1px solid #1e262d;font-size:11.5px;}
+.bar .grp{display:flex;align-items:center;gap:5px;}
+.bar .lbl{color:#7c8893;font-weight:600;text-transform:uppercase;letter-spacing:.05em;font-size:9.5px;}
+.bar button{border:1px solid #2a333b;background:#1a2127;color:#aeb9c1;border-radius:6px;padding:4px 8px;cursor:pointer;font:inherit;font-size:11px;}
+.bar button.on{background:var(--green);color:#fff;border-color:var(--green);}
+.bar .ac{margin-left:auto;color:#6f7c85;}.bar .ac b{color:#9FE3BD;}
+</style>
+</head>
+<body>
+<template id="__bundler_thumbnail" data-bg-color="#0E4D34"><svg viewBox="0 0 1200 800" xmlns="http://www.w3.org/2000/svg"><rect width="1200" height="800" fill="#0E4D34"/><circle cx="600" cy="310" r="66" fill="none" stroke="#FBC02D" stroke-width="11"/><path d="M508 430a92 92 0 0 1 184 0" fill="none" stroke="#9FE3BD" stroke-width="11" stroke-linecap="round"/><text x="600" y="560" text-anchor="middle" font-family="monospace" font-size="30" font-weight="700" fill="#fff" letter-spacing="3">EMPLOYEE MASTER</text><text x="600" y="606" text-anchor="middle" font-family="monospace" font-size="20" fill="#9FE3BD" letter-spacing="3">C4·C5·C6·C7·C9 · MOV-02</text></svg></template>
+
+<div class="bar">
+ <div class="grp"><span class="lbl">Screen</span><span id="screens"></span></div>
+ <div class="grp"><span class="lbl">State</span><span id="states"></span></div>
+ <div class="grp"><span class="lbl">Viewer</span><span id="roles"></span></div>
+ <div class="grp"><span class="lbl">Theme</span><span id="themes"></span></div>
+ <div class="grp"><span class="lbl">Surface</span><span id="surfaces"></span></div>
+ <div class="grp"><span class="lbl">Lang</span><span id="langs"></span></div>
+ <div class="ac" id="acline"></div>
+</div>
+<div class="stage"><div class="frame" id="frame"></div></div>
+
+<script>
+// Slice 11 · Employee master & lifecycle (C4 directory · C5 profile · C6 joiner · C7 transfer · rehire MOV-02 · C9 ID card) — bilingual
+const T={en:{
+ reg:'registry v1.2',
+ directory:'Employee directory', directorySub:'Console · master data · site-scoped · C4',
+ profile:'Employee profile', profileSub:'Console · confidential fields by role (A3) · C5',
+ joiner:'New joiner', joinerSub:'Console · onboard · number generated TMCL-<LOC>-<SEQ> · C6',
+ transfer:'Transfer', transferSub:'Console · move site/role · number unchanged · C7 · MOV-01',
+ rehire:'Rehire', rehireSub:'Console · returning employee keeps original number · MOV-02',
+ idcard:'ID card', idcardSub:'Console · permitted fields · print = light · C9 · PRT-01',
+ // directory
+ colName:'Employee', colRole:'Role', colSite:'Site', colStatus:'Status',
+ stActive:'Active', stSuspended:'Suspended', stTerminated:'Terminated', stRehire:'Rehired',
+ dirCount:'1,246 employees · 4 sites', dirShown:'showing 40 of 1,246 · virtualised', dirScope:'Site-scoped — you see your assigned site only (EMP-02).',
+ dirCountScoped:'612 employees · Mwadui', dirShownScoped:'showing 40 of 612 · virtualised', dirScopeOrg:'Org-wide view — all sites visible to your role (EMP-02).',
+ search:'Search name or number',
+ // profile
+ tabOverview:'Overview', tabEmployment:'Employment', tabConfidential:'Confidential', tabDocuments:'Documents',
+ fLegalName:'Legal name', fNumber:'Employee number', fRole:'Role', fSite:'Site', fGrade:'Grade', fManager:'Line manager',
+ fStart:'Start date', fContract:'Contract', fContractVal:'Permanent', fNok:'Next of kin',
+ fPay:'Basic pay', fBank:'Bank account', fMedical:'Medical notes', fPermit:'Work permit',
+ confAbsent:'Confidential fields (pay, bank, medical, permits) are absent for your role — not masked, genuinely not returned (A3 · EMP-01).',
+ confShown:'Pay & bank visible to your role (A3).',
+ editReq:'Edit requests route to approval (EMP-03).',
+ // joiner
+ joinTitle:'Onboard a new employee', numberGen:'Employee number', numberGenNote:'Generated · non-editable · resets per location', numberGenVal:'TMCL-MW-2231',
+ locLbl:'Location', locVal:'Mwadui (MW)', seqNote:'Next sequence for MW · zero-padded',
+ joinNote:'The number is generated from the location and the next sequence — it is never typed (JML-01).',
+ rolloverFlag:'[TBC] rollover beyond 9999/location',
+ // transfer
+ transferTitle:'Transfer employee', fromSite:'From', fromVal:'Mwadui · General Labour', toSite:'To', toVal:'Nyanzaga · Storekeeper',
+ numberKeep:'Employee number', numberKeepNote:'Unchanged on transfer (MOV-01 · EN-4)',
+ transferNote:'A transfer moves site and role but the employee number never changes (MOV-01).',
+ // rehire
+ rehireTitle:'Rehire a former employee', matched:'Prior record matched', matchedSub:'A former employee record was found on the national ID / legacy number.',
+ priorNo:'Original number', priorNoNote:'Retained on rehire — a new number is NOT minted (MOV-02)', priorNoVal:'TMCL-MW-2210',
+ priorSpell:'Prior employment', priorSpellVal:'General Labour · Mwadui · left 2024',
+ rehireNote:'A returning employee keeps their original number and their history is re-linked — no duplicate record (MOV-02).',
+ statusFlip:'Status', statusFlipVal:'terminated → rehired',
+ // id card
+ idField:'Field', idPermitted:'Permitted fields only', idPrint:'Print layout = light theme',
+ idName:'Name', idNo:'ID number', idRole2:'Role', idSite2:'Site', idBlood:'Blood group', idEmergency:'Emergency',
+ idPhoto:'PHOTO\nHERE', idValid:'Valid to 12/2027', idIssued:'Issued 06/2026',
+ idNote:'Only permitted fields render on the card; confidential fields are never printed (PRT-01 · A3).',
+ // states
+ emptyDirTitle:'No employees in scope', emptyDirBody:'No employees match your site scope and filters. Adjust the filter or check your assigned sites.',
+ emptyGeneric:'Nothing to show', emptyGenericBody:'This view populates once a record is selected or created.',
+ loadingTitle:'Loading…',
+ successJoinTitle:'Employee onboarded', successJoinSub:'Number TMCL-MW-2231 generated and the record created. Statutory registration flagged to Finance.',
+ successTransferTitle:'Transfer recorded', successTransferSub:'Site and role updated; the employee number is unchanged.',
+ successRehireTitle:'Employee rehired', successRehireSub:'Original number TMCL-MW-2210 retained and history re-linked. Status is now rehired.',
+ successGeneric:'Saved', successGenericSub:'The change was recorded and audited (UNI-06).',
+ errTitle:'Something went wrong', errBody:'The action could not be completed. Nothing changed. Try again.',
+ offNote:'Offline — showing the last synced records. Edits are queued and apply on reconnect.',
+ noPermTitle:'No access', noPermBody:'Employee master data is limited to HR and line-management roles (R02–R07). Your role cannot view or edit these records.', noPermWhy:'C4/C5 · master data · viewer',
+ largeTitle:'Full directory',
+ // buttons
+ save:'Save', cancel:'Cancel', retry:'Retry', createBtn:'Create employee', transferBtn:'Confirm transfer', rehireBtn:'Confirm rehire', print:'Print ID card', edit:'Request edit', na:'—'
+},
+sw:{
+ reg:'rejista v1.2',
+ directory:'Orodha ya wafanyakazi', directorySub:'Konsoli · data msingi · kwa eneo · C4',
+ profile:'Wasifu wa mfanyakazi', profileSub:'Konsoli · sehemu za siri kwa jukumu (A3) · C5',
+ joiner:'Mwajiriwa mpya', joinerSub:'Konsoli · usajili · namba TMCL-<LOC>-<SEQ> · C6',
+ transfer:'Uhamisho', transferSub:'Konsoli · badili eneo/jukumu · namba haibadiliki · C7 · MOV-01',
+ rehire:'Kuajiri upya', rehireSub:'Konsoli · anayerudi anabaki na namba yake ya awali · MOV-02',
+ idcard:'Kitambulisho', idcardSub:'Konsoli · sehemu zinazoruhusiwa · chapa = mwanga · C9 · PRT-01',
+ colName:'Mfanyakazi', colRole:'Jukumu', colSite:'Eneo', colStatus:'Hali',
+ stActive:'Hai', stSuspended:'Imesimamishwa', stTerminated:'Imesitishwa', stRehire:'Ameajiriwa upya',
+ dirCount:'wafanyakazi 1,246 · maeneo 4', dirShown:'inaonyesha 40 kati ya 1,246 · imepunguzwa', dirScope:'Kwa eneo — unaona eneo lako ulilopangiwa pekee (EMP-02).',
+ dirCountScoped:'wafanyakazi 612 · Mwadui', dirShownScoped:'inaonyesha 40 kati ya 612 · imepunguzwa', dirScopeOrg:'Mwonekano wa shirika zima — maeneo yote yanaonekana kwa jukumu lako (EMP-02).',
+ search:'Tafuta jina au namba',
+ tabOverview:'Muhtasari', tabEmployment:'Ajira', tabConfidential:'Siri', tabDocuments:'Nyaraka',
+ fLegalName:'Jina rasmi', fNumber:'Namba ya mfanyakazi', fRole:'Jukumu', fSite:'Eneo', fGrade:'Daraja', fManager:'Msimamizi',
+ fStart:'Tarehe ya kuanza', fContract:'Mkataba', fContractVal:'Kudumu', fNok:'Ndugu wa karibu',
+ fPay:'Malipo ya msingi', fBank:'Akaunti ya benki', fMedical:'Maelezo ya afya', fPermit:'Kibali cha kazi',
+ confAbsent:'Sehemu za siri (malipo, benki, afya, vibali) hazipo kwa jukumu lako — hazijafichwa, hazirudishwi kabisa (A3 · EMP-01).',
+ confShown:'Malipo & benki vinaonekana kwa jukumu lako (A3).',
+ editReq:'Maombi ya kuhariri yanaenda kwa idhini (EMP-03).',
+ joinTitle:'Sajili mfanyakazi mpya', numberGen:'Namba ya mfanyakazi', numberGenNote:'Imetengenezwa · haihaririki · inaanza upya kwa eneo', numberGenVal:'TMCL-MW-2231',
+ locLbl:'Eneo', locVal:'Mwadui (MW)', seqNote:'Mfuatano ujao wa MW · sufuri mbele',
+ joinNote:'Namba inatengenezwa kutoka eneo na mfuatano ujao — haiandikwi kamwe (JML-01).',
+ rolloverFlag:'[TBC] baada ya 9999/eneo',
+ transferTitle:'Hamisha mfanyakazi', fromSite:'Kutoka', fromVal:'Mwadui · Kibarua', toSite:'Kwenda', toVal:'Nyanzaga · Mtunza-ghala',
+ numberKeep:'Namba ya mfanyakazi', numberKeepNote:'Haibadiliki wakati wa uhamisho (MOV-01 · EN-4)',
+ transferNote:'Uhamisho unabadili eneo na jukumu lakini namba haibadiliki kamwe (MOV-01).',
+ rehireTitle:'Ajiri upya mfanyakazi wa zamani', matched:'Rekodi ya awali imepatikana', matchedSub:'Rekodi ya mfanyakazi wa zamani imepatikana kwa kitambulisho cha taifa / namba ya zamani.',
+ priorNo:'Namba ya awali', priorNoNote:'Inabaki wakati wa kuajiri upya — namba mpya HAITENGENEZWI (MOV-02)', priorNoVal:'TMCL-MW-2210',
+ priorSpell:'Ajira ya awali', priorSpellVal:'Kibarua · Mwadui · aliondoka 2024',
+ rehireNote:'Anayerudi anabaki na namba yake ya awali na historia inaunganishwa tena — hakuna rekodi mbili (MOV-02).',
+ statusFlip:'Hali', statusFlipVal:'imesitishwa → ameajiriwa upya',
+ idField:'Sehemu', idPermitted:'Sehemu zinazoruhusiwa pekee', idPrint:'Muundo wa kuchapa = mandhari nyepesi',
+ idName:'Jina', idNo:'Namba ya kitambulisho', idRole2:'Jukumu', idSite2:'Eneo', idBlood:'Kundi la damu', idEmergency:'Dharura',
+ idPhoto:'PICHA\nHAPA', idValid:'Halali hadi 12/2027', idIssued:'Imetolewa 06/2026',
+ idNote:'Sehemu zinazoruhusiwa pekee ndizo zinaonekana; sehemu za siri hazichapishwi kamwe (PRT-01 · A3).',
+ emptyDirTitle:'Hakuna wafanyakazi kwenye wigo', emptyDirBody:'Hakuna wafanyakazi wanaolingana na wigo wako na vichujio. Rekebisha kichujio au angalia maeneo yako.',
+ emptyGeneric:'Hakuna cha kuonyesha', emptyGenericBody:'Mwonekano huu unajaa rekodi ikichaguliwa au kutengenezwa.',
+ loadingTitle:'Inapakia…',
+ successJoinTitle:'Mfanyakazi amesajiliwa', successJoinSub:'Namba TMCL-MW-2231 imetengenezwa na rekodi imeundwa. Usajili wa kisheria umearifiwa kwa Fedha.',
+ successTransferTitle:'Uhamisho umerekodiwa', successTransferSub:'Eneo na jukumu vimesasishwa; namba ya mfanyakazi haibadiliki.',
+ successRehireTitle:'Mfanyakazi ameajiriwa upya', successRehireSub:'Namba ya awali TMCL-MW-2210 imebaki na historia imeunganishwa. Hali sasa ni ameajiriwa upya.',
+ successGeneric:'Imehifadhiwa', successGenericSub:'Badiliko limerekodiwa na kukaguliwa (UNI-06).',
+ errTitle:'Kuna hitilafu', errBody:'Kitendo hakikuweza kukamilika. Hakuna kilichobadilika. Jaribu tena.',
+ offNote:'Nje ya mtandao — inaonyesha rekodi za mwisho. Mabadiliko yamesubiri na yatatumika ukirejea.',
+ noPermTitle:'Huna ufikiaji', noPermBody:'Data msingi ya wafanyakazi ni kwa majukumu ya HR na usimamizi (R02–R07). Jukumu lako haliwezi kuona au kuhariri rekodi hizi.', noPermWhy:'C4/C5 · data msingi · mtazamaji',
+ largeTitle:'Orodha kamili',
+ save:'Hifadhi', cancel:'Ghairi', retry:'Jaribu tena', createBtn:'Unda mfanyakazi', transferBtn:'Thibitisha uhamisho', rehireBtn:'Thibitisha kuajiri upya', print:'Chapa kitambulisho', edit:'Omba kuhariri', na:'—'
+}};
+window.T=T;
+
+</script>
+<script>
+// Slice 11 · Employee master & lifecycle (C4·C5·C6·C7·C9 · MOV-02) — flow logic (reuses kit)
+function t(k){return window.T[cur.lang][k];}
+
+const ic={
+ users:'<svg class="svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8M22 21v-2a4 4 0 0 0-3-3.87M16 3.13A4 4 0 0 1 16 11"/></svg>',
+ user:'<svg class="svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8"/></svg>',
+ check:'<svg class="svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6 9 17l-5-5"/></svg>',
+ warn:'<svg class="svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></svg>',
+ off:'<svg class="svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M1 1l22 22M16.7 11.1A6 6 0 0 0 5 12M8.5 8.5A6 6 0 0 0 5 12M2 8.8A11 11 0 0 1 6 6M22 8.8a11 11 0 0 0-4.6-3.3M12 20h.01"/></svg>',
+ wifi:'<svg class="svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 12a10 10 0 0 1 14 0M8.5 15.5a5 5 0 0 1 7 0M12 19h.01"/></svg>',
+ sync:'<svg class="svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 12a9 9 0 1 1-3-6.7L21 8M21 3v5h-5"/></svg>',
+ lock:'<svg class="svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="5" y="11" width="14" height="9" rx="1"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>',
+ search:'<svg class="svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>',
+ pin:'<svg class="svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0z"/><circle cx="12" cy="10" r="2.5"/></svg>',
+ swap:'<svg class="svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M7 10 3 6l4-4M3 6h13M17 14l4 4-4 4M21 18H8"/></svg>',
+ redo:'<svg class="svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 12a9 9 0 1 1-3-6.7L21 8M21 3v5h-5"/></svg>',
+ card:'<svg class="svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20M6 15h4"/></svg>',
+ shield:'<svg class="svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>',
+ locksm:'<svg class="svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="5" y="11" width="14" height="9" rx="1"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>'};
+
+const initials=n=>n.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
+let cur={screen:'directory',state:'populated',role:'R07',theme:'light',surface:'desktop',lang:'en'};
+const MASTER_VIEW=['R02','R03','R04','R05','R06','R07'];
+const SITE_SCOPED={R03:'Mwadui',R06:'Mwadui'}; // EMP-02: these roles see only their assigned site (illustrative scope)
+const PAY_VIEW=['R07']; // within master-data viewers, confidential pay/bank (A3)
+const stColor=st=>st==='terminated'?'var(--red)':st==='suspended'?'var(--yellow)':st==='rehire'?'var(--blue)':'var(--green)';
+const DIR=[
+ {n:'Peter Komba',no:'TMCL-MW-2210',role:'General Labour',site:'Mwadui',st:'active'},
+ {n:'Grace Ndaki',no:'TMCL-MW-3190',role:'Site Supervisor',site:'Mwadui',st:'active'},
+ {n:'Amina Juma',no:'TMCL-MW-3341',role:'Storekeeper',site:'Mwadui',st:'suspended'},
+ {n:'Fatuma Chacha',no:'TMCL-NZ-4110',role:'Storekeeper',site:'Nyanzaga',st:'active'},
+ {n:'Joseph Mlimani',no:'TMCL-MW-4821',role:'Equipment Operator',site:'Mwadui',st:'active'},
+ {n:'Daniel Mwaky',no:'TMCL-DY-1188',role:'Driver',site:'Dar Yard',st:'terminated'}];
+
+function app(title,sub,netOff,bodyHTML){
+ const net=netOff?`<span class="net off">${ic.off}${cur.lang==='en'?'Offline':'Nje ya mtandao'}</span>`
+  :`<span class="net">${ic.wifi}${cur.lang==='en'?'Online':'Mtandaoni'}</span>`;
+ return `<div class="app"><div class="topbar">${ic.users}<div><div class="tt">${title}</div><div class="ts">${sub}</div></div>${net}</div>
+  <div class="body">${bodyHTML}</div></div>`;
+}
+function center(icCls,icon,title,body,extra){return `<div class="center"><span class="ic ${icCls||''}">${icon}</span><h3>${title}</h3><p>${body}</p>${extra||''}</div>`;}
+function skel(n){return '<div class="skelrow" style="width:100%;margin:9px 0"></div>'.repeat(n);}
+function badge(st){const l={active:t('stActive'),suspended:t('stSuspended'),terminated:t('stTerminated'),rehire:t('stRehire')}[st];return `<span class="badge ${st}"><span class="dot"></span>${l}</span>`;}
+function rrow(k,v,conf){return `<div class="rr"><span class="k">${conf?ic.locksm+' ':''}${k}</span><span class="v">${v}</span></div>`;}
+function receipt(rows){return `<div class="receipt">${rows}</div>`;}
+// generic state wrapper; pop() renders populated + large-data
+function withStates(title,sub,cfg){
+ const off=cur.state==='offline';
+ let body;
+ switch(cur.state){
+  case 'empty': body=center('',ic.users,cfg.emptyT,cfg.emptyB); break;
+  case 'loading': body=skel(7); break;
+  case 'error': body=`<div class="banner err">${ic.warn}<div><b>${t('errTitle')}</b><br>${t('errBody')}</div></div><button class="btn p block">${ic.sync} ${t('retry')}</button>`; break;
+  case 'success': body=`<div class="seal"><span class="disc ok">${ic.check}</span><h3>${cfg.succT}</h3><p>${cfg.succS}</p></div>${cfg.succX||''}`; break;
+  case 'offline': body=`<div class="banner off">${ic.off}<div>${t('offNote')}</div></div>${cfg.pop()}`; break;
+  default: body=cfg.pop();
+ }
+ return app(title,sub,off,body);
+}
+
+// ── C4 directory ──
+function dirRow(e){return `<div class="drow"><div class="who2"><span class="av2" style="background:${stColor(e.st)}${e.st==='suspended'?';color:#5a3d00':''}">${initials(e.n)}</span>
+  <div><div class="nm2">${e.n}</div><div class="no2">${e.no}</div></div></div>
+  <div class="hide" style="color:var(--muted)">${e.role}</div><div class="hide" style="color:var(--muted)">${e.site}</div>${badge(e.st)}</div>`;}
+function directoryPop(){
+ const big=cur.state==='large-data';
+ const scopeSite=SITE_SCOPED[cur.role];
+ const rows=scopeSite?DIR.filter(e=>e.site===scopeSite):DIR;
+ const pill=scopeSite?t('dirCountScoped'):t('dirCount');
+ const shown=scopeSite?t('dirShownScoped'):t('dirShown');
+ const note=scopeSite?t('dirScope'):t('dirScopeOrg');
+ return `<div class="rmeta"><span class="scope">${ic.users} ${pill}</span>${big?`<span class="cnt">${shown}</span>`:''}</div>
+  <div class="rsearch">${ic.search}<span>${t('search')}</span></div>
+  <div class="dirtable"><div class="dhead"><div>${t('colName')}</div><div class="hide">${t('colRole')}</div><div class="hide">${t('colSite')}</div><div style="justify-self:end">${t('colStatus')}</div></div>
+   ${rows.map(dirRow).join('')}${big?`<div class="vhint">${shown}</div>`:''}</div>
+  <div class="note">${ic.pin}<span>${note}</span></div>`;
+}
+
+// ── C5 profile ──
+function profilePop(){
+ const canPay=PAY_VIEW.includes(cur.role);
+ const e=DIR[0];
+ const conf=canPay
+  ? `<div class="note" style="color:var(--green)">${ic.check}<span>${t('confShown')}</span></div>${receipt(rrow(t('fPay'),'TZS 980,000',true)+rrow(t('fBank'),'NBC ••• 4821',true)+rrow(t('fMedical'),'On file',true)+rrow(t('fPermit'),'N/A · citizen',true))}`
+  : `<div class="confabs">${ic.locksm}<span>${t('confAbsent')}</span></div>`;
+ return `<div class="profhd"><span class="pav" style="background:${stColor(e.st)}">${initials(e.n)}</span>
+   <div style="flex:1"><h3>${e.n}</h3><div class="pmeta">${e.no} · ${e.role} · ${e.site}</div></div>${badge(e.st)}</div>
+  <div class="proftabs"><span class="ptab on">${t('tabOverview')}</span><span class="ptab">${t('tabEmployment')}</span><span class="ptab">${t('tabConfidential')}</span><span class="ptab">${t('tabDocuments')}</span></div>
+  ${receipt(rrow(t('fLegalName'),e.n)+rrow(t('fNumber'),e.no)+rrow(t('fRole'),e.role)+rrow(t('fSite'),e.site)+rrow(t('fStart'),'14 Jan 2019')+rrow(t('fContract'),t('fContractVal'))+rrow(t('fManager'),'Grace Ndaki'))}
+  ${conf}
+  <div class="note">${ic.shield}<span>${t('editReq')}</span></div>`;
+}
+
+// ── C6 joiner ──
+function joinerPop(){
+ return `<div class="shead">${ic.user} ${t('joinTitle')}</div>
+  <div class="fg"><div class="field"><label>${t('fLegalName')} <span class="req">*</span></label><input value="Halima Bakari" readonly></div>
+   <div class="field"><label>${t('fRole')} <span class="req">*</span></label><input value="General Labour" readonly></div>
+   <div class="field"><label>${t('locLbl')} <span class="req">*</span></label><input value="${t('locVal')}" readonly></div>
+   <div class="field"><label>${t('fStart')} <span class="req">*</span></label><input value="2026-07-01" readonly></div></div>
+  <div class="idmint"><span class="im">${ic.card}</span><div><div class="il">${t('numberGen')} · ${t('numberGenNote')}</div><div class="iv">${t('numberGenVal')}</div></div></div>
+  <div class="note">${ic.shield}<span>${t('joinNote')}</span></div>
+  <div class="note">${ic.warn}<span><span class="flag"><span class="dot"></span>${t('rolloverFlag')}</span> · ${t('seqNote')}</span></div>
+  <button class="btn p block">${ic.check} ${t('createBtn')}</button>`;
+}
+
+// ── C7 transfer ──
+function transferPop(){
+ const e=DIR[0];
+ return `<div class="shead">${ic.swap} ${t('transferTitle')}</div>
+  <div class="profhd"><span class="pav" style="background:${stColor('active')}">${initials(e.n)}</span><div style="flex:1"><h3>${e.n}</h3><div class="pmeta">${e.no}</div></div>${badge('active')}</div>
+  <div class="seedgrid"><div class="seedtile"><span class="si">${ic.pin}</span><div style="flex:1"><div class="sl">${t('fromSite')}</div><div class="sc" style="font-size:13px">${t('fromVal')}</div></div></div>
+   <div class="seedtile"><span class="si">${ic.pin}</span><div style="flex:1"><div class="sl">${t('toSite')}</div><div class="sc" style="font-size:13px">${t('toVal')}</div></div></div></div>
+  ${receipt(rrow(t('numberKeep')+' · '+t('numberKeepNote'),e.no))}
+  <div class="note">${ic.shield}<span>${t('transferNote')}</span></div>
+  <button class="btn p block">${ic.swap} ${t('transferBtn')}</button>`;
+}
+
+// ── Rehire (MOV-02) ──
+function rehirePop(){
+ return `<div class="shead">${ic.redo} ${t('rehireTitle')}</div>
+  <div class="banner ok" style="background:rgba(0,148,212,.08);color:var(--blue);border-color:rgba(0,148,212,.28)">${ic.check}<div><b>${t('matched')}.</b> ${t('matchedSub')}</div></div>
+  <div class="idmint" style="background:rgba(0,148,212,.07);border-color:rgba(0,148,212,.3)"><span class="im" style="background:rgba(0,148,212,.15);color:var(--blue)">${ic.card}</span>
+   <div><div class="il">${t('priorNo')} · ${t('priorNoNote')}</div><div class="iv">${t('priorNoVal')}</div></div></div>
+  ${receipt(rrow(t('priorSpell'),t('priorSpellVal'))+rrow(t('statusFlip'),t('statusFlipVal')))}
+  <div class="note">${ic.shield}<span>${t('rehireNote')}</span></div>
+  <button class="btn b block">${ic.redo} ${t('rehireBtn')}</button>`;
+}
+
+// ── C9 ID card ──
+function idcardPop(){
+ const e=DIR[0];
+ return `<div class="idcard" data-om-raster><div class="ic-h"><span class="ic-logo">TM</span><div><div class="ic-co">TAIFA MINING</div><div class="ic-sub">Employee Identity</div></div></div>
+   <div class="ic-b"><div class="ic-photo">${t('idPhoto').replace(/\n/g,'<br>')}</div>
+    <div style="flex:1"><div class="ic-nm">${e.n}</div><div class="ic-rl">${e.role}</div>
+     <div class="ic-f">${t('idNo')}</div><div class="ic-v">${e.no}</div>
+     <div class="ic-f">${t('idSite2')}</div><div class="ic-v">${e.site}</div>
+     <div class="ic-f">${t('idBlood')} · ${t('idEmergency')}</div><div class="ic-v">O+ · +255 7•• ••• •••</div></div></div>
+   <div class="ic-strip"><span>${t('idIssued')}</span><span>${t('idValid')}</span></div></div>
+  <div class="note" style="margin-top:12px">${ic.locksm}<span>${t('idNote')}</span></div>
+  <button class="btn g block">${ic.card} ${t('print')}</button>`;
+}
+
+// ── render ──
+const SCREENS={
+ directory:{title:'directory',sub:'directorySub',pop:directoryPop,emptyT:'emptyDirTitle',emptyB:'emptyDirBody',succT:'successGeneric',succS:'successGenericSub'},
+ profile:{title:'profile',sub:'profileSub',pop:profilePop,emptyT:'emptyGeneric',emptyB:'emptyGenericBody',succT:'successGeneric',succS:'successGenericSub'},
+ joiner:{title:'joiner',sub:'joinerSub',pop:joinerPop,emptyT:'emptyGeneric',emptyB:'emptyGenericBody',succT:'successJoinTitle',succS:'successJoinSub'},
+ transfer:{title:'transfer',sub:'transferSub',pop:transferPop,emptyT:'emptyGeneric',emptyB:'emptyGenericBody',succT:'successTransferTitle',succS:'successTransferSub'},
+ rehire:{title:'rehire',sub:'rehireSub',pop:rehirePop,emptyT:'emptyGeneric',emptyB:'emptyGenericBody',succT:'successRehireTitle',succS:'successRehireSub'},
+ idcard:{title:'idcard',sub:'idcardSub',pop:idcardPop,emptyT:'emptyGeneric',emptyB:'emptyGenericBody',succT:'successGeneric',succS:'successGenericSub'}};
+function render(){
+ const s=SCREENS[cur.screen];
+ let html;
+ if(!MASTER_VIEW.includes(cur.role)||cur.state==='no-permission')
+  html=app(t(s.title),t(s.sub),false,center('err',ic.lock,t('noPermTitle'),t('noPermBody'),`<div class="why">${t('noPermWhy')} ${cur.role}</div>`));
+ else html=withStates(t(s.title),t(s.sub),{emptyT:t(s.emptyT),emptyB:t(s.emptyB),succT:t(s.succT),succS:t(s.succS),pop:s.pop});
+ document.querySelector('.stage').innerHTML=`<div class="frame">${html}</div>`;
+}
+function seg(id,items,key){const el=document.getElementById(id);el.innerHTML=items.map(it=>{const v=Array.isArray(it)?it[0]:it,l=Array.isArray(it)?it[1]:it;return `<button data-v="${v}">${l}</button>`;}).join('');el.querySelectorAll('button').forEach(b=>b.onclick=()=>{cur[key]=b.getAttribute('data-v');sync();});}
+const AC={directory:'EMP-02 site-scoping · UNI-02 large-data',profile:'EMP-01 confidential by role (A3) · EMP-03 · SOD-03',joiner:'JML-01/03/04 · number generated TMCL-<LOC>-<SEQ>',transfer:'MOV-01 · number unchanged',rehire:'MOV-02 · original number retained',idcard:'PRT-01 · permitted fields · print=light'};
+function sync(){
+ document.documentElement.setAttribute('data-theme',cur.theme);
+ document.documentElement.setAttribute('data-surface',cur.surface);
+ [['screens','screen'],['states','state'],['roles','role'],['themes','theme'],['surfaces','surface'],['langs','lang']].forEach(([id,k])=>document.querySelectorAll('#'+id+' button').forEach(b=>b.classList.toggle('on',b.getAttribute('data-v')===cur[k])));
+ document.getElementById('acline').innerHTML=`Covers <b>${AC[cur.screen]}</b> · ${cur.theme}/${cur.surface} · viewer ${cur.role} · ${t('reg')}`;
+ render();
+}
+seg('screens',[['directory','Directory · C4'],['profile','Profile · C5'],['joiner','Joiner · C6'],['transfer','Transfer · C7'],['rehire','Rehire · MOV-02'],['idcard','ID card · C9']],'screen');
+seg('states',[['empty','empty'],['loading','loading'],['populated','populated'],['large-data','large-data'],['error','error'],['no-permission','no-perm'],['offline','offline'],['success','success']],'state');
+seg('roles',['R01','R02','R03','R04','R05','R06','R07','R08','R09','R10','R11','R12','R13'].map(r=>[r,r]),'role');
+seg('themes',[['light','Light'],['dark','Dark'],['glass','Glass'],['reduced','Reduced']],'theme');
+seg('surfaces',[['desktop','Desk'],['tablet','Tablet'],['mobile','Mobile'],['kiosk','Kiosk']],'surface');
+seg('langs',[['en','EN'],['sw','SW']],'lang');
+sync();
+
+</script>
+</body>
+</html>

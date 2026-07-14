@@ -10,6 +10,33 @@ const { F } = H;
 before(H.start);
 after(H.stop);
 
+const owner = (sql, p) => db.withOwner((c) => c.query(sql, p));
+
+// ── Setup-phase MFA toggle: ONE flag flips field-visibility + enforcement ────
+test('MFA toggle: auth.mfa.required drives /auth/config AND enforcement together', async () => {
+  const A = F.TENANT_A;
+  try {
+    // Flag ON (default): field shown + MFA enforced.
+    const cfgOn = await H.req('GET', '/auth/config');
+    assert.equal(cfgOn.status, 200);
+    assert.equal(cfgOn.body.mfaRequired, true, 'config reports field visible');
+    const noMfaOn = await H.req('POST', '/auth/console',
+      { body: { email: F.USERS.EMP_A.email, password: F.USERS.EMP_A.password } }); // no mfa
+    assert.equal(noMfaOn.status, 401, 'MFA enforced: email+password alone refused');
+
+    // Flip the ONE flag to 0 for every tenant (the setup-phase state).
+    await owner(`UPDATE config SET value='0' WHERE key='auth.mfa.required'`);
+    const cfgOff = await H.req('GET', '/auth/config');
+    assert.equal(cfgOff.body.mfaRequired, false, 'config reports field HIDDEN — flips with enforcement');
+    const noMfaOff = await H.req('POST', '/auth/console',
+      { body: { email: F.USERS.EMP_A.email, password: F.USERS.EMP_A.password } }); // no mfa
+    assert.equal(noMfaOff.status, 200, 'setup phase: email+password alone authenticates');
+    assert.ok(noMfaOff.body.token);
+  } finally {
+    await owner(`UPDATE config SET value='1' WHERE key='auth.mfa.required'`); // restore (UAT posture)
+  }
+});
+
 // ── AC-AUTH-01: console verifies email + password + MFA, lands per A2 ───────
 test('AUTH-01 console sign-in with all three factors succeeds and returns A2 landing', async () => {
   const r = await H.loginConsole(F.USERS.EMP_A);
@@ -121,29 +148,53 @@ test('AUTH-05 password reset by a permitted owner rotates the credential', async
   assert.equal(withOld.status, 401);
 });
 
+// ── bughunt-B #3: the rank lattice — a reset may only TARGET a role at or
+// below the actor's rank. Being in password.reset.owner (R03 is) must never let
+// an HR Officer rotate a System Administrator's credential and take the account. ─
+test('AUTH-05b rank lattice: R03 → R12 reset is REFUSED (privilege escalation); downward reset still works', async () => {
+  const hr = await H.loginConsole(F.USERS.HR_A); // R03 ∈ password.reset.owner
+  const up = await H.req('POST', '/auth/reset/password', {
+    token: hr.body.token, body: { target_user: F.USERS.ADMIN_A.id, new_password: 'Escalate!99x' } });
+  assert.equal(up.status, 403, 'R03 cannot reset an R12 — rank lattice refuses upward resets');
+  assert.match(String(up.body.error), /higher-ranked/);
+  // The admin credential is untouched — the original password still logs in.
+  assert.equal((await H.loginConsole(F.USERS.ADMIN_A)).status, 200, 'R12 credential not rotated');
+
+  // Downward stays permitted: R12 (rank 90) resets an R01 (rank 10).
+  const admin = await H.loginConsole(F.USERS.ADMIN_A);
+  const down = await H.req('POST', '/auth/reset/password', {
+    token: admin.body.token, body: { target_user: F.USERS.RESET_A.id, new_password: 'AdminSet!99x' } });
+  assert.equal(down.status, 200, 'R12 → R01 reset permitted (at-or-below rank)');
+  assert.equal((await H.loginConsole(F.USERS.RESET_A, { password: 'AdminSet!99x' })).status, 200);
+});
+
 // ── A3: confidential fields enforced server-side; forbidden fields ABSENT ───
-test('A3 payroll role (R07) sees pay/bank + disciplinary but not medical/permits', async () => {
+// (Profile reads now share the Slice 2 assembler over the normalised tables.)
+test('A3 payroll role (R07) sees pay/bank + disciplinary but not medical', async () => {
   const pay = await H.loginConsole(F.USERS.PAYROLL_A);
   const r = await H.req('GET', `/me/profile/${F.EMP.CAROL}`, { token: pay.body.token });
   assert.equal(r.status, 200);
-  assert.ok('pay_grade' in r.body && 'bank_account' in r.body);
+  assert.ok('basic_pay' in r.body && 'bank_account' in r.body);
   assert.ok('disciplinary' in r.body);
-  assert.ok(!('medical_notes' in r.body), 'medical omitted (absent, not masked)');
-  assert.ok(!('permits' in r.body));
+  assert.ok(!('osha_status' in r.body), 'medical omitted (absent, not masked)');
+  assert.ok(!('permit_no' in r.body));
 });
 
-test('A3 HSE role (R06) sees medical/permits + disciplinary but not pay/bank', async () => {
+test('A3 HSE role (R06) sees medical + disciplinary but not pay/bank', async () => {
   const hse = await H.loginConsole(F.USERS.HSE_A);
   const r = await H.req('GET', `/me/profile/${F.EMP.CAROL}`, { token: hse.body.token });
   assert.equal(r.status, 200);
-  assert.ok('medical_notes' in r.body && 'permits' in r.body);
+  assert.ok('osha_status' in r.body && 'permit_no' in r.body);
   assert.ok('disciplinary' in r.body);
-  assert.ok(!('pay_grade' in r.body) && !('bank_account' in r.body));
+  assert.ok(!('basic_pay' in r.body) && !('bank_account' in r.body));
 });
 
 test('A3 ordinary employee (R01) sees no confidential fields at all', async () => {
   const emp = await H.loginConsole(F.USERS.EMP_A);
   const r = await H.req('GET', `/me/profile/${F.EMP.CAROL}`, { token: emp.body.token });
   assert.equal(r.status, 200);
-  assert.deepEqual(Object.keys(r.body).sort(), ['full_name', 'id']);
+  for (const k of ['basic_pay', 'bank_account', 'osha_status', 'permit_no', 'disciplinary']) {
+    assert.ok(!(k in r.body), `${k} absent for R01`);
+  }
+  assert.ok('full_name' in r.body); // base profile still present
 });

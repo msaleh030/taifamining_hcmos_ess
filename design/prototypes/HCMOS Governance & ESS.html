@@ -1,0 +1,898 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light" data-surface="desktop">
+<head>
+<meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>HCMOS · Slice 9 Governance & ESS services (C20 · alerts · E12 · E7)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
+<style>
+:root{--green:#1FA24A;--blue:#0094D4;--yellow:#FBC02D;--red:#E5484D;--font:'IBM Plex Sans',system-ui,sans-serif;--mono:'IBM Plex Mono',monospace;--r:12px;}
+*{box-sizing:border-box;}html,body{margin:0;height:100%;}body{font-family:var(--font);background:#0b0f13;-webkit-font-smoothing:antialiased;display:flex;flex-direction:column;}
+.num{font-family:var(--mono);font-variant-numeric:tabular-nums;}
+[data-theme="light"]{--bg:#EEF1F3;--surface:#fff;--surface2:#F6F8F9;--text:#15191D;--muted:#5C6770;--faint:#8A949C;--border:#E2E7EA;--field:#F6F8F9;--card-bd:#E2E7EA;--blur:0px;--card-bg:#fff;--shadow:0 8px 30px rgba(16,24,32,.08);}
+[data-theme="dark"]{--bg:#0C1115;--surface:#141B20;--surface2:#1A2228;--text:#E7EDF1;--muted:#94A2AC;--faint:#697680;--border:#26313A;--field:#1A2228;--card-bd:#26313A;--blur:0px;--card-bg:#141B20;--shadow:0 12px 40px rgba(0,0,0,.5);}
+[data-theme="glass"]{--bg:linear-gradient(135deg,#0E4D34,#08311E 60%,#0a2a4a);--surface:rgba(255,255,255,.14);--surface2:rgba(255,255,255,.10);--text:#F2F6F4;--muted:rgba(242,246,244,.8);--faint:rgba(242,246,244,.55);--border:rgba(255,255,255,.22);--field:rgba(255,255,255,.12);--card-bd:rgba(255,255,255,.28);--blur:16px;--card-bg:rgba(255,255,255,.12);--shadow:0 18px 60px rgba(0,0,0,.35);}
+[data-theme="reduced"]{--bg:#06271A;--surface:#0C3B27;--surface2:#0A3220;--text:#fff;--muted:#CFE6DA;--faint:#9FC3B0;--border:#1C6A47;--field:#0A3220;--card-bd:#2C8A5E;--blur:0px;--card-bg:#0C3B27;--shadow:none;}
+.stage{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;padding:22px;overflow:auto;background:var(--bg);}
+.frame{position:relative;background:var(--bg);border-radius:18px;overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.45);display:flex;flex-direction:column;color:var(--text);}
+[data-surface="desktop"] .frame{width:1120px;height:660px;}
+[data-surface="tablet"] .frame{width:760px;height:600px;}
+[data-surface="mobile"] .frame{width:390px;height:760px;border-radius:30px;font-size:14px;}
+[data-surface="kiosk"] .frame{width:720px;height:840px;font-size:17px;}
+.svg{width:16px;height:16px;}
+
+/* app chrome */
+.app{flex:1;display:flex;flex-direction:column;min-height:0;background:var(--surface);}
+.topbar{display:flex;align-items:center;gap:10px;padding:14px 16px;border-bottom:1px solid var(--border);background:var(--surface);}
+[data-surface="mobile"] .topbar{padding-top:26px;}
+.topbar .tt{font-size:15px;font-weight:700;}
+.topbar .ts{font-size:10.5px;color:var(--faint);margin-top:1px;}
+.topbar .net{margin-left:auto;display:inline-flex;align-items:center;gap:5px;font:600 10px var(--mono);padding:3px 8px;border-radius:20px;background:var(--surface2);color:var(--muted);border:1px solid var(--border);}
+.topbar .net.off{background:rgba(251,192,45,.16);color:#9A6B00;border-color:rgba(251,192,45,.5);}
+[data-theme="dark"] .topbar .net.off,[data-theme="glass"] .topbar .net.off,[data-theme="reduced"] .topbar .net.off{color:var(--yellow);}
+.body{flex:1;overflow:auto;padding:16px;display:flex;flex-direction:column;gap:13px;}
+[data-surface="kiosk"] .body{padding:22px;gap:16px;}
+
+/* shift context strip */
+.shiftbar{display:flex;align-items:center;gap:12px;padding:13px 14px;border-radius:13px;background:var(--surface2);border:1px solid var(--card-bd);}
+.shiftbar .av{width:40px;height:40px;border-radius:50%;background:var(--green);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;flex-shrink:0;}
+.shiftbar .nm{font-weight:700;font-size:14px;}
+.shiftbar .mt{font:600 11px var(--mono);color:var(--muted);margin-top:1px;}
+.shiftbar .st{margin-left:auto;text-align:right;}
+.shiftbar .st .lbl{font-size:9.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--faint);font-weight:700;}
+.shiftbar .st .val{font-weight:700;font-size:13px;}
+.stat3{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--border);border:1px solid var(--card-bd);border-radius:12px;overflow:hidden;}
+.stat3 .c{background:var(--surface);padding:11px 13px;}
+.stat3 .c .lbl{font-size:9.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--faint);font-weight:700;}
+.stat3 .c .val{font:700 16px var(--mono);margin-top:3px;}
+.stat3 .c .val.g{color:var(--green);}
+
+/* geofence radar */
+.geo{position:relative;height:186px;border-radius:14px;overflow:hidden;border:1px solid var(--card-bd);background:
+ repeating-linear-gradient(0deg,transparent,transparent 21px,color-mix(in srgb,var(--border) 55%,transparent) 21px,color-mix(in srgb,var(--border) 55%,transparent) 22px),
+ repeating-linear-gradient(90deg,transparent,transparent 21px,color-mix(in srgb,var(--border) 55%,transparent) 21px,color-mix(in srgb,var(--border) 55%,transparent) 22px),
+ radial-gradient(circle at 50% 52%,var(--surface2),var(--field));display:flex;align-items:center;justify-content:center;}
+[data-surface="kiosk"] .geo{height:220px;}
+.geo .bound{position:absolute;left:50%;top:52%;transform:translate(-50%,-50%);width:150px;height:150px;border-radius:50%;border:2.5px dashed var(--green);background:rgba(31,162,74,.08);}
+.geo .bound.bad{border-color:var(--red);background:rgba(229,72,77,.07);}
+.geo .you{position:absolute;left:50%;top:52%;transform:translate(-50%,-50%);width:16px;height:16px;border-radius:50%;background:var(--blue);border:2px solid #fff;box-shadow:0 0 0 6px rgba(0,148,212,.22);z-index:2;}
+.geo .you.out{left:82%;top:26%;background:var(--red);box-shadow:0 0 0 6px rgba(229,72,77,.22);}
+@media (prefers-reduced-motion:no-preference){[data-deck] .geo .you{}.geo .pulse{position:absolute;left:50%;top:52%;transform:translate(-50%,-50%);width:16px;height:16px;border-radius:50%;background:rgba(0,148,212,.4);animation:ping 2.4s ease-out infinite;}.geo .pulse.out{left:82%;top:26%;background:rgba(229,72,77,.4);}}
+@keyframes ping{0%{width:16px;height:16px;opacity:.6;}100%{width:150px;height:150px;opacity:0;}}
+.geo .gtag{position:absolute;left:12px;bottom:11px;display:inline-flex;align-items:center;gap:6px;font-weight:700;font-size:12px;padding:6px 11px;border-radius:20px;background:var(--card-bg);border:1px solid var(--card-bd);}
+.geo .gtag.ok{color:var(--green);}.geo .gtag.bad{color:var(--red);}
+.geo .gtag .dot{width:7px;height:7px;border-radius:50%;background:currentColor;}
+.geo .locbadge{position:absolute;right:12px;top:11px;font:600 9.5px var(--mono);color:var(--muted);background:var(--card-bg);border:1px solid var(--card-bd);border-radius:6px;padding:3px 7px;}
+
+/* capture receipt */
+.receipt{border:1px solid var(--card-bd);border-radius:13px;background:var(--surface2);overflow:hidden;}
+.receipt .rh{display:flex;align-items:center;gap:8px;padding:10px 13px;border-bottom:1px solid var(--card-bd);font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:700;}
+.receipt .rr{display:flex;align-items:center;gap:10px;padding:9px 13px;font-size:12.5px;border-bottom:1px solid color-mix(in srgb,var(--border) 60%,transparent);}
+.receipt .rr:last-child{border-bottom:none;}
+.receipt .rr .k{color:var(--muted);}
+.receipt .rr .v{margin-left:auto;font:600 12px var(--mono);text-align:right;}
+.receipt .rr .v.d{color:var(--faint);font-weight:500;}
+
+/* flag pill for [SS-3 Open] */
+.flag{display:inline-flex;align-items:center;gap:5px;font:700 10px var(--mono);letter-spacing:.03em;padding:3px 8px;border-radius:6px;background:rgba(251,192,45,.18);color:#9A6B00;border:1px solid rgba(251,192,45,.5);}
+[data-theme="dark"] .flag,[data-theme="glass"] .flag,[data-theme="reduced"] .flag{color:var(--yellow);}
+.flag .dot{width:6px;height:6px;border-radius:50%;background:currentColor;}
+
+/* big punch button */
+.punch{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;border:none;border-radius:15px;padding:17px;font-weight:700;font-size:16px;cursor:pointer;color:#fff;}
+[data-surface="kiosk"] .punch{padding:22px;font-size:20px;}
+.punch.in{background:var(--green);}
+.punch.out{background:var(--surface);color:var(--red);border:1.5px solid var(--red);}
+.punch:disabled{opacity:.5;cursor:default;}
+.punch.wait{background:var(--surface2);color:var(--muted);border:1px solid var(--card-bd);}
+
+/* result seal (success/error/offline hero) */
+.seal{display:flex;flex-direction:column;align-items:center;text-align:center;gap:6px;padding:6px 6px 2px;}
+.seal .disc{width:66px;height:66px;border-radius:50%;display:flex;align-items:center;justify-content:center;}
+.seal .disc.ok{background:rgba(31,162,74,.15);color:var(--green);}
+.seal .disc.err{background:rgba(229,72,77,.14);color:var(--red);}
+.seal .disc.off{background:rgba(251,192,45,.18);color:#9A6B00;}
+[data-theme="dark"] .seal .disc.off,[data-theme="glass"] .seal .disc.off,[data-theme="reduced"] .seal .disc.off{color:var(--yellow);}
+.seal .disc .svg{width:32px;height:32px;}
+.seal h3{margin:2px 0 0;font-size:19px;}
+.seal .big{font:700 30px var(--mono);letter-spacing:-.01em;}
+.seal p{margin:0;font-size:12.5px;color:var(--muted);max-width:300px;line-height:1.45;}
+
+/* banners + notes (kit) */
+.banner{padding:11px 13px;border-radius:11px;font-size:12px;display:flex;gap:9px;align-items:flex-start;line-height:1.45;}
+.banner.off{background:rgba(251,192,45,.16);color:#9A6B00;border:1px solid rgba(251,192,45,.5);}
+.banner.err{background:rgba(229,72,77,.14);color:var(--red);border:1px solid rgba(229,72,77,.4);}
+.banner.ok{background:rgba(31,162,74,.15);color:var(--green);border:1px solid rgba(31,162,74,.4);}
+.banner.info{background:rgba(0,148,212,.1);color:var(--blue);border:1px solid rgba(0,148,212,.3);}
+[data-theme="dark"] .banner.off,[data-theme="glass"] .banner.off,[data-theme="reduced"] .banner.off{color:var(--yellow);}
+.banner .svg{flex-shrink:0;margin-top:1px;}
+.note{display:flex;gap:8px;align-items:flex-start;font-size:11px;color:var(--muted);line-height:1.5;padding:2px 2px;}
+.note .svg{flex-shrink:0;margin-top:1px;color:var(--faint);}
+.shead{font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:700;display:flex;align-items:center;gap:7px;margin:2px 0;}
+
+/* audit chip */
+.audit{display:flex;align-items:center;gap:8px;padding:9px 12px;border-radius:10px;background:rgba(0,148,212,.08);border:1px solid rgba(0,148,212,.26);font-size:11px;color:var(--muted);line-height:1.4;}
+.audit .svg{color:var(--blue);flex-shrink:0;}
+.audit .h{font:600 10px var(--mono);color:var(--blue);margin-left:auto;flex-shrink:0;}
+
+/* recent punches list */
+.plist{display:flex;flex-direction:column;gap:7px;}
+.pitem{display:flex;align-items:center;gap:11px;padding:10px 12px;border-radius:11px;background:var(--surface2);border:1px solid var(--card-bd);}
+.pitem .pi{width:30px;height:30px;border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.pitem .pi.in{background:rgba(31,162,74,.14);color:var(--green);}
+.pitem .pi.out{background:rgba(0,148,212,.12);color:var(--blue);}
+.pitem .pt{font-size:12.5px;font-weight:600;}
+.pitem .pd{font-size:10.5px;color:var(--muted);margin-top:1px;}
+.pitem .ptime{margin-left:auto;font:700 13px var(--mono);}
+
+/* lock / empty states (kit) */
+.center{display:flex;flex-direction:column;align-items:center;justify-content:center;flex:1;text-align:center;padding:30px;gap:12px;color:var(--muted);}
+.center .ic{width:56px;height:56px;border-radius:16px;display:flex;align-items:center;justify-content:center;background:var(--surface2);color:var(--faint);}
+.center .ic.warn{background:rgba(251,192,45,.16);color:#9A6B00;}
+.center .ic.err{background:rgba(229,72,77,.13);color:var(--red);}
+[data-theme="dark"] .center .ic.warn,[data-theme="glass"] .center .ic.warn,[data-theme="reduced"] .center .ic.warn{color:var(--yellow);}
+.center .ic .svg{width:26px;height:26px;}
+.center h3{margin:0;color:var(--text);font-size:17px;}
+.center p{margin:0;font-size:12.5px;max-width:320px;line-height:1.5;}
+.center .why{font:600 11px var(--mono);background:var(--surface2);border:1px solid var(--border);border-radius:7px;padding:6px 10px;color:var(--muted);}
+.center .btn{margin-top:4px;}
+
+/* skeleton */
+.skelrow{height:16px;border-radius:6px;background:linear-gradient(90deg,var(--surface2),var(--field),var(--surface2));background-size:200% 100%;animation:sh 1.2s linear infinite;}
+@keyframes sh{to{background-position:-200% 0;}}
+
+/* buttons */
+.btn{border:none;border-radius:10px;padding:11px 16px;font-weight:600;font-size:13px;cursor:pointer;display:inline-flex;align-items:center;gap:7px;justify-content:center;}
+.btn.p{background:var(--green);color:#fff;}.btn.g{background:transparent;border:1px solid var(--border);color:var(--text);}
+.btn.b{background:var(--blue);color:#fff;}.btn.w{background:var(--yellow);color:#5a3d00;}
+.btn.block{width:100%;}
+.btn:disabled{opacity:.5;}
+
+/* roster (large-data / kiosk assisted) */
+.rsearch{display:flex;align-items:center;gap:9px;padding:11px 13px;border-radius:12px;background:var(--field);border:1px solid var(--border);color:var(--faint);font-size:13px;}
+.rmeta{display:flex;align-items:center;justify-content:space-between;font-size:11px;color:var(--muted);}
+.rmeta .cnt{font:600 11px var(--mono);}
+.roster{border:1px solid var(--card-bd);border-radius:13px;overflow:hidden;background:var(--surface);}
+.rrow{display:flex;align-items:center;gap:11px;padding:11px 13px;border-bottom:1px solid var(--border);}
+.rrow:last-child{border-bottom:none;}
+.rrow .av{width:34px;height:34px;border-radius:50%;background:var(--surface2);color:var(--muted);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px;flex-shrink:0;border:1px solid var(--card-bd);}
+.rrow .rn{font-size:13px;font-weight:600;}
+.rrow .rs{font:600 10.5px var(--mono);color:var(--faint);margin-top:1px;}
+.rrow .rb{margin-left:auto;font-size:11.5px;font-weight:600;color:var(--green);border:1px solid var(--card-bd);border-radius:8px;padding:6px 12px;background:var(--surface2);flex-shrink:0;}
+.vhint{text-align:center;font:600 10px var(--mono);color:var(--faint);padding:9px;background:var(--surface2);}
+
+/* sync queue */
+.qitem{border:1px solid var(--card-bd);border-radius:12px;background:var(--surface2);padding:11px 13px;display:flex;align-items:center;gap:11px;}
+.qitem .qi{width:32px;height:32px;border-radius:9px;display:flex;align-items:center;justify-content:center;flex-shrink:0;background:var(--card-bg);border:1px solid var(--border);color:var(--muted);}
+.qitem .qt{font-size:12.5px;font-weight:600;}
+.qitem .qd{font:600 10.5px var(--mono);color:var(--faint);margin-top:2px;}
+.qitem .qs{margin-left:auto;flex-shrink:0;display:inline-flex;align-items:center;gap:6px;font:700 10px var(--mono);letter-spacing:.03em;padding:4px 9px;border-radius:20px;}
+.qs.queued{background:rgba(251,192,45,.16);color:#9A6B00;}
+.qs.syncing{background:rgba(0,148,212,.12);color:var(--blue);}
+.qs.synced{background:rgba(31,162,74,.14);color:var(--green);}
+.qs.conflict{background:rgba(229,72,77,.14);color:var(--red);}
+[data-theme="dark"] .qs.queued,[data-theme="glass"] .qs.queued,[data-theme="reduced"] .qs.queued{color:var(--yellow);}
+.qs .dot{width:6px;height:6px;border-radius:50%;background:currentColor;}
+@media (prefers-reduced-motion:no-preference){.qs.syncing .dot{animation:blink 1s ease-in-out infinite;}}
+@keyframes blink{50%{opacity:.3;}}
+.qitem.conflict{border-color:rgba(229,72,77,.5);}
+
+/* conflict resolution */
+.confhead{display:flex;align-items:center;gap:12px;padding:13px 14px;border-radius:13px;background:rgba(229,72,77,.1);border:1px solid rgba(229,72,77,.3);}
+.confhead .seal2{width:42px;height:42px;border-radius:11px;background:rgba(229,72,77,.16);color:var(--red);display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.confhead .ht{font-weight:700;font-size:14.5px;}
+.confhead .hs{font-size:11px;color:var(--muted);margin-top:2px;line-height:1.4;}
+.versus{display:grid;grid-template-columns:1fr 1fr;gap:11px;}
+[data-surface="mobile"] .versus{grid-template-columns:1fr;}
+.ver{border:1px solid var(--card-bd);border-radius:12px;background:var(--surface2);padding:12px;}
+.ver.dev{border-color:rgba(0,148,212,.4);}
+.ver .vl{font:700 9.5px var(--mono);letter-spacing:.04em;text-transform:uppercase;color:var(--muted);margin-bottom:9px;display:flex;align-items:center;gap:6px;}
+.ver.dev .vl{color:var(--blue);}
+.ver .vtime{font:700 22px var(--mono);}
+.ver .vsub{font-size:11px;color:var(--muted);margin-top:3px;line-height:1.4;}
+.ver .vkey{margin-top:9px;font:600 10px var(--mono);color:var(--faint);padding-top:9px;border-top:1px solid var(--border);}
+.choices{display:flex;flex-direction:column;gap:8px;}
+.choice{display:flex;align-items:center;gap:11px;padding:12px 13px;border:1.5px solid var(--card-bd);border-radius:11px;cursor:default;}
+.choice.sel{border-color:var(--blue);background:rgba(0,148,212,.07);}
+.choice .rad{width:17px;height:17px;border-radius:50%;border:2px solid var(--card-bd);flex-shrink:0;}
+.choice.sel .rad{border-color:var(--blue);background:radial-gradient(circle,var(--blue) 42%,transparent 46%);}
+.choice .ct{font-size:12.5px;font-weight:600;}
+.choice .cd{font-size:10.5px;color:var(--muted);margin-top:1px;}
+
+/* two-up showcase (geofence screen) */
+.showgrid{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+[data-surface="mobile"] .showgrid{grid-template-columns:1fr;}
+.showcard{border:1px solid var(--card-bd);border-radius:14px;background:var(--surface);overflow:hidden;display:flex;flex-direction:column;}
+.showcard .sc-h{padding:11px 13px;font-weight:700;font-size:13px;display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--border);}
+.showcard .sc-h.ok{color:var(--green);}.showcard .sc-h.bad{color:var(--red);}
+.showcard .sc-b{padding:13px;display:flex;flex-direction:column;gap:11px;}
+
+/* ── Slice-6 leave additions ── */
+/* balance tiles */
+.tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:11px;}
+[data-surface="mobile"] .tiles{grid-template-columns:1fr;}
+.tile{border:1px solid var(--card-bd);border-radius:14px;background:var(--surface2);padding:13px 14px;display:flex;flex-direction:column;gap:3px;}
+.tile.hi{border-color:rgba(31,162,74,.4);background:rgba(31,162,74,.06);}
+.tile.sick{border-color:rgba(0,148,212,.35);background:rgba(0,148,212,.06);}
+.tile.carry{border-color:rgba(251,192,45,.45);background:rgba(251,192,45,.08);}
+.tile .tl{font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:700;display:flex;align-items:center;gap:6px;}
+.tile .big{font:700 30px var(--mono);line-height:1.05;letter-spacing:-.01em;}
+.tile .big small{font-size:13px;font-weight:600;color:var(--muted);letter-spacing:0;}
+.tile.hi .big{color:var(--green);}.tile.sick .big{color:var(--blue);}
+.tile .sub{font-size:10.5px;color:var(--muted);line-height:1.4;}
+.tile .split{display:flex;gap:12px;margin-top:2px;}
+.tile .split div .n{font:700 16px var(--mono);}.tile .split div .k{font-size:9.5px;color:var(--faint);text-transform:uppercase;letter-spacing:.04em;font-weight:700;}
+
+/* form fields */
+.fg{display:grid;grid-template-columns:1fr 1fr;gap:12px 13px;}
+[data-surface="mobile"] .fg{grid-template-columns:1fr;}
+.field label{display:block;font-size:10.5px;color:var(--muted);margin-bottom:5px;font-weight:600;}
+.field .req{color:var(--red);}
+.field input,.field select,.field textarea{width:100%;border:1px solid var(--border);border-radius:9px;padding:10px 11px;background:var(--field);color:var(--text);font:inherit;font-size:13px;resize:none;}
+.field textarea{min-height:60px;line-height:1.5;}
+.field .full,.full{grid-column:1/-1;}
+
+/* leave type segmented */
+.ltypes{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+.ltype{border:1.5px solid var(--card-bd);border-radius:12px;padding:12px 13px;display:flex;gap:10px;align-items:center;}
+.ltype.sel-a{border-color:var(--green);background:rgba(31,162,74,.07);}
+.ltype.sel-s{border-color:var(--blue);background:rgba(0,148,212,.07);}
+.ltype .li{width:32px;height:32px;border-radius:9px;display:flex;align-items:center;justify-content:center;flex-shrink:0;background:var(--surface2);color:var(--faint);}
+.ltype.sel-a .li{background:rgba(31,162,74,.16);color:var(--green);}
+.ltype.sel-s .li{background:rgba(0,148,212,.14);color:var(--blue);}
+.ltype .tt{font-weight:700;font-size:13.5px;}.ltype .td{font-size:10px;color:var(--muted);margin-top:1px;}
+.ltype .rad{margin-left:auto;width:16px;height:16px;border-radius:50%;border:2px solid var(--card-bd);flex-shrink:0;}
+.ltype.sel-a .rad{border-color:var(--green);background:radial-gradient(circle,var(--green) 42%,transparent 46%);}
+.ltype.sel-s .rad{border-color:var(--blue);background:radial-gradient(circle,var(--blue) 42%,transparent 46%);}
+
+/* submission checks */
+.checks{display:flex;flex-direction:column;gap:8px;}
+.chk{display:flex;gap:11px;align-items:flex-start;padding:10px 12px;border-radius:11px;background:var(--surface2);border:1px solid var(--card-bd);}
+.chk .ci{width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.chk.ok .ci{background:rgba(31,162,74,.16);color:var(--green);}
+.chk.bad .ci{background:rgba(229,72,77,.14);color:var(--red);}
+.chk.warn .ci{background:rgba(251,192,45,.2);color:#9A6B00;}
+[data-theme="dark"] .chk.warn .ci,[data-theme="glass"] .chk.warn .ci,[data-theme="reduced"] .chk.warn .ci{color:var(--yellow);}
+.chk .ct{font-size:12.5px;font-weight:600;}.chk .cd{font-size:10.5px;color:var(--muted);margin-top:2px;line-height:1.4;}
+.chk .ci .svg{width:14px;height:14px;}
+.hoh{margin-top:2px;padding:11px 13px;border-radius:11px;background:rgba(251,192,45,.12);border:1px solid rgba(251,192,45,.45);font-size:11.5px;line-height:1.45;display:flex;gap:9px;align-items:flex-start;color:#7a5600;}
+[data-theme="dark"] .hoh,[data-theme="glass"] .hoh,[data-theme="reduced"] .hoh{color:var(--yellow);}
+.hoh .svg{flex-shrink:0;margin-top:1px;color:var(--yellow);}
+.hoh b{font-weight:700;}
+
+/* request detail (approve) */
+.reqcard{border:1px solid var(--card-bd);border-radius:14px;background:var(--surface);overflow:hidden;}
+.reqcard .rq-h{display:flex;align-items:center;gap:12px;padding:13px 14px;border-bottom:1px solid var(--border);}
+.reqcard .rq-h .av{width:40px;height:40px;border-radius:50%;background:var(--green);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;flex-shrink:0;}
+.reqcard .rq-h .nm{font-weight:700;font-size:14px;}.reqcard .rq-h .mt{font:600 11px var(--mono);color:var(--muted);margin-top:1px;}
+.reqcard .rq-b{padding:6px 4px;}
+
+/* coverage meter */
+.cov{border:1px solid var(--card-bd);border-radius:13px;background:var(--surface2);padding:13px 14px;}
+.cov.warn{border-color:rgba(251,192,45,.5);background:rgba(251,192,45,.08);}
+.cov .cvh{display:flex;align-items:center;gap:8px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-bottom:10px;}
+.cov .cvrow{display:flex;align-items:center;gap:11px;}
+.cov .cvrole{font-size:12.5px;font-weight:600;}
+.cov .cvsub{font-size:10.5px;color:var(--muted);margin-top:1px;}
+.cov .cvcount{margin-left:auto;text-align:right;flex-shrink:0;}
+.cov .cvcount .n{font:700 18px var(--mono);}.cov.warn .cvcount .n{color:var(--red);}
+.cov .cvcount .k{font-size:9.5px;color:var(--faint);text-transform:uppercase;letter-spacing:.04em;font-weight:700;}
+.cov .cvbar{margin-top:11px;height:7px;border-radius:5px;background:var(--border);overflow:hidden;}
+.cov .cvbar i{display:block;height:100%;background:var(--green);}
+.cov.warn .cvbar i{background:var(--red);}
+
+/* acknowledge override */
+.ack{margin-top:11px;border:1px solid rgba(229,72,77,.3);border-radius:12px;background:rgba(229,72,77,.05);padding:12px 13px;}
+.ack .akt{font-weight:700;font-size:12.5px;display:flex;align-items:center;gap:7px;}
+.ack .akb{font-size:11px;color:var(--muted);margin:3px 0 10px;line-height:1.45;}
+.ackchk{display:flex;align-items:center;gap:9px;font-size:12px;font-weight:600;}
+.ackchk .box{width:18px;height:18px;border-radius:5px;border:2px solid var(--card-bd);display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.ackchk .box.on{background:var(--red);border-color:var(--red);color:#fff;}
+.ackchk .box .svg{width:12px;height:12px;}
+
+/* liability table */
+.ltable{border:1px solid var(--card-bd);border-radius:13px;overflow:hidden;background:var(--surface);}
+.lhead,.lrow{display:grid;grid-template-columns:1.6fr .9fr .9fr .9fr;gap:8px;padding:10px 13px;align-items:center;}
+.lhead{background:var(--surface2);border-bottom:1px solid var(--card-bd);font-size:9.5px;text-transform:uppercase;letter-spacing:.04em;color:var(--faint);font-weight:700;}
+.lrow{border-bottom:1px solid var(--border);font-size:12.5px;}
+.lrow:last-child{border-bottom:none;}
+[data-surface="mobile"] .lhead,[data-surface="mobile"] .lrow{grid-template-columns:1.4fr 1fr;}
+[data-surface="mobile"] .lhead .hide,[data-surface="mobile"] .lrow .hide{display:none;}
+.lrow .who .nm{font-weight:600;}.lrow .who .rl{font:600 10px var(--mono);color:var(--faint);margin-top:1px;}
+.lrow .num{font-family:var(--mono);font-variant-numeric:tabular-nums;text-align:right;}
+.lrow .liab{font-weight:700;text-align:right;}
+.lrow.excl{opacity:.55;}
+.lrow.excl .liab{color:var(--faint);font-weight:600;font-size:11px;}
+.lna{display:inline-flex;align-items:center;gap:5px;font:700 10px var(--mono);color:#9A6B00;background:rgba(251,192,45,.16);border:1px solid rgba(251,192,45,.45);border-radius:6px;padding:2px 7px;}
+[data-theme="dark"] .lna,[data-theme="glass"] .lna,[data-theme="reduced"] .lna{color:var(--yellow);}
+.ltotal{display:flex;align-items:center;gap:12px;padding:14px;border-radius:13px;background:var(--surface2);border:1px solid var(--card-bd);}
+.ltotal .tk{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:700;}
+.ltotal .tv{font:700 26px var(--mono);letter-spacing:-.01em;margin-top:2px;}
+[data-surface="kiosk"] .ltotal .tv{font-size:30px;}
+.ltotal .tmeta{margin-left:auto;text-align:right;font-size:10.5px;color:var(--muted);line-height:1.5;flex-shrink:0;}
+.moneybig{font:700 32px var(--mono);letter-spacing:-.01em;}
+.formula{display:inline-flex;align-items:center;gap:6px;font:600 10.5px var(--mono);color:var(--muted);background:var(--surface2);border:1px solid var(--border);border-radius:7px;padding:5px 9px;}
+
+/* ── Slice-7 KPI scorecard ── */
+/* RAG summary bar */
+.ragbar{display:flex;flex-wrap:wrap;gap:9px;align-items:center;}
+.ragpill{display:inline-flex;align-items:center;gap:7px;padding:7px 13px;border-radius:11px;border:1px solid var(--card-bd);background:var(--surface2);font-size:12px;font-weight:600;}
+.ragpill .n{font:700 16px var(--mono);}
+.ragpill.g{border-color:rgba(31,162,74,.4);}.ragpill.g .n{color:var(--green);}
+.ragpill.a{border-color:rgba(251,192,45,.5);}.ragpill.a .n{color:#9A6B00;}
+.ragpill.r{border-color:rgba(229,72,77,.4);}.ragpill.r .n{color:var(--red);}
+.ragpill.na .n{color:var(--faint);}
+[data-theme="dark"] .ragpill.a .n,[data-theme="glass"] .ragpill.a .n,[data-theme="reduced"] .ragpill.a .n{color:var(--yellow);}
+.ragdot{width:9px;height:9px;border-radius:50%;flex-shrink:0;}
+.ragdot.g{background:var(--green);}.ragdot.a{background:var(--yellow);}.ragdot.r{background:var(--red);}.ragdot.na{background:var(--faint);}
+.scope{display:inline-flex;align-items:center;gap:6px;font:600 10.5px var(--mono);color:var(--muted);background:var(--surface2);border:1px solid var(--border);border-radius:7px;padding:5px 9px;}
+
+/* category header */
+.kcat{font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:700;display:flex;align-items:center;gap:8px;margin:4px 0 2px;}
+.kcat .ln{flex:1;height:1px;background:var(--border);}
+
+/* KPI grid + card */
+.kgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;}
+[data-surface="tablet"] .kgrid{grid-template-columns:repeat(2,1fr);}
+[data-surface="mobile"] .kgrid{grid-template-columns:1fr;}
+[data-surface="kiosk"] .kgrid{grid-template-columns:repeat(2,1fr);}
+.kcard{border:1px solid var(--card-bd);border-left-width:4px;border-radius:13px;background:var(--surface);padding:13px 14px;display:flex;flex-direction:column;gap:7px;position:relative;}
+.kcard.g{border-left-color:var(--green);}.kcard.a{border-left-color:var(--yellow);}.kcard.r{border-left-color:var(--red);}.kcard.n{border-left-color:var(--faint);}
+.kcard.na{border-left-color:var(--yellow);background:repeating-linear-gradient(135deg,color-mix(in srgb,var(--yellow) 7%,transparent),color-mix(in srgb,var(--yellow) 7%,transparent) 10px,transparent 10px,transparent 20px);}
+.kcard .khead{display:flex;align-items:flex-start;gap:9px;}
+.kcard .kn{font-size:12.5px;font-weight:700;line-height:1.3;flex:1;}
+.kcard .kstat{flex-shrink:0;display:inline-flex;align-items:center;gap:5px;font:700 9.5px var(--mono);letter-spacing:.04em;padding:3px 8px;border-radius:20px;text-transform:uppercase;}
+.kstat.g{background:rgba(31,162,74,.14);color:var(--green);}.kstat.a{background:rgba(251,192,45,.18);color:#9A6B00;}.kstat.r{background:rgba(229,72,77,.14);color:var(--red);}.kstat.n{background:var(--surface2);color:var(--faint);}
+.kstat.na{background:rgba(251,192,45,.16);color:#9A6B00;}
+[data-theme="dark"] .kstat.a,[data-theme="glass"] .kstat.a,[data-theme="reduced"] .kstat.a,[data-theme="dark"] .kstat.na,[data-theme="glass"] .kstat.na,[data-theme="reduced"] .kstat.na{color:var(--yellow);}
+.kcard .kv{font:700 27px var(--mono);letter-spacing:-.01em;line-height:1;}
+[data-surface="kiosk"] .kcard .kv{font-size:31px;}
+.kcard .kv.navb{font-size:15px;color:#9A6B00;display:inline-flex;align-items:center;gap:7px;}
+[data-theme="dark"] .kcard .kv.navb,[data-theme="glass"] .kcard .kv.navb,[data-theme="reduced"] .kcard .kv.navb{color:var(--yellow);}
+.kcard .ksub{font-size:10.5px;color:var(--faint);}
+.kcard .kfoot{margin-top:auto;padding-top:8px;border-top:1px solid var(--border);display:flex;flex-direction:column;gap:4px;}
+.kcard .krow{display:flex;align-items:center;gap:8px;font-size:10.5px;}
+.kcard .krow .kk{color:var(--faint);text-transform:uppercase;letter-spacing:.04em;font-weight:700;font-size:9px;width:52px;flex-shrink:0;}
+.kcard .krow .kf{font:600 10.5px var(--mono);color:var(--muted);}
+.kcard .krow .kt{margin-left:auto;font:700 11px var(--mono);}
+.kcard .naband{display:inline-flex;align-items:center;gap:6px;font:700 10px var(--mono);color:#9A6B00;}
+[data-theme="dark"] .kcard .naband,[data-theme="glass"] .kcard .naband,[data-theme="reduced"] .kcard .naband{color:var(--yellow);}
+
+/* ESS my-kpi headline */
+.myhead{display:flex;align-items:center;gap:12px;padding:14px;border-radius:14px;background:var(--surface2);border:1px solid var(--card-bd);}
+.myhead .av{width:42px;height:42px;border-radius:50%;background:var(--green);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;flex-shrink:0;}
+.myhead .nm{font-weight:700;font-size:14px;}.myhead .mt{font:600 11px var(--mono);color:var(--muted);margin-top:1px;}
+
+/* ── Slice-8 Exact / Asset / Payslip ── */
+/* pipeline stepper */
+.pipe{display:flex;align-items:flex-start;gap:0;padding:4px 0 2px;}
+.pstep{flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;position:relative;text-align:center;}
+.pstep::before{content:"";position:absolute;top:15px;left:-50%;width:100%;height:2px;background:var(--border);z-index:0;}
+.pstep:first-child::before{display:none;}
+.pstep.done::before,.pstep.active::before{background:var(--green);}
+.pstep.fail.active::before{background:var(--red);}
+.pnode{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:var(--surface2);border:2px solid var(--border);color:var(--faint);z-index:1;font:700 12px var(--mono);}
+.pstep.done .pnode{background:var(--green);border-color:var(--green);color:#fff;}
+.pstep.active .pnode{background:var(--card-bg);border-color:var(--green);color:var(--green);}
+.pstep.fail .pnode{background:var(--red);border-color:var(--red);color:#fff;}
+.pstep.queued .pnode{opacity:.6;}
+.pstep .plbl{font-size:10px;font-weight:600;color:var(--muted);line-height:1.3;}
+.pstep.active .plbl{color:var(--text);font-weight:700;}
+.pstep .psvg .svg{width:15px;height:15px;}
+
+/* dropzone */
+.drop{border:2px dashed var(--card-bd);border-radius:16px;background:var(--surface2);padding:34px 20px;display:flex;flex-direction:column;align-items:center;gap:11px;text-align:center;}
+.drop .di{width:56px;height:56px;border-radius:15px;background:var(--card-bg);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;color:var(--blue);}
+.drop .di .svg{width:26px;height:26px;}
+.drop h3{margin:0;font-size:16px;}.drop p{margin:0;font-size:12.5px;color:var(--muted);max-width:360px;line-height:1.5;}
+
+/* match-key chip row */
+.mkey{display:flex;align-items:center;gap:9px;padding:10px 13px;border-radius:11px;background:rgba(0,148,212,.07);border:1px solid rgba(0,148,212,.26);font-size:12px;flex-wrap:wrap;}
+.mkey .kk{font-weight:700;color:var(--blue);}
+.mkey .kv{font:600 11.5px var(--mono);}
+
+/* validation offending rows */
+.vlist{border:1px solid rgba(229,72,77,.3);border-radius:12px;overflow:hidden;}
+.vhead,.vrow{display:grid;grid-template-columns:.6fr 1fr 2fr;gap:9px;padding:9px 13px;align-items:center;font-size:12px;}
+.vhead{background:rgba(229,72,77,.08);font:700 9.5px var(--mono);text-transform:uppercase;letter-spacing:.04em;color:var(--red);}
+.vrow{border-top:1px solid var(--border);}
+.vrow .vr{font:700 11px var(--mono);color:var(--red);}
+.vrow .vf{font:600 11px var(--mono);color:var(--text);}
+.vrow .vm{color:var(--muted);font-size:11.5px;}
+
+/* reconciliation buckets */
+.recon{display:flex;flex-direction:column;gap:9px;}
+.rbucket{border:1px solid var(--card-bd);border-radius:12px;background:var(--surface2);padding:11px 13px;display:flex;gap:11px;align-items:flex-start;}
+.rbucket .rbi{width:30px;height:30px;border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.rbucket.unknown .rbi{background:rgba(229,72,77,.14);color:var(--red);}
+.rbucket.missing .rbi{background:rgba(251,192,45,.18);color:#9A6B00;}
+.rbucket.leaver .rbi{background:rgba(0,148,212,.12);color:var(--blue);}
+[data-theme="dark"] .rbucket.missing .rbi,[data-theme="glass"] .rbucket.missing .rbi,[data-theme="reduced"] .rbucket.missing .rbi{color:var(--yellow);}
+.rbucket .rt{font-size:12.5px;font-weight:700;}.rbucket .rd{font-size:11px;color:var(--muted);margin-top:2px;line-height:1.4;}
+.rbucket .rn{margin-left:auto;font:700 15px var(--mono);flex-shrink:0;}
+.rbucket.unknown .rn{color:var(--red);}.rbucket.missing .rn{color:#9A6B00;}.rbucket.leaver .rn{color:var(--blue);}
+[data-theme="dark"] .rbucket.missing .rn,[data-theme="glass"] .rbucket.missing .rn,[data-theme="reduced"] .rbucket.missing .rn{color:var(--yellow);}
+
+/* control-totals table */
+.ctot{border:1px solid var(--card-bd);border-radius:12px;overflow:hidden;}
+.cthead,.ctrow{display:grid;grid-template-columns:1.2fr 1fr 1fr .8fr;gap:8px;padding:10px 13px;align-items:center;}
+.cthead{background:var(--surface2);border-bottom:1px solid var(--card-bd);font:700 9.5px var(--mono);text-transform:uppercase;letter-spacing:.04em;color:var(--faint);}
+.ctrow{border-bottom:1px solid var(--border);font-size:12.5px;}
+.ctrow:last-child{border-bottom:none;}
+.ctrow .num{font-family:var(--mono);font-variant-numeric:tabular-nums;text-align:right;}
+.ctrow .d0{color:var(--green);font-weight:700;text-align:right;}
+.ctrow.bad{background:rgba(229,72,77,.06);}
+.ctrow.bad .dx{color:var(--red);font-weight:700;text-align:right;}
+
+/* publish summary */
+.pub{display:flex;flex-direction:column;gap:8px;}
+.pubrow{display:flex;align-items:center;gap:10px;padding:10px 13px;border-radius:10px;background:var(--surface2);border:1px solid var(--card-bd);font-size:12.5px;}
+.pubrow .pi{color:var(--green);flex-shrink:0;}
+
+/* asset table */
+.atable{border:1px solid var(--card-bd);border-radius:13px;overflow:hidden;background:var(--surface);}
+.ahead,.arow{display:grid;grid-template-columns:1.6fr 1fr 1fr 1fr;gap:9px;padding:10px 13px;align-items:center;}
+.ahead{background:var(--surface2);border-bottom:1px solid var(--card-bd);font:700 9.5px var(--mono);text-transform:uppercase;letter-spacing:.04em;color:var(--faint);}
+.arow{border-bottom:1px solid var(--border);font-size:12.5px;}
+.arow:last-child{border-bottom:none;}
+[data-surface="mobile"] .ahead,[data-surface="mobile"] .arow{grid-template-columns:1.4fr 1fr;}
+[data-surface="mobile"] .ahead .hide,[data-surface="mobile"] .arow .hide{display:none;}
+.arow .an{font-weight:600;}.arow .ac{font:600 10px var(--mono);color:var(--faint);margin-top:1px;}
+.astat{display:inline-flex;align-items:center;gap:5px;font:700 9.5px var(--mono);letter-spacing:.03em;padding:3px 8px;border-radius:20px;text-transform:uppercase;}
+.astat.assigned{background:rgba(0,148,212,.12);color:var(--blue);}
+.astat.available{background:rgba(31,162,74,.14);color:var(--green);}
+.astat.returned{background:var(--surface2);color:var(--faint);}
+.astat.clearance{background:rgba(229,72,77,.14);color:var(--red);}
+.astat .dot{width:6px;height:6px;border-radius:50%;background:currentColor;}
+.arow .ab{font-size:11.5px;font-weight:600;color:var(--blue);border:1px solid var(--card-bd);border-radius:8px;padding:5px 11px;background:var(--surface2);flex-shrink:0;justify-self:end;}
+
+/* custody timeline */
+.custody{position:relative;padding-left:26px;}
+.custody::before{content:"";position:absolute;left:9px;top:6px;bottom:8px;width:2px;background:var(--border);}
+.cevent{position:relative;padding:7px 0;}
+.cevent::before{content:"";position:absolute;left:-21px;top:11px;width:11px;height:11px;border-radius:50%;background:var(--blue);border:2px solid var(--card-bg);}
+.cevent.ret::before{background:var(--faint);}
+.cevent .ce{font-size:12px;font-weight:600;}.cevent .cm{font:600 10px var(--mono);color:var(--faint);margin-top:1px;}
+
+/* payslip */
+.pay{border:1px solid var(--card-bd);border-radius:14px;overflow:hidden;background:var(--surface);}
+.pay .ph{padding:13px 15px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;background:var(--surface2);}
+.pay .ph .pt{font-weight:700;font-size:14px;}.pay .ph .pm{font:600 11px var(--mono);color:var(--muted);margin-top:1px;}
+.pay .psec{padding:6px 15px;}
+.pay .psh{font-size:9.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--faint);font-weight:700;padding:9px 0 5px;}
+.payr{display:flex;align-items:center;padding:6px 0;font-size:12.5px;border-bottom:1px solid color-mix(in srgb,var(--border) 55%,transparent);}
+.payr:last-child{border-bottom:none;}
+.payr .pk{color:var(--muted);}.payr .pv{margin-left:auto;font:600 12.5px var(--mono);}
+.paytot{display:flex;align-items:center;padding:10px 15px;border-top:1px solid var(--card-bd);font-weight:700;font-size:13px;}
+.paytot .pv{margin-left:auto;font:700 14px var(--mono);}
+.paynet{display:flex;flex-direction:column;gap:2px;padding:13px 15px;background:rgba(31,162,74,.08);border-top:1px solid var(--card-bd);}
+.paynet .nrow{display:flex;align-items:center;}
+.paynet .nk{font-weight:700;font-size:14px;}.paynet .nv{margin-left:auto;font:700 22px var(--mono);color:var(--green);}
+.paynet .nd{font-size:10.5px;color:var(--muted);}
+
+/* ── Slice-9 governance / ESS ── */
+/* control card (C20) */
+.ctrl{border:1px solid var(--card-bd);border-left-width:4px;border-radius:13px;background:var(--surface);padding:13px 14px;display:flex;flex-direction:column;gap:9px;}
+.ctrl.pass{border-left-color:var(--green);}.ctrl.fail{border-left-color:var(--red);}
+.ctrl .ch{display:flex;align-items:center;gap:10px;}
+.ctrl .cih{width:32px;height:32px;border-radius:9px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.ctrl.pass .cih{background:rgba(31,162,74,.14);color:var(--green);}.ctrl.fail .cih{background:rgba(229,72,77,.14);color:var(--red);}
+.ctrl .cn{font-size:13px;font-weight:700;}.ctrl .cd{font-size:10.5px;color:var(--muted);margin-top:1px;}
+.ctrl .cb{margin-left:auto;flex-shrink:0;display:inline-flex;align-items:center;gap:6px;font:700 10px var(--mono);letter-spacing:.03em;padding:4px 10px;border-radius:20px;text-transform:uppercase;}
+.cb.pass{background:rgba(31,162,74,.14);color:var(--green);}.cb.fail{background:rgba(229,72,77,.14);color:var(--red);}
+.cb .dot{width:6px;height:6px;border-radius:50%;background:currentColor;}
+.offend{border:1px solid rgba(229,72,77,.28);border-radius:10px;overflow:hidden;}
+.offend .orow{display:flex;align-items:center;gap:10px;padding:8px 12px;font-size:11.5px;border-top:1px solid var(--border);}
+.offend .orow:first-child{border-top:none;}
+.offend .oid{font:700 10.5px var(--mono);color:var(--red);flex-shrink:0;}
+.offend .ov{color:var(--muted);}
+.offend .otag{margin-left:auto;font:600 9.5px var(--mono);color:var(--faint);background:var(--surface2);border:1px solid var(--border);border-radius:5px;padding:2px 6px;flex-shrink:0;}
+.runhead{display:flex;align-items:center;gap:11px;padding:12px 14px;border-radius:12px;background:var(--surface2);border:1px solid var(--card-bd);}
+.runhead .rt{font-weight:700;font-size:13px;}.runhead .rs{font:600 10.5px var(--mono);color:var(--muted);margin-top:1px;}
+
+/* expiry alerts */
+.leadset{display:flex;flex-wrap:wrap;gap:8px;align-items:center;}
+.lead{font:700 11px var(--mono);padding:6px 11px;border-radius:20px;border:1px solid var(--card-bd);background:var(--surface2);color:var(--muted);}
+.lead.on{border-color:var(--blue);color:var(--blue);background:rgba(0,148,212,.08);}
+.alertrow{display:flex;align-items:center;gap:11px;padding:11px 13px;border-radius:11px;background:var(--surface2);border:1px solid var(--card-bd);}
+.alertrow .ai{width:30px;height:30px;border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.alertrow.due .ai{background:rgba(251,192,45,.18);color:#9A6B00;}
+.alertrow.over .ai{background:rgba(229,72,77,.14);color:var(--red);}
+.alertrow.cleared{opacity:.6;}
+.alertrow.cleared .ai{background:var(--surface);color:var(--faint);}
+[data-theme="dark"] .alertrow.due .ai,[data-theme="glass"] .alertrow.due .ai,[data-theme="reduced"] .alertrow.due .ai{color:var(--yellow);}
+.alertrow .at{font-size:12.5px;font-weight:600;}.alertrow .am{font:600 10px var(--mono);color:var(--faint);margin-top:1px;}
+.alertrow .aw{margin-left:auto;flex-shrink:0;font:700 10px var(--mono);}
+.alertrow.due .aw{color:#9A6B00;}.alertrow.over .aw{color:var(--red);}.alertrow.cleared .aw{color:var(--green);}
+[data-theme="dark"] .alertrow.due .aw,[data-theme="glass"] .alertrow.due .aw,[data-theme="reduced"] .alertrow.due .aw{color:var(--yellow);}
+
+/* policy */
+.polcard{border:1px solid var(--card-bd);border-radius:14px;background:var(--surface);overflow:hidden;}
+.polcard .plh{padding:14px 15px;border-bottom:1px solid var(--border);background:var(--surface2);}
+.polcard .pltitle{font-weight:700;font-size:15px;}
+.polcard .plver{display:inline-flex;align-items:center;gap:6px;font:700 10px var(--mono);background:rgba(0,148,212,.12);color:var(--blue);border-radius:6px;padding:2px 8px;margin-top:6px;}
+.polbody{padding:14px 15px;font-size:12px;line-height:1.6;color:var(--muted);}
+.polbody .pl{height:7px;border-radius:4px;background:var(--surface2);margin:7px 0;}
+.polbody .pl.s{width:72%;}.polbody .pl.m{width:92%;}
+.ackbig{display:flex;align-items:center;gap:9px;padding:12px 15px;border-top:1px solid var(--card-bd);font-size:12px;}
+.ackbig .box{width:19px;height:19px;border-radius:5px;border:2px solid var(--card-bd);display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.ackbig .box.on{background:var(--green);border-color:var(--green);color:#fff;}
+.ackbig .box .svg{width:13px;height:13px;}
+.trackbar{display:flex;gap:9px;align-items:center;}
+.trackbar .tp{flex:1;height:9px;border-radius:6px;background:var(--border);overflow:hidden;}
+.trackbar .tp i{display:block;height:100%;background:var(--green);}
+.trackbar .tv{font:700 12px var(--mono);flex-shrink:0;}
+
+/* switcher bar (kit) */
+.bar{display:flex;flex-wrap:wrap;gap:12px;align-items:center;padding:9px 14px;background:#11161b;color:#cfd8de;border-bottom:1px solid #1e262d;font-size:11.5px;}
+.bar .grp{display:flex;align-items:center;gap:5px;}
+.bar .lbl{color:#7c8893;font-weight:600;text-transform:uppercase;letter-spacing:.05em;font-size:9.5px;}
+.bar button{border:1px solid #2a333b;background:#1a2127;color:#aeb9c1;border-radius:6px;padding:4px 8px;cursor:pointer;font:inherit;font-size:11px;}
+.bar button.on{background:var(--green);color:#fff;border-color:var(--green);}
+.bar .ac{margin-left:auto;color:#6f7c85;}.bar .ac b{color:#9FE3BD;}
+</style>
+</head>
+<body>
+<template id="__bundler_thumbnail" data-bg-color="#0E4D34"><svg viewBox="0 0 1200 800" xmlns="http://www.w3.org/2000/svg"><rect width="1200" height="800" fill="#0E4D34"/><path d="M600 220l120 44v90c0 74-50 120-120 150-70-30-120-76-120-150v-90z" fill="none" stroke="#FBC02D" stroke-width="11"/><path d="M556 350l34 34 66-70" fill="none" stroke="#9FE3BD" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/><text x="600" y="560" text-anchor="middle" font-family="monospace" font-size="32" font-weight="700" fill="#fff" letter-spacing="4">GOVERNANCE</text><text x="600" y="606" text-anchor="middle" font-family="monospace" font-size="20" fill="#9FE3BD" letter-spacing="3">C20 · ALERTS · E12 · E7</text></svg></template>
+
+<div class="bar">
+ <div class="grp"><span class="lbl">Screen</span><span id="screens"></span></div>
+ <div class="grp"><span class="lbl">State</span><span id="states"></span></div>
+ <div class="grp"><span class="lbl">Viewer</span><span id="roles"></span></div>
+ <div class="grp"><span class="lbl">Theme</span><span id="themes"></span></div>
+ <div class="grp"><span class="lbl">Surface</span><span id="surfaces"></span></div>
+ <div class="grp"><span class="lbl">Lang</span><span id="langs"></span></div>
+ <div class="ac" id="acline"></div>
+</div>
+<div class="stage"><div class="frame" id="frame"></div></div>
+
+<script>
+// Slice 9 · Governance (C20 controls · expiry alerts) & ESS services (E12 support · E7 policy) — bilingual
+const T={en:{
+ reg:'registry v1.2',
+ controls:'Controls & Checker', controlsSub:'Console · governance controls run pass/fail with offending records · C20',
+ alerts:'Expiry alerts', alertsSub:'Console · lead times, notified role, set / repeat / clear · DOC-01',
+ support:'Support tickets', supportSub:'Raise → lifecycle → closure → notify · E12',
+ policy:'Policy acknowledgement', policySub:'Read current version, acknowledge, re-acknowledge · E7',
+ // controls (C20)
+ runLast:'Last run', runLastVal:'30 Jun 2026 · 09:12', runNow:'Run controls now', runningBody:'Running governance controls across the tenant…',
+ ctrlSod:'Segregation of duties', ctrlSodD:'Issuer ≠ approver ≠ subject across every action',
+ ctrlGps:'Attendance without GPS evidence', ctrlGpsD:'Punches missing a device location fix',
+ ctrlLeaver:'Leaver access', ctrlLeaverD:'Active sessions or roles held by leavers',
+ ctrlChain:'Audit-chain integrity', ctrlChainD:'Hash chain unbroken end to end',
+ pass:'Pass', fail:'Fail', checked:'checked', offenders:'offending records',
+ offendNone:'No offending records — control holds.',
+ allClearTitle:'All controls passed.', allClearBody:'Every control ran clean — 0 offending records across all checks.',
+ allClearNote:'This is the audit evidence: each control is shown with the population it checked, so “all clear” is provable, not asserted. Retained and timestamped (UNI-06).',
+ ctrlNote:'Each control lists its offending records; nothing is auto-fixed. AUD-03 · governance run is itself audited (UNI-06).',
+ aud03:'AC-AUD-03 · controls & checker',
+ // alerts (DOC-01)
+ leadTitle:'Alert lead times', leadSub:'DA-1 · days before expiry', notifyTitle:'Notified role', notifyVal:'Project HR + Head of HR',
+ notifySub:'DA-2 · who receives the alert', repeatTitle:'Repeat', repeatVal:'Daily until cleared',
+ alertActive:'Active alerts', alertDoc:'document', 
+ aWorkPermit:'Work permit', aContract:'Contract', aMedical:'Medical certificate', aCert:'Competency certificate',
+ dueIn:'due in', overdue:'overdue', clearedLbl:'cleared',
+ setBtn:'Save alert configuration', clearBtn:'Clear', repeatBtn:'Repeat',
+ alertNote:'Alerts repeat on the lead schedule until the document is renewed or the alert is cleared. Clearing is audited (UNI-06).',
+ // support (E12)
+ raiseCta:'Raise a ticket', ticketList:'Tickets',
+ tkSubject:'Subject', tkOpen:'Open', tkResolved:'Resolved', tkClosed:'Closed',
+ lifeRaised:'Raised', lifeAck:'Acknowledged', lifeProg:'In progress', lifeResolved:'Resolved', lifeClosed:'Closed',
+ tkNotify:'Notified', tkChannel:'Channel', tkPriority:'Priority',
+ supportNote:'Every state change notifies the raiser and is tracked to closure (SUP-01..04).',
+ tkSample:'May payslip not visible', tkDetail:'My May payslip is not showing in the app.',
+ tkAdvance:'Advance stage',
+ ownSupportScope:'Your tickets', ownSupportMeta:'2 tickets · raised by you',
+ supportOwnNote:'You see only tickets you raised (SUP-02). The full queue is limited to support agents (R12) and HR admins (R07, R11).',
+ supportOwnTicketNote:'You are notified at every state change. Only support agents (R12) move a ticket through its lifecycle.',
+ // policy (E7)
+ polTitle:'Code of Conduct', polVersion:'Version 3.0 · effective 1 Jun 2026', polOldVersion:'You acknowledged v2.1',
+ polRead:'Read the current version, then acknowledge to confirm you understand it.',
+ ackChk:'I have read and understood this policy', ackBtn:'Acknowledge', reackBtn:'Re-acknowledge new version',
+ reackBanner:'A new version (v3.0) was published. Your previous acknowledgement (v2.1) no longer covers it — re-acknowledge to stay compliant (POL-03).',
+ ackedLbl:'Acknowledged', ackedOn:'on 2 Jun 2026',
+ outstanding:'Outstanding acknowledgements', trackedNote:'Outstanding tracking rolls up who has and has not acknowledged the current version (POL-04).',
+ ackDone:'acknowledged', ackPending:'pending',
+ publishBtn:'Publish new version',
+ noPermPublishTitle:'Publish & outstanding is admin-only',
+ noPermPublishBody:'Publishing new policy versions and the organisation-wide outstanding tracker are limited to HR admins (R07, R11). You can read and acknowledge your own policies.',
+ noPermPublishWhy:'POL-04 · publish / outstanding · viewer',
+ // states
+ emptyControlsTitle:'No control run yet', emptyControlsBody:'Run the governance controls to check segregation of duties, GPS evidence, leaver access and audit-chain integrity. Offending records are listed per control.',
+ emptyAlertsTitle:'No alerts configured', emptyAlertsBody:'Set the lead times and the notified role to start expiry alerts for contracts, permits, medicals and certifications.',
+ emptySupportTitle:'No tickets yet', emptySupportBody:'Raise a ticket and its lifecycle is tracked to closure, notifying you at every step.',
+ emptyPolicyTitle:'No policy assigned', emptyPolicyBody:'Policies you must read and acknowledge appear here.',
+ loadingTitle:'Loading…',
+ successControlsTitle:'Controls run complete', successControlsSub:'Results recorded and the run audited. Offending records are queued for follow-up.',
+ successAlertTitle:'Alert configuration saved', successAlertSub:'Lead times and notified role updated. Alerts repeat until cleared.',
+ successSupportTitle:'Ticket raised', successSupportSub:'Logged and routed. You will be notified at every state change.',
+ successPolicyTitle:'Policy acknowledged', successPolicySub:'Your acknowledgement of v3.0 is recorded and time-stamped.',
+ errTitle:'Something went wrong', errBody:'The action could not be completed. Nothing changed. Try again.',
+ offControlsNote:'Offline — showing the last control run. Re-run on reconnect.',
+ offAlertsNote:'Offline — alert changes are queued and apply on reconnect.',
+ offSupportNote:'Offline — the ticket is queued and submits on reconnect.',
+ offPolicyNote:'Offline — your acknowledgement is queued and records on reconnect.',
+ noPermControlsTitle:'No access to Controls & Checker', noPermControlsBody:'Governance controls are limited to Compliance and IT (R11, R12) — not general HR seniority. Head of HR (R07) cannot run or view controls.', noPermControlsWhy:'C20 · governance · viewer',
+ noPermAlertsTitle:'No access to alert configuration', noPermAlertsBody:'Expiry-alert configuration is limited to HR roles (R05, R06, R07, R11) and IT (R12).', noPermAlertsWhy:'DOC-01 · config · viewer',
+ largeControls:'Full tenant run', largeControlsMeta:'1,077 staff · 6,214 actions checked · virtualised',
+ largeSupport:'All tickets', largeSupportMeta:'1,284 tickets · virtualised', supportShown:'showing 40 of 1,284',
+ largePolicy:'Outstanding tracking', largePolicyMeta:'1,246 staff · current version',
+ retry:'Retry', cancel:'Cancel', close:'Close', save:'Save', na:'—'
+},
+sw:{
+ reg:'rejista v1.2',
+ controls:'Udhibiti & Mkaguzi', controlsSub:'Konsoli · udhibiti wa utawala unaonyesha kufaulu/kushindwa na rekodi zenye makosa · C20',
+ alerts:'Tahadhari za muda wa mwisho', alertsSub:'Konsoli · muda wa awali, jukumu la kuarifiwa, weka / rudia / futa · DOC-01',
+ support:'Tiketi za msaada', supportSub:'Wasilisha → mzunguko → kufunga → arifu · E12',
+ policy:'Kukiri sera', policySub:'Soma toleo la sasa, kiri, kiri upya · E7',
+ runLast:'Uendeshaji wa mwisho', runLastVal:'30 Jun 2026 · 09:12', runNow:'Endesha udhibiti sasa', runningBody:'Inaendesha udhibiti wa utawala kwa tenant nzima…',
+ ctrlSod:'Mgawanyo wa majukumu', ctrlSodD:'Mtoaji ≠ mwidhinishaji ≠ mlengwa kwa kila hatua',
+ ctrlGps:'Mahudhurio bila ushahidi wa GPS', ctrlGpsD:'Kuingia bila nafasi ya eneo la kifaa',
+ ctrlLeaver:'Ufikiaji wa walioondoka', ctrlLeaverD:'Vikao au majukumu ya walioondoka bado hai',
+ ctrlChain:'Uadilifu wa mnyororo wa ukaguzi', ctrlChainD:'Mnyororo wa hash haujavunjika mwanzo hadi mwisho',
+ pass:'Imefaulu', fail:'Imeshindwa', checked:'zimekaguliwa', offenders:'rekodi zenye makosa',
+ offendNone:'Hakuna rekodi zenye makosa — udhibiti umeshikilia.',
+ allClearTitle:'Vidhibiti vyote vimefaulu.', allClearBody:'Kila kidhibiti kimeendeshwa safi — hakuna rekodi zenye makosa katika ukaguzi wote.',
+ allClearNote:'Huu ni ushahidi wa ukaguzi: kila kidhibiti kinaonyeshwa na idadi kilichokagua, hivyo “vyote safi” kinathibitishwa, si kudaiwa tu. Umehifadhiwa na kupigwa muhuri wa muda (UNI-06).',
+ ctrlNote:'Kila udhibiti unaorodhesha rekodi zenye makosa; hakuna kinacharekebishwa kiotomatiki. AUD-03 · uendeshaji unakaguliwa (UNI-06).',
+ aud03:'AC-AUD-03 · udhibiti & mkaguzi',
+ leadTitle:'Muda wa awali wa tahadhari', leadSub:'DA-1 · siku kabla ya kuisha', notifyTitle:'Jukumu la kuarifiwa', notifyVal:'HR wa mradi + Mkuu wa HR',
+ notifySub:'DA-2 · nani anapokea tahadhari', repeatTitle:'Rudia', repeatVal:'Kila siku hadi kufutwa',
+ alertActive:'Tahadhari zilizopo', alertDoc:'hati',
+ aWorkPermit:'Kibali cha kazi', aContract:'Mkataba', aMedical:'Cheti cha daktari', aCert:'Cheti cha umahiri',
+ dueIn:'inaisha baada ya', overdue:'imepitwa', clearedLbl:'imefutwa',
+ setBtn:'Hifadhi mipangilio ya tahadhari', clearBtn:'Futa', repeatBtn:'Rudia',
+ alertNote:'Tahadhari zinarudia kwa ratiba hadi hati irudishwe au tahadhari ifutwe. Kufuta kunakaguliwa (UNI-06).',
+ raiseCta:'Wasilisha tiketi', ticketList:'Tiketi',
+ tkSubject:'Mada', tkOpen:'Wazi', tkResolved:'Imetatuliwa', tkClosed:'Imefungwa',
+ lifeRaised:'Imewasilishwa', lifeAck:'Imepokewa', lifeProg:'Inashughulikiwa', lifeResolved:'Imetatuliwa', lifeClosed:'Imefungwa',
+ tkNotify:'Ameariﬁwa', tkChannel:'Njia', tkPriority:'Kipaumbele',
+ supportNote:'Kila badiliko la hali linamwarifu mwasilishaji na linafuatiliwa hadi kufungwa (SUP-01..04).',
+ tkSample:'Slipu ya Mei haionekani', tkDetail:'Slipu yangu ya Mei haionekani kwenye programu.',
+ tkAdvance:'Sogeza hatua',
+ ownSupportScope:'Tiketi zako', ownSupportMeta:'tiketi 2 · ulizowasilisha',
+ supportOwnNote:'Unaona tiketi ulizowasilisha wewe tu (SUP-02). Foleni kamili ni kwa maajenti wa msaada (R12) na wasimamizi wa HR (R07, R11).',
+ supportOwnTicketNote:'Unaarifiwa kila badiliko la hali. Ni maajenti wa msaada (R12) pekee wanaosogeza tiketi katika mzunguko wake.',
+ polTitle:'Kanuni za Maadili', polVersion:'Toleo 3.0 · linaanza 1 Jun 2026', polOldVersion:'Ulikiri toleo 2.1',
+ polRead:'Soma toleo la sasa, kisha kiri kuthibitisha umelielewa.',
+ ackChk:'Nimesoma na kuelewa sera hii', ackBtn:'Kiri', reackBtn:'Kiri upya toleo jipya',
+ reackBanner:'Toleo jipya (3.0) limechapishwa. Kukiri kwako kwa awali (2.1) hakulifuniki tena — kiri upya kubaki mwafaka (POL-03).',
+ ackedLbl:'Imekiriwa', ackedOn:'tarehe 2 Jun 2026',
+ outstanding:'Ukiri unaosubiri', trackedNote:'Ufuatiliaji unaonyesha nani amekiri na hajakiri toleo la sasa (POL-04).',
+ publishBtn:'Chapisha toleo jipya',
+ noPermPublishTitle:'Kuchapisha na ufuatiliaji ni kwa wasimamizi pekee',
+ noPermPublishBody:'Kuchapisha matoleo mapya ya sera na ufuatiliaji wa shirika zima ni kwa wasimamizi wa HR (R07, R11). Unaweza kusoma na kukiri sera zako.',
+ noPermPublishWhy:'POL-04 · kuchapisha / kusubiri · mtazamaji',
+ ackDone:'wamekiri', ackPending:'wanasubiri',
+ emptyControlsTitle:'Hakuna uendeshaji bado', emptyControlsBody:'Endesha udhibiti wa utawala kukagua mgawanyo wa majukumu, ushahidi wa GPS, ufikiaji wa walioondoka na uadilifu wa mnyororo. Rekodi zenye makosa zinaorodheshwa.',
+ emptyAlertsTitle:'Hakuna tahadhari zilizowekwa', emptyAlertsBody:'Weka muda wa awali na jukumu la kuarifiwa kuanza tahadhari za mikataba, vibali, vyeti vya daktari na umahiri.',
+ emptySupportTitle:'Hakuna tiketi bado', emptySupportBody:'Wasilisha tiketi na mzunguko wake unafuatiliwa hadi kufungwa, ukikuarifu kila hatua.',
+ emptyPolicyTitle:'Hakuna sera iliyopangwa', emptyPolicyBody:'Sera unazopaswa kusoma na kukiri zitaonekana hapa.',
+ loadingTitle:'Inapakia…',
+ successControlsTitle:'Uendeshaji umekamilika', successControlsSub:'Matokeo yamerekodiwa na uendeshaji umekaguliwa. Rekodi zenye makosa zimewekwa kwa ufuatiliaji.',
+ successAlertTitle:'Mipangilio ya tahadhari imehifadhiwa', successAlertSub:'Muda wa awali na jukumu vimesasishwa. Tahadhari zinarudia hadi kufutwa.',
+ successSupportTitle:'Tiketi imewasilishwa', successSupportSub:'Imeandikishwa na kuelekezwa. Utaarifiwa kila badiliko la hali.',
+ successPolicyTitle:'Sera imekiriwa', successPolicySub:'Kukiri kwako kwa toleo 3.0 kumerekodiwa na kupigwa muhuri wa muda.',
+ errTitle:'Kuna hitilafu', errBody:'Kitendo hakikuweza kukamilika. Hakuna kilichobadilika. Jaribu tena.',
+ offControlsNote:'Nje ya mtandao — inaonyesha uendeshaji wa mwisho. Endesha tena ukirejea.',
+ offAlertsNote:'Nje ya mtandao — mabadiliko ya tahadhari yamesubiri na yatatumika ukirejea.',
+ offSupportNote:'Nje ya mtandao — tiketi imesubiri na itawasilishwa ukirejea.',
+ offPolicyNote:'Nje ya mtandao — kukiri kwako kumesubiri na kutarekodiwa ukirejea.',
+ noPermControlsTitle:'Huna ufikiaji wa Udhibiti & Mkaguzi', noPermControlsBody:'Udhibiti wa utawala ni kwa Uzingatiaji na TEHAMA (R11, R12) — si ukuu wa HR kwa jumla. Mkuu wa HR (R07) hawezi kuendesha au kuona udhibiti.', noPermControlsWhy:'C20 · utawala · mtazamaji',
+ noPermAlertsTitle:'Huna ufikiaji wa mipangilio ya tahadhari', noPermAlertsBody:'Mipangilio ya tahadhari ni kwa majukumu ya HR (R05, R06, R07, R11) na TEHAMA (R12).', noPermAlertsWhy:'DOC-01 · mipangilio · mtazamaji',
+ largeControls:'Uendeshaji wa tenant nzima', largeControlsMeta:'wafanyakazi 1,077 · vitendo 6,214 vimekaguliwa · imepunguzwa',
+ largeSupport:'Tiketi zote', largeSupportMeta:'tiketi 1,284 · imepunguzwa', supportShown:'inaonyesha 40 kati ya 1,284',
+ largePolicy:'Ufuatiliaji unaosubiri', largePolicyMeta:'wafanyakazi 1,246 · toleo la sasa',
+ retry:'Jaribu tena', cancel:'Ghairi', close:'Funga', save:'Hifadhi', na:'—'
+}};
+window.T=T;
+
+</script>
+<script>
+// Slice 9 · Governance (C20 · alerts) & ESS (E12 · E7) — flow logic (reuses kit)
+function t(k){return window.T[cur.lang][k];}
+
+const ic={
+ shield:'<svg class="svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>',
+ check:'<svg class="svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6 9 17l-5-5"/></svg>',
+ x:'<svg class="svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M18 6 6 18M6 6l12 12"/></svg>',
+ warn:'<svg class="svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></svg>',
+ off:'<svg class="svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M1 1l22 22M16.7 11.1A6 6 0 0 0 5 12M8.5 8.5A6 6 0 0 0 5 12M2 8.8A11 11 0 0 1 6 6M22 8.8a11 11 0 0 0-4.6-3.3M12 20h.01"/></svg>',
+ wifi:'<svg class="svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 12a10 10 0 0 1 14 0M8.5 15.5a5 5 0 0 1 7 0M12 19h.01"/></svg>',
+ sync:'<svg class="svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 12a9 9 0 1 1-3-6.7L21 8M21 3v5h-5"/></svg>',
+ lock:'<svg class="svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="5" y="11" width="14" height="9" rx="1"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>',
+ users:'<svg class="svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8M22 21v-2a4 4 0 0 0-3-3.87M16 3.13A4 4 0 0 1 16 11"/></svg>',
+ doc:'<svg class="svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M9 13h6M9 17h4"/></svg>',
+ clock:'<svg class="svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>',
+ bell:'<svg class="svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 0 1-3.4 0"/></svg>',
+ ticket:'<svg class="svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 8a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v2a2 2 0 0 0 0 4v2a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-2a2 2 0 0 0 0-4z"/><path d="M13 6v12"/></svg>',
+ search:'<svg class="svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>',
+ plus:'<svg class="svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>'};
+
+const initials=n=>n.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
+let cur={screen:'controls',state:'populated',role:'R11',theme:'light',surface:'desktop',lang:'en'};
+const CTRL_VIEW=['R11','R12'], ALERT_VIEW=['R05','R06','R07','R11','R12'];
+const SUPPORT_AGENT=['R12','R07','R11'], POLICY_ADMIN=['R07','R11'];
+
+function app(title,sub,netOff,bodyHTML){
+ const net=netOff?`<span class="net off">${ic.off}${cur.lang==='en'?'Offline':'Nje ya mtandao'}</span>`
+  :`<span class="net">${ic.wifi}${cur.lang==='en'?'Online':'Mtandaoni'}</span>`;
+ return `<div class="app"><div class="topbar">${ic.shield}<div><div class="tt">${title}</div><div class="ts">${sub}</div></div>${net}</div>
+  <div class="body">${bodyHTML}</div></div>`;
+}
+function center(icCls,icon,title,body,extra){return `<div class="center"><span class="ic ${icCls||''}">${icon}</span><h3>${title}</h3><p>${body}</p>${extra||''}</div>`;}
+function skel(n){return '<div class="skelrow" style="width:100%;margin:9px 0"></div>'.repeat(n);}
+function auditRow(txt){return `<div class="audit">${ic.shield}<span>${txt}</span><span class="h">#3f9a…d1</span></div>`;}
+function lifePipe(stage){
+ const labels=[t('lifeRaised'),t('lifeAck'),t('lifeProg'),t('lifeResolved'),t('lifeClosed')];
+ return `<div class="pipe">${labels.map((l,i)=>{const s=i<stage?'done':i===stage?'active':'queued';const node=s==='done'?ic.check:`${i+1}`;
+  return `<div class="pstep ${s}"><span class="pnode">${node}</span><span class="plbl">${l}</span></div>`;}).join('')}</div>`;
+}
+
+// ── Controls & Checker (C20) ──
+const CONTROLS=[
+ {key:'ctrlSod',d:'ctrlSodD',pass:false,checked:'1,204 actions',off:[['SOD-1','Issuer = approver on DISC-REG-0042','R06'],['SOD-2','Issuer = subject on LV-3187','R13']]},
+ {key:'ctrlGps',d:'ctrlGpsD',pass:false,checked:'6,214 punches',off:[['ATT-8841','Clock-in · no GPS fix','Mwadui'],['ATT-8899','Clock-out · location denied','Nyanzaga'],['ATT-9002','No fix · offline unresolved','Dar Yard']]},
+ {key:'ctrlLeaver',d:'ctrlLeaverD',pass:true,checked:'19 leavers',off:[]},
+ {key:'ctrlChain',d:'ctrlChainD',pass:true,checked:'48,120 entries',off:[]}];
+const ALL_CLEAR=CONTROLS.map(c=>({...c,pass:true,off:[]}));
+function controlCard(c){
+ const offHTML=c.off.length
+  ?`<div class="offend">${c.off.map(([id,v,tag])=>`<div class="orow"><span class="oid">${id}</span><span class="ov">${v}</span><span class="otag">${tag}</span></div>`).join('')}</div>`
+  :`<div class="note" style="color:var(--green)">${ic.check}<span>${t('offendNone')}</span></div>`;
+ return `<div class="ctrl ${c.pass?'pass':'fail'}"><div class="ch"><span class="cih">${c.pass?ic.check:ic.warn}</span>
+   <div style="flex:1"><div class="cn">${t(c.key)}</div><div class="cd">${t(c.d)}</div></div>
+   <span class="cb ${c.pass?'pass':'fail'}"><span class="dot"></span>${c.pass?t('pass'):t('fail')}</span></div>
+  <div style="font:600 10.5px var(--mono);color:var(--faint)">${c.checked} ${t('checked')}${c.off.length?` · ${c.off.length} ${t('offenders')}`:''}</div>
+  ${offHTML}</div>`;
+}
+function runhead(){return `<div class="runhead">${ic.shield}<div style="flex:1"><div class="rt">${t('aud03')}</div><div class="rs">${t('runLast')} ${t('runLastVal')}</div></div><button class="btn b">${ic.sync} ${t('runNow')}</button></div>`;}
+function controlsScreen(){
+ if(!CTRL_VIEW.includes(cur.role)||cur.state==='no-permission')
+  return app(t('controls'),t('controlsSub'),false,center('err',ic.lock,t('noPermControlsTitle'),t('noPermControlsBody'),`<div class="why">${t('noPermControlsWhy')} ${cur.role}</div>`));
+ const off=cur.state==='offline', wrap=b=>app(t('controls'),t('controlsSub'),off,b);
+ switch(cur.state){
+  case 'empty': return wrap(center('',ic.shield,t('emptyControlsTitle'),t('emptyControlsBody'),`<button class="btn b">${ic.sync} ${t('runNow')}</button>`));
+  case 'loading': return wrap(`${runhead()}<div class="banner info">${ic.sync}<div>${t('runningBody')}</div></div>${skel(5)}`);
+  case 'error': return wrap(`<div class="banner err">${ic.warn}<div><b>${t('errTitle')}</b><br>${t('errBody')}</div></div><button class="btn p block">${ic.sync} ${t('retry')}</button>`);
+  case 'success': return wrap(`<div class="seal"><span class="disc ok">${ic.check}</span><h3>${t('successControlsTitle')}</h3><p>${t('successControlsSub')}</p></div>${auditRow(t('ctrlNote'))}`);
+  case 'all-clear': return wrap(`${runhead()}
+   <div class="banner ok">${ic.check}<div><b>${t('allClearTitle')}</b> ${t('allClearBody')}</div></div>
+   ${ALL_CLEAR.map(controlCard).join('')}
+   <div class="note">${ic.shield}<span>${t('allClearNote')}</span></div>${auditRow(t('ctrlNote'))}`);
+  case 'large-data': return wrap(`<div class="rmeta"><span class="scope">${ic.shield} ${t('largeControls')}</span><span class="cnt">${t('largeControlsMeta')}</span></div>${runhead()}${CONTROLS.map(controlCard).join('')}<div class="note">${ic.shield}<span>${t('ctrlNote')}</span></div>`);
+  case 'offline': return wrap(`<div class="banner off">${ic.off}<div>${t('offControlsNote')}</div></div>${runhead()}${CONTROLS.map(controlCard).join('')}`);
+  default: return wrap(`${runhead()}${CONTROLS.map(controlCard).join('')}<div class="note">${ic.shield}<span>${t('ctrlNote')}</span></div>`);
+ }
+}
+
+// ── Expiry alerts (DOC-01) ──
+const ALERTS=[
+ {key:'aWorkPermit',who:'12 expatriates',st:'over',d:()=>t('overdue')+' · 3d'},
+ {key:'aContract',who:'Amina Juma · TMC-03341',st:'due',d:()=>t('dueIn')+' 14d'},
+ {key:'aMedical',who:'Mwadui crew · 8',st:'due',d:()=>t('dueIn')+' 28d'},
+ {key:'aCert',who:'Grace Ndaki · TMC-03190',st:'cleared',d:()=>t('clearedLbl')}];
+function alertRow(a){
+ const i=a.st==='over'?ic.warn:a.st==='cleared'?ic.check:ic.bell;
+ return `<div class="alertrow ${a.st}"><span class="ai">${i}</span><div style="flex:1"><div class="at">${t(a.key)}</div><div class="am">${a.who}</div></div><span class="aw">${a.d()}</span></div>`;
+}
+function alertConfig(){
+ return `<div class="shead">${ic.bell} ${t('leadTitle')} <span style="font-weight:500;text-transform:none;letter-spacing:0;color:var(--faint)">· ${t('leadSub')}</span></div>
+  <div class="leadset">${[[90,true],[60,false],[30,true],[7,true]].map(([d,on])=>`<span class="lead ${on?'on':''}">${d}d</span>`).join('')}</div>
+  <div class="receipt"><div class="rr"><span class="k">${t('notifyTitle')} <span style="color:var(--faint)">· ${t('notifySub')}</span></span><span class="v">${t('notifyVal')}</span></div>
+   <div class="rr"><span class="k">${t('repeatTitle')}</span><span class="v">${t('repeatVal')}</span></div></div>`;
+}
+function alertsScreen(){
+ if(!ALERT_VIEW.includes(cur.role)||cur.state==='no-permission')
+  return app(t('alerts'),t('alertsSub'),false,center('err',ic.lock,t('noPermAlertsTitle'),t('noPermAlertsBody'),`<div class="why">${t('noPermAlertsWhy')} ${cur.role}</div>`));
+ const off=cur.state==='offline', wrap=b=>app(t('alerts'),t('alertsSub'),off,b);
+ const list=`<div class="shead">${ic.clock} ${t('alertActive')}</div><div style="display:flex;flex-direction:column;gap:8px">${ALERTS.map(alertRow).join('')}</div>`;
+ switch(cur.state){
+  case 'empty': return wrap(center('',ic.bell,t('emptyAlertsTitle'),t('emptyAlertsBody')));
+  case 'loading': return wrap(skel(6));
+  case 'error': return wrap(`<div class="banner err">${ic.warn}<div><b>${t('errTitle')}</b><br>${t('errBody')}</div></div><button class="btn p block">${ic.sync} ${t('retry')}</button>`);
+  case 'success': return wrap(`<div class="seal"><span class="disc ok">${ic.check}</span><h3>${t('successAlertTitle')}</h3><p>${t('successAlertSub')}</p></div>${alertConfig()}`);
+  case 'large-data': return wrap(`${alertConfig()}${list}${ALERTS.map(alertRow).join('')}<div class="note">${ic.bell}<span>${t('alertNote')}</span></div>`);
+  case 'offline': return wrap(`<div class="banner off">${ic.off}<div>${t('offAlertsNote')}</div></div>${alertConfig()}${list}`);
+  default: return wrap(`${alertConfig()}${list}<div class="note">${ic.bell}<span>${t('alertNote')}</span></div>
+   <div style="display:flex;gap:9px"><button class="btn g" style="flex:1">${t('clearBtn')}</button><button class="btn p" style="flex:2">${ic.check} ${t('setBtn')}</button></div>`);
+ }
+}
+
+// ── Support tickets (E12) ──
+function ticketCard(stage){
+ const upd=[['Logged · IT support notified','22 Jun 09:10'],['Investigating payroll sync — ETA today','22 Jun 11:30']];
+ return `<div class="reqcard"><div class="rq-h"><span class="av" style="background:var(--blue);width:34px;height:34px;border-radius:9px">${ic.ticket}</span>
+   <div style="flex:1"><div class="nm">${t('tkSample')}</div><div class="mt">TK-1042 · Joseph Mlimani · TMC-04821</div></div>
+   <span class="flag" style="background:rgba(0,148,212,.12);color:var(--blue);border-color:rgba(0,148,212,.3)">${t('tkChannel')}: ESS</span></div>
+  <div class="rq-b" style="padding:12px 14px"><div style="font-size:12px;color:var(--muted);margin-bottom:12px">${t('tkDetail')}</div>
+   ${lifePipe(stage)}
+   <div class="shead" style="margin-top:14px">${ic.clock} ${t('tkNotify')}</div>
+   <div class="custody">${upd.map(([e,m])=>`<div class="cevent"><div class="ce">${e}</div><div class="cm">${m}</div></div>`).join('')}</div></div></div>`;
+}
+function supportScreen(){
+ const off=cur.state==='offline', wrap=b=>app(t('support'),t('supportSub'),off,b);
+ switch(cur.state){
+  case 'empty': return wrap(center('',ic.ticket,t('emptySupportTitle'),t('emptySupportBody'),`<button class="btn b">${ic.plus} ${t('raiseCta')}</button>`));
+  case 'loading': return wrap(skel(6));
+  case 'error': return wrap(`<div class="banner err">${ic.warn}<div><b>${t('errTitle')}</b><br>${t('errBody')}</div></div><button class="btn p block">${ic.sync} ${t('retry')}</button>`);
+  case 'success': return wrap(`<div class="seal"><span class="disc ok">${ic.check}</span><h3>${t('successSupportTitle')}</h3><p>${t('successSupportSub')}</p></div>${ticketCard(0)}`);
+  case 'large-data':{
+   const agent=SUPPORT_AGENT.includes(cur.role);
+   const all=[['TK-1042',t('tkSample'),'prog',true],['TK-1041','ID card reprint request','resolved',false],['TK-1039','Leave balance query','closed',true],['TK-1044','Cannot log in on new phone','open',false],['TK-1045','Payslip PDF blank','prog',false]];
+   const rows=agent?all:all.filter(r=>r[3]);
+   const badge=s=>s==='closed'?`<span class="astat returned"><span class="dot"></span>${t('tkClosed')}</span>`:s==='resolved'?`<span class="astat available"><span class="dot"></span>${t('tkResolved')}</span>`:`<span class="astat assigned"><span class="dot"></span>${t('tkOpen')}</span>`;
+   const scope=agent?t('largeSupport'):t('ownSupportScope'), meta=agent?t('largeSupportMeta'):t('ownSupportMeta');
+   const hint=agent?`<div class="vhint">${t('supportShown')}</div>`:'';
+   const note=agent?'':`<div class="note">${ic.ticket}<span>${t('supportOwnNote')}</span></div>`;
+   return wrap(`<div class="rmeta"><span class="scope">${ic.ticket} ${scope}</span><span class="cnt">${meta}</span></div>
+    <div class="roster">${rows.map(([id,s,st])=>`<div class="rrow"><span class="av">${ic.ticket}</span><div style="flex:1"><div class="rn">${s}</div><div class="rs">${id}</div></div>${badge(st)}</div>`).join('')}${hint}</div>${note}`);
+  }
+  case 'offline': return wrap(`<div class="banner off">${ic.off}<div>${t('offSupportNote')}</div></div>${ticketCard(2)}`);
+  default:{
+   const agent=SUPPORT_AGENT.includes(cur.role);
+   const actions=agent
+    ?`<div style="display:flex;gap:9px"><button class="btn g" style="flex:1">${t('tkResolved')}</button><button class="btn p" style="flex:1">${ic.check} ${t('tkAdvance')}</button></div>`
+    :`<button class="btn p block">${ic.plus} ${t('raiseCta')}</button>`;
+   const note=agent?t('supportNote'):t('supportOwnTicketNote');
+   return wrap(`${ticketCard(2)}<div class="note">${ic.bell}<span>${note}</span></div>${actions}`);
+  }
+ }
+}
+
+// ── Policy acknowledgement (E7) ──
+function polCard(acked){
+ return `<div class="polcard"><div class="plh"><div class="pltitle">${t('polTitle')}</div><div class="plver">${ic.doc} ${t('polVersion')}</div></div>
+   <div class="polbody">${t('polRead')}<div class="pl m"></div><div class="pl"></div><div class="pl s"></div><div class="pl m"></div></div>
+   <div class="ackbig"><span class="box ${acked?'on':''}">${acked?ic.check:''}</span>${acked?`${t('ackedLbl')} · ${t('ackedOn')}`:t('ackChk')}</div></div>`;
+}
+function policyScreen(){
+ const off=cur.state==='offline', wrap=b=>app(t('policy'),t('policySub'),off,b);
+ switch(cur.state){
+  case 'empty': return wrap(center('',ic.doc,t('emptyPolicyTitle'),t('emptyPolicyBody')));
+  case 'loading': return wrap(skel(6));
+  case 'error': return wrap(`<div class="banner err">${ic.warn}<div><b>${t('errTitle')}</b><br>${t('errBody')}</div></div><button class="btn p block">${ic.sync} ${t('retry')}</button>`);
+  case 'success': return wrap(`<div class="seal"><span class="disc ok">${ic.check}</span><h3>${t('successPolicyTitle')}</h3><p>${t('successPolicySub')}</p></div>${polCard(true)}${auditRow(t('trackedNote'))}`);
+  case 'large-data':{
+   if(!POLICY_ADMIN.includes(cur.role))
+    return wrap(center('err',ic.lock,t('noPermPublishTitle'),t('noPermPublishBody'),`<div class="why">${t('noPermPublishWhy')} ${cur.role}</div>`));
+   const staff=[['Joseph Mlimani','TMC-04821',true],['Grace Ndaki','TMC-03190',true],['Amina Juma','TMC-03341',false],['Peter Komba','TMC-02210',false],['Daniel Mwaky','TMC-01188',true]];
+   const badge=a=>a?`<span class="astat available"><span class="dot"></span>${t('ackedLbl')}</span>`:`<span class="astat clearance"><span class="dot"></span>${t('ackPending')}</span>`;
+   return wrap(`<div class="rmeta"><span class="scope">${ic.doc} ${t('outstanding')}</span><span class="cnt">${t('largePolicyMeta')}</span></div>
+    <div class="trackbar"><div class="tp"><i style="width:81%"></i></div><span class="tv">1,014 / 1,246</span></div>
+    <div class="roster">${staff.map(([n,no,a])=>`<div class="rrow"><span class="av">${initials(n)}</span><div style="flex:1"><div class="rn">${n}</div><div class="rs">${no}</div></div>${badge(a)}</div>`).join('')}</div>
+    <div class="note">${ic.doc}<span>${t('trackedNote')}</span></div>
+    <div style="display:flex;gap:9px"><button class="btn g" style="flex:1">${t('close')}</button><button class="btn p" style="flex:2">${ic.doc} ${t('publishBtn')}</button></div>`);
+  }
+  case 'offline': return wrap(`<div class="banner off">${ic.off}<div>${t('offPolicyNote')}</div></div>${polCard(false)}`);
+  default: return wrap(`<div class="banner off">${ic.warn}<div>${t('reackBanner')}</div></div>${polCard(false)}
+   <button class="btn p block">${ic.check} ${t('reackBtn')}</button>`);
+ }
+}
+
+// ── render ──
+function render(){
+ const s=cur.screen;
+ const html=s==='alerts'?alertsScreen():s==='support'?supportScreen():s==='policy'?policyScreen():controlsScreen();
+ document.querySelector('.stage').innerHTML=`<div class="frame">${html}</div>`;
+}
+function seg(id,items,key){const el=document.getElementById(id);el.innerHTML=items.map(it=>{const v=Array.isArray(it)?it[0]:it,l=Array.isArray(it)?it[1]:it;return `<button data-v="${v}">${l}</button>`;}).join('');el.querySelectorAll('button').forEach(b=>b.onclick=()=>{cur[key]=b.getAttribute('data-v');sync();});}
+const AC={controls:'AC-AUD-03 · controls & checker · UNI-06',alerts:'AC-DOC-01 · DA-1 lead times · DA-2 notified role',support:'AC-SUP-01..04 · lifecycle to closure',policy:'AC-POL-01..04 · read · acknowledge · re-acknowledge'};
+function sync(){
+ document.documentElement.setAttribute('data-theme',cur.theme);
+ document.documentElement.setAttribute('data-surface',cur.surface);
+ [['screens','screen'],['states','state'],['roles','role'],['themes','theme'],['surfaces','surface'],['langs','lang']].forEach(([id,k])=>document.querySelectorAll('#'+id+' button').forEach(b=>b.classList.toggle('on',b.getAttribute('data-v')===cur[k])));
+ document.getElementById('acline').innerHTML=`Covers <b>${AC[cur.screen]}</b> · ${cur.theme}/${cur.surface} · viewer ${cur.role} · ${t('reg')}`;
+ render();
+}
+seg('screens',[['controls','Controls · C20'],['alerts','Expiry alerts'],['support','Support · E12'],['policy','Policy · E7']],'screen');
+seg('states',[['empty','empty'],['loading','loading'],['populated','populated'],['all-clear','all-clear'],['large-data','large-data'],['error','error'],['no-permission','no-perm'],['offline','offline'],['success','success']],'state');
+seg('roles',['R01','R02','R03','R04','R05','R06','R07','R08','R09','R10','R11','R12','R13'].map(r=>[r,r]),'role');
+seg('themes',[['light','Light'],['dark','Dark'],['glass','Glass'],['reduced','Reduced']],'theme');
+seg('surfaces',[['desktop','Desk'],['tablet','Tablet'],['mobile','Mobile'],['kiosk','Kiosk']],'surface');
+seg('langs',[['en','EN'],['sw','SW']],'lang');
+sync();
+
+</script>
+</body>
+</html>

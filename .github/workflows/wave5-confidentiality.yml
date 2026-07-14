@@ -1,0 +1,153 @@
+name: Wave5 Confidentiality + CEO read-only Probe
+
+# Wave 5 (2026-07-14): LIVE over HTTPS. Mints short-lived sessions by ROLE on
+# the box (no passwords needed — token_hash is sha256), then proves: R14 (CEO)
+# reads but cannot write (structural read-only guard); a pay-visible read writes
+# a profile.read audit row + blocks, a base-only read writes none; the hash
+# chain still extends. Sentinel: .github/RUN-WAVE5.
+on:
+  workflow_dispatch:
+  push:
+    branches: [claude/nifty-goodall-poihi4]
+    paths: ['.github/RUN-WAVE5']
+
+concurrency: { group: wave5, cancel-in-progress: false }
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      UAT_IP: 152.239.121.249
+      UAT_CO: 11111111-1111-1111-1111-111111111111
+      BASE: https://uat.taifamining.tz
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - name: SSH path — tunnel first, direct fallback
+        env:
+          CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+          CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
+        run: |
+          mkdir -p ~/.ssh && printf '%s\n' "${{ secrets.UAT_SSH_PRIVATE_KEY }}" > ~/.ssh/uat && chmod 600 ~/.ssh/uat
+          sudo curl -sSL -o /usr/local/bin/cloudflared \
+            https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 \
+            && sudo chmod +x /usr/local/bin/cloudflared || true
+          cat > ~/.ssh/config <<EOF
+          Host uat-tunnel
+            HostName ssh.uat.taifamining.tz
+            User root
+            IdentityFile ~/.ssh/uat
+            StrictHostKeyChecking accept-new
+            ProxyCommand /usr/local/bin/cloudflared access ssh --hostname %h --service-token-id $CF_ACCESS_CLIENT_ID --service-token-secret $CF_ACCESS_CLIENT_SECRET
+          Host uat-direct
+            HostName $UAT_IP
+            User root
+            IdentityFile ~/.ssh/uat
+            StrictHostKeyChecking accept-new
+            ConnectTimeout 10
+          EOF
+          chmod 600 ~/.ssh/config
+          if timeout 30 ssh uat-tunnel true 2>/dev/null; then echo uat-tunnel > /tmp/ssh_host; echo tunnel; exit 0; fi
+          for i in $(seq 1 100); do
+            ssh uat-direct true 2>/dev/null && { echo uat-direct > /tmp/ssh_host; echo direct; exit 0; }
+            echo "waiting ($i/100)"; sleep 15
+          done
+          echo FATAL; exit 1
+
+      - name: BUILD_SHA at START + mint R14/R07 sessions by role + registry key
+        run: |
+          SSH="ssh $(cat /tmp/ssh_host)"
+          echo "── BUILD_SHA (running process) at START of Wave 5 ──"
+          $SSH "curl -fsS http://127.0.0.1:3000/health 2>/dev/null; echo; cat /opt/hcmos/BUILD_SHA 2>/dev/null | head -c 40; echo"
+          echo "── registry: is auth.readonly.roles seeded (migration 035)? ──"
+          $SSH "sudo -u postgres psql -d hcmos -c \"SELECT key, value FROM config WHERE company_id='$UAT_CO' AND key='auth.readonly.roles'\""
+          $SSH "cd /opt/hcmos && set -a && . /etc/hcmos/hcmos.env && set +a && node -e '
+            const db=require(\"./src/db\"), C=require(\"./src/crypto\");
+            const CO=\"$UAT_CO\";
+            (async()=>{ await db.withOwner(async c=>{
+              const pick=async(role)=>(await c.query(\"SELECT id FROM app_user WHERE company_id=\$1 AND role_code=\$2 AND status=\x27active\x27 ORDER BY email LIMIT 1\",[CO,role])).rows[0];
+              const emp=(await c.query(\"SELECT id FROM employee WHERE company_id=\$1 AND coalesce(is_expat,false)=false AND status=\x27active\x27 ORDER BY id LIMIT 1\",[CO])).rows[0];
+              const out={emp:emp.id, tok:{}, sid:[]};
+              for(const role of [\"R14\",\"R07\"]){
+                const u=await pick(role); if(!u){out.tok[role]=null;continue;}
+                const t=C.newToken();
+                const r=await c.query(\"INSERT INTO session(company_id,user_id,role_code,token_hash,expires_at) VALUES(\$1,\$2,\$3,\$4,now()+interval \x271 hour\x27) RETURNING id\",[CO,u.id,role,C.tokenHash(t)]);
+                out.tok[role]=t; out.sid.push(r.rows[0].id);
+              }
+              require(\"fs\").writeFileSync(\"/root/wave5.json\",JSON.stringify(out));
+              console.log(\"minted roles:\", Object.keys(out.tok).filter(k=>out.tok[k]).join(\",\"), \"| target emp:\", out.emp);
+            }); await db.close(); })().catch(e=>{console.error(e.message);process.exit(1);});
+          '"
+          $SSH 'cat /root/wave5.json' > /tmp/w5.json
+          # strip tokens from the runner log — only role/emp are printed above.
+
+      - name: 5.x — CEO reads, cannot write; pay-visible read is audited (raw bodies)
+        env:
+          CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+          CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
+        run: |
+          node - <<'EOF'
+          const Z = require('/tmp/w5.json');
+          const CF = { 'CF-Access-Client-Id': process.env.CF_ACCESS_CLIENT_ID, 'CF-Access-Client-Secret': process.env.CF_ACCESS_CLIENT_SECRET };
+          const BASE = process.env.BASE;
+          const api = async (method, path, { token, body } = {}) => {
+            const headers = { ...CF }; if (token) headers.authorization = `Bearer ${token}`; if (body) headers['content-type']='application/json';
+            const r = await fetch(BASE+path,{method,headers,body:body&&JSON.stringify(body),signal:AbortSignal.timeout(20000)});
+            let d=null; try{d=await r.json();}catch{} return {status:r.status, body:d||{}};
+          };
+          let fail=false; const say=(ok,n,det)=>{ if(!ok)fail=true; console.log(`${ok?'PASS':'FAIL'}  ${n} — ${det}`); };
+          (async () => {
+            const r14 = Z.tok.R14, r07 = Z.tok.R07, emp = Z.emp;
+            if (!r14 || !r07) { console.error('missing a minted role token', Object.keys(Z.tok)); process.exit(1); }
+            // R14 session is live and reads the directory.
+            const land = await api('GET','/me/landing',{token:r14});
+            say(land.status===200, 'R14 session valid (GET /me/landing)', `${land.status} raw=${JSON.stringify(land.body).slice(0,120)}`);
+            const dir = await api('GET','/employees',{token:r14});
+            say(dir.status===200, 'R14 READS the directory (oversight)', `${dir.status}`);
+            // R14 cannot write: a mutating route is barred by the structural guard.
+            const w = await api('POST',`/employees/${emp}/change`,{token:r14, body:{field:'phone', value:'0700000000'}});
+            say(w.status===403, 'R14 CANNOT write (POST /change -> 403, read-only guard)', `${w.status} raw=${JSON.stringify(w.body).slice(0,120)}`);
+            // R07 (pay-visible) reads the target — a confidential disclosure.
+            const paid = await api('GET',`/me/profile/${emp}`,{token:r07});
+            say(paid.status===200 && ('basic_pay' in paid.body), 'R07 read includes the pay block', `${paid.status} keys=${Object.keys(paid.body).filter(k=>['basic_pay','national_id','bank_account'].includes(k)).join(',')}`);
+            // R14 reads the SAME record — base directory only, no confidential block.
+            const oversight = await api('GET',`/me/profile/${emp}`,{token:r14});
+            say(oversight.status===200 && !('basic_pay' in oversight.body), 'R14 read is BASE-ONLY (no pay block)', `${oversight.status} has_basic_pay=${'basic_pay' in oversight.body}`);
+            process.exit(fail?1:0);
+          })().catch(e=>{console.error('PROBE ERROR:',e.message);process.exit(1);});
+          EOF
+
+      - name: 5.x — read-audit populated + chain extension; BUILD_SHA END; cleanup
+        if: always()
+        run: |
+          SSH="ssh $(cat /tmp/ssh_host)"
+          EMP=$(node -e 'console.log(require("/tmp/w5.json").emp)')
+          echo "── profile.read audit for the target: R07 confidential read logged, R14 base read NOT ──"
+          $SSH "sudo -u postgres psql -d hcmos -c \"
+            SELECT role, after->'blocks' AS blocks, ts
+              FROM audit WHERE company_id='$UAT_CO' AND action='profile.read' AND entity_id='$EMP'
+             ORDER BY seq DESC LIMIT 5\""
+          echo "── audit chain: head must still EXTEND from seq 638 / d492031865, never break ──"
+          $SSH "sudo -u postgres psql -d hcmos -c \"
+            SELECT (SELECT max(seq) FROM audit WHERE company_id='$UAT_CO') AS head_seq,
+                   bool_and(hash = encode(sha256(convert_to(prev_hash || concat_ws('|',
+                     company_id::text, coalesce(actor,''), coalesce(role,''), action,
+                     coalesce(entity,''), coalesce(entity_id,''), ts::text,
+                     coalesce(before::text,''), coalesce(after::text,'')), 'UTF8')),'hex')) AS recompute_ok
+              FROM audit WHERE company_id='$UAT_CO';
+            SELECT count(*) AS linkage_breaks FROM (
+              SELECT prev_hash, lag(hash) OVER (PARTITION BY company_id ORDER BY seq) AS expect FROM audit) x
+             WHERE (expect IS NULL AND prev_hash <> repeat('0',64)) OR (expect IS NOT NULL AND prev_hash <> expect)\""
+          echo "── BUILD_SHA (running process) at END of Wave 5 — must equal START ──"
+          $SSH "curl -fsS http://127.0.0.1:3000/health 2>/dev/null; echo; cat /opt/hcmos/BUILD_SHA 2>/dev/null | head -c 40; echo"
+          echo "── cleanup: delete the minted probe sessions + wave5.json (leave no live token) ──"
+          $SSH "cd /opt/hcmos && set -a && . /etc/hcmos/hcmos.env && set +a && node -e '
+            const db=require(\"./src/db\");
+            (async()=>{ const Z=require(\"/root/wave5.json\");
+              await db.withOwner(async c=>{ for(const id of Z.sid||[]) await c.query(\"DELETE FROM session WHERE id=\$1\",[id]); });
+              await db.close(); console.log(\"deleted sessions:\", (Z.sid||[]).length);
+            })().catch(e=>{console.error(e.message);});
+          '"
+          $SSH "rm -f /root/wave5.json"

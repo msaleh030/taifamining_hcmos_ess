@@ -1,0 +1,778 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light" data-surface="desktop">
+<head>
+<meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>HCMOS · Slice 7 KPI scorecard (C3 · E8)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
+<style>
+:root{--green:#1FA24A;--blue:#0094D4;--yellow:#FBC02D;--red:#E5484D;--font:'IBM Plex Sans',system-ui,sans-serif;--mono:'IBM Plex Mono',monospace;--r:12px;}
+*{box-sizing:border-box;}html,body{margin:0;height:100%;}body{font-family:var(--font);background:#0b0f13;-webkit-font-smoothing:antialiased;display:flex;flex-direction:column;}
+.num{font-family:var(--mono);font-variant-numeric:tabular-nums;}
+[data-theme="light"]{--bg:#EEF1F3;--surface:#fff;--surface2:#F6F8F9;--text:#15191D;--muted:#5C6770;--faint:#8A949C;--border:#E2E7EA;--field:#F6F8F9;--card-bd:#E2E7EA;--blur:0px;--card-bg:#fff;--shadow:0 8px 30px rgba(16,24,32,.08);}
+[data-theme="dark"]{--bg:#0C1115;--surface:#141B20;--surface2:#1A2228;--text:#E7EDF1;--muted:#94A2AC;--faint:#697680;--border:#26313A;--field:#1A2228;--card-bd:#26313A;--blur:0px;--card-bg:#141B20;--shadow:0 12px 40px rgba(0,0,0,.5);}
+[data-theme="glass"]{--bg:linear-gradient(135deg,#0E4D34,#08311E 60%,#0a2a4a);--surface:rgba(255,255,255,.14);--surface2:rgba(255,255,255,.10);--text:#F2F6F4;--muted:rgba(242,246,244,.8);--faint:rgba(242,246,244,.55);--border:rgba(255,255,255,.22);--field:rgba(255,255,255,.12);--card-bd:rgba(255,255,255,.28);--blur:16px;--card-bg:rgba(255,255,255,.12);--shadow:0 18px 60px rgba(0,0,0,.35);}
+[data-theme="reduced"]{--bg:#06271A;--surface:#0C3B27;--surface2:#0A3220;--text:#fff;--muted:#CFE6DA;--faint:#9FC3B0;--border:#1C6A47;--field:#0A3220;--card-bd:#2C8A5E;--blur:0px;--card-bg:#0C3B27;--shadow:none;}
+.stage{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;padding:22px;overflow:auto;background:var(--bg);}
+.frame{position:relative;background:var(--bg);border-radius:18px;overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.45);display:flex;flex-direction:column;color:var(--text);}
+[data-surface="desktop"] .frame{width:1120px;height:660px;}
+[data-surface="tablet"] .frame{width:760px;height:600px;}
+[data-surface="mobile"] .frame{width:390px;height:760px;border-radius:30px;font-size:14px;}
+[data-surface="kiosk"] .frame{width:720px;height:840px;font-size:17px;}
+.svg{width:16px;height:16px;}
+
+/* app chrome */
+.app{flex:1;display:flex;flex-direction:column;min-height:0;background:var(--surface);}
+.topbar{display:flex;align-items:center;gap:10px;padding:14px 16px;border-bottom:1px solid var(--border);background:var(--surface);}
+[data-surface="mobile"] .topbar{padding-top:26px;}
+.topbar .tt{font-size:15px;font-weight:700;}
+.topbar .ts{font-size:10.5px;color:var(--faint);margin-top:1px;}
+.topbar .net{margin-left:auto;display:inline-flex;align-items:center;gap:5px;font:600 10px var(--mono);padding:3px 8px;border-radius:20px;background:var(--surface2);color:var(--muted);border:1px solid var(--border);}
+.topbar .net.off{background:rgba(251,192,45,.16);color:#9A6B00;border-color:rgba(251,192,45,.5);}
+[data-theme="dark"] .topbar .net.off,[data-theme="glass"] .topbar .net.off,[data-theme="reduced"] .topbar .net.off{color:var(--yellow);}
+.body{flex:1;overflow:auto;padding:16px;display:flex;flex-direction:column;gap:13px;}
+[data-surface="kiosk"] .body{padding:22px;gap:16px;}
+
+/* shift context strip */
+.shiftbar{display:flex;align-items:center;gap:12px;padding:13px 14px;border-radius:13px;background:var(--surface2);border:1px solid var(--card-bd);}
+.shiftbar .av{width:40px;height:40px;border-radius:50%;background:var(--green);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;flex-shrink:0;}
+.shiftbar .nm{font-weight:700;font-size:14px;}
+.shiftbar .mt{font:600 11px var(--mono);color:var(--muted);margin-top:1px;}
+.shiftbar .st{margin-left:auto;text-align:right;}
+.shiftbar .st .lbl{font-size:9.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--faint);font-weight:700;}
+.shiftbar .st .val{font-weight:700;font-size:13px;}
+.stat3{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--border);border:1px solid var(--card-bd);border-radius:12px;overflow:hidden;}
+.stat3 .c{background:var(--surface);padding:11px 13px;}
+.stat3 .c .lbl{font-size:9.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--faint);font-weight:700;}
+.stat3 .c .val{font:700 16px var(--mono);margin-top:3px;}
+.stat3 .c .val.g{color:var(--green);}
+
+/* geofence radar */
+.geo{position:relative;height:186px;border-radius:14px;overflow:hidden;border:1px solid var(--card-bd);background:
+ repeating-linear-gradient(0deg,transparent,transparent 21px,color-mix(in srgb,var(--border) 55%,transparent) 21px,color-mix(in srgb,var(--border) 55%,transparent) 22px),
+ repeating-linear-gradient(90deg,transparent,transparent 21px,color-mix(in srgb,var(--border) 55%,transparent) 21px,color-mix(in srgb,var(--border) 55%,transparent) 22px),
+ radial-gradient(circle at 50% 52%,var(--surface2),var(--field));display:flex;align-items:center;justify-content:center;}
+[data-surface="kiosk"] .geo{height:220px;}
+.geo .bound{position:absolute;left:50%;top:52%;transform:translate(-50%,-50%);width:150px;height:150px;border-radius:50%;border:2.5px dashed var(--green);background:rgba(31,162,74,.08);}
+.geo .bound.bad{border-color:var(--red);background:rgba(229,72,77,.07);}
+.geo .you{position:absolute;left:50%;top:52%;transform:translate(-50%,-50%);width:16px;height:16px;border-radius:50%;background:var(--blue);border:2px solid #fff;box-shadow:0 0 0 6px rgba(0,148,212,.22);z-index:2;}
+.geo .you.out{left:82%;top:26%;background:var(--red);box-shadow:0 0 0 6px rgba(229,72,77,.22);}
+@media (prefers-reduced-motion:no-preference){[data-deck] .geo .you{}.geo .pulse{position:absolute;left:50%;top:52%;transform:translate(-50%,-50%);width:16px;height:16px;border-radius:50%;background:rgba(0,148,212,.4);animation:ping 2.4s ease-out infinite;}.geo .pulse.out{left:82%;top:26%;background:rgba(229,72,77,.4);}}
+@keyframes ping{0%{width:16px;height:16px;opacity:.6;}100%{width:150px;height:150px;opacity:0;}}
+.geo .gtag{position:absolute;left:12px;bottom:11px;display:inline-flex;align-items:center;gap:6px;font-weight:700;font-size:12px;padding:6px 11px;border-radius:20px;background:var(--card-bg);border:1px solid var(--card-bd);}
+.geo .gtag.ok{color:var(--green);}.geo .gtag.bad{color:var(--red);}
+.geo .gtag .dot{width:7px;height:7px;border-radius:50%;background:currentColor;}
+.geo .locbadge{position:absolute;right:12px;top:11px;font:600 9.5px var(--mono);color:var(--muted);background:var(--card-bg);border:1px solid var(--card-bd);border-radius:6px;padding:3px 7px;}
+
+/* capture receipt */
+.receipt{border:1px solid var(--card-bd);border-radius:13px;background:var(--surface2);overflow:hidden;}
+.receipt .rh{display:flex;align-items:center;gap:8px;padding:10px 13px;border-bottom:1px solid var(--card-bd);font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:700;}
+.receipt .rr{display:flex;align-items:center;gap:10px;padding:9px 13px;font-size:12.5px;border-bottom:1px solid color-mix(in srgb,var(--border) 60%,transparent);}
+.receipt .rr:last-child{border-bottom:none;}
+.receipt .rr .k{color:var(--muted);}
+.receipt .rr .v{margin-left:auto;font:600 12px var(--mono);text-align:right;}
+.receipt .rr .v.d{color:var(--faint);font-weight:500;}
+
+/* flag pill for [SS-3 Open] */
+.flag{display:inline-flex;align-items:center;gap:5px;font:700 10px var(--mono);letter-spacing:.03em;padding:3px 8px;border-radius:6px;background:rgba(251,192,45,.18);color:#9A6B00;border:1px solid rgba(251,192,45,.5);}
+[data-theme="dark"] .flag,[data-theme="glass"] .flag,[data-theme="reduced"] .flag{color:var(--yellow);}
+.flag .dot{width:6px;height:6px;border-radius:50%;background:currentColor;}
+
+/* big punch button */
+.punch{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;border:none;border-radius:15px;padding:17px;font-weight:700;font-size:16px;cursor:pointer;color:#fff;}
+[data-surface="kiosk"] .punch{padding:22px;font-size:20px;}
+.punch.in{background:var(--green);}
+.punch.out{background:var(--surface);color:var(--red);border:1.5px solid var(--red);}
+.punch:disabled{opacity:.5;cursor:default;}
+.punch.wait{background:var(--surface2);color:var(--muted);border:1px solid var(--card-bd);}
+
+/* result seal (success/error/offline hero) */
+.seal{display:flex;flex-direction:column;align-items:center;text-align:center;gap:6px;padding:6px 6px 2px;}
+.seal .disc{width:66px;height:66px;border-radius:50%;display:flex;align-items:center;justify-content:center;}
+.seal .disc.ok{background:rgba(31,162,74,.15);color:var(--green);}
+.seal .disc.err{background:rgba(229,72,77,.14);color:var(--red);}
+.seal .disc.off{background:rgba(251,192,45,.18);color:#9A6B00;}
+[data-theme="dark"] .seal .disc.off,[data-theme="glass"] .seal .disc.off,[data-theme="reduced"] .seal .disc.off{color:var(--yellow);}
+.seal .disc .svg{width:32px;height:32px;}
+.seal h3{margin:2px 0 0;font-size:19px;}
+.seal .big{font:700 30px var(--mono);letter-spacing:-.01em;}
+.seal p{margin:0;font-size:12.5px;color:var(--muted);max-width:300px;line-height:1.45;}
+
+/* banners + notes (kit) */
+.banner{padding:11px 13px;border-radius:11px;font-size:12px;display:flex;gap:9px;align-items:flex-start;line-height:1.45;}
+.banner.off{background:rgba(251,192,45,.16);color:#9A6B00;border:1px solid rgba(251,192,45,.5);}
+.banner.err{background:rgba(229,72,77,.14);color:var(--red);border:1px solid rgba(229,72,77,.4);}
+.banner.ok{background:rgba(31,162,74,.15);color:var(--green);border:1px solid rgba(31,162,74,.4);}
+.banner.info{background:rgba(0,148,212,.1);color:var(--blue);border:1px solid rgba(0,148,212,.3);}
+[data-theme="dark"] .banner.off,[data-theme="glass"] .banner.off,[data-theme="reduced"] .banner.off{color:var(--yellow);}
+.banner .svg{flex-shrink:0;margin-top:1px;}
+.note{display:flex;gap:8px;align-items:flex-start;font-size:11px;color:var(--muted);line-height:1.5;padding:2px 2px;}
+.note .svg{flex-shrink:0;margin-top:1px;color:var(--faint);}
+.shead{font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:700;display:flex;align-items:center;gap:7px;margin:2px 0;}
+
+/* audit chip */
+.audit{display:flex;align-items:center;gap:8px;padding:9px 12px;border-radius:10px;background:rgba(0,148,212,.08);border:1px solid rgba(0,148,212,.26);font-size:11px;color:var(--muted);line-height:1.4;}
+.audit .svg{color:var(--blue);flex-shrink:0;}
+.audit .h{font:600 10px var(--mono);color:var(--blue);margin-left:auto;flex-shrink:0;}
+
+/* recent punches list */
+.plist{display:flex;flex-direction:column;gap:7px;}
+.pitem{display:flex;align-items:center;gap:11px;padding:10px 12px;border-radius:11px;background:var(--surface2);border:1px solid var(--card-bd);}
+.pitem .pi{width:30px;height:30px;border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.pitem .pi.in{background:rgba(31,162,74,.14);color:var(--green);}
+.pitem .pi.out{background:rgba(0,148,212,.12);color:var(--blue);}
+.pitem .pt{font-size:12.5px;font-weight:600;}
+.pitem .pd{font-size:10.5px;color:var(--muted);margin-top:1px;}
+.pitem .ptime{margin-left:auto;font:700 13px var(--mono);}
+
+/* lock / empty states (kit) */
+.center{display:flex;flex-direction:column;align-items:center;justify-content:center;flex:1;text-align:center;padding:30px;gap:12px;color:var(--muted);}
+.center .ic{width:56px;height:56px;border-radius:16px;display:flex;align-items:center;justify-content:center;background:var(--surface2);color:var(--faint);}
+.center .ic.warn{background:rgba(251,192,45,.16);color:#9A6B00;}
+.center .ic.err{background:rgba(229,72,77,.13);color:var(--red);}
+[data-theme="dark"] .center .ic.warn,[data-theme="glass"] .center .ic.warn,[data-theme="reduced"] .center .ic.warn{color:var(--yellow);}
+.center .ic .svg{width:26px;height:26px;}
+.center h3{margin:0;color:var(--text);font-size:17px;}
+.center p{margin:0;font-size:12.5px;max-width:320px;line-height:1.5;}
+.center .why{font:600 11px var(--mono);background:var(--surface2);border:1px solid var(--border);border-radius:7px;padding:6px 10px;color:var(--muted);}
+.center .btn{margin-top:4px;}
+/* feature-flag-off (whole module disabled) — distinct from empty & no-permission */
+.center .ic.moff{background:rgba(0,148,212,.12);color:var(--blue);}
+[data-theme="reduced"] .center .ic.moff{background:rgba(255,255,255,.12);color:var(--text);}
+.center .modtag{font:700 9.5px var(--mono);letter-spacing:.09em;text-transform:uppercase;color:var(--muted);background:var(--surface2);border:1px solid var(--border);border-radius:20px;padding:4px 12px;}
+.center .prov{display:inline-flex;align-items:center;gap:9px;font:600 12px var(--font);background:var(--field);border:1px dashed var(--card-bd);border-radius:10px;padding:10px 14px;color:var(--text);}
+.center .prov .svg{width:15px;height:15px;color:var(--blue);flex-shrink:0;}
+.center .prov b{font-family:var(--mono);font-size:11.5px;color:var(--muted);}
+
+/* skeleton */
+.skelrow{height:16px;border-radius:6px;background:linear-gradient(90deg,var(--surface2),var(--field),var(--surface2));background-size:200% 100%;animation:sh 1.2s linear infinite;}
+@keyframes sh{to{background-position:-200% 0;}}
+
+/* buttons */
+.btn{border:none;border-radius:10px;padding:11px 16px;font-weight:600;font-size:13px;cursor:pointer;display:inline-flex;align-items:center;gap:7px;justify-content:center;}
+.btn.p{background:var(--green);color:#fff;}.btn.g{background:transparent;border:1px solid var(--border);color:var(--text);}
+.btn.b{background:var(--blue);color:#fff;}.btn.w{background:var(--yellow);color:#5a3d00;}
+.btn.block{width:100%;}
+.btn:disabled{opacity:.5;}
+
+/* roster (large-data / kiosk assisted) */
+.rsearch{display:flex;align-items:center;gap:9px;padding:11px 13px;border-radius:12px;background:var(--field);border:1px solid var(--border);color:var(--faint);font-size:13px;}
+.rmeta{display:flex;align-items:center;justify-content:space-between;font-size:11px;color:var(--muted);}
+.rmeta .cnt{font:600 11px var(--mono);}
+.roster{border:1px solid var(--card-bd);border-radius:13px;overflow:hidden;background:var(--surface);}
+.rrow{display:flex;align-items:center;gap:11px;padding:11px 13px;border-bottom:1px solid var(--border);}
+.rrow:last-child{border-bottom:none;}
+.rrow .av{width:34px;height:34px;border-radius:50%;background:var(--surface2);color:var(--muted);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px;flex-shrink:0;border:1px solid var(--card-bd);}
+.rrow .rn{font-size:13px;font-weight:600;}
+.rrow .rs{font:600 10.5px var(--mono);color:var(--faint);margin-top:1px;}
+.rrow .rb{margin-left:auto;font-size:11.5px;font-weight:600;color:var(--green);border:1px solid var(--card-bd);border-radius:8px;padding:6px 12px;background:var(--surface2);flex-shrink:0;}
+.vhint{text-align:center;font:600 10px var(--mono);color:var(--faint);padding:9px;background:var(--surface2);}
+
+/* sync queue */
+.qitem{border:1px solid var(--card-bd);border-radius:12px;background:var(--surface2);padding:11px 13px;display:flex;align-items:center;gap:11px;}
+.qitem .qi{width:32px;height:32px;border-radius:9px;display:flex;align-items:center;justify-content:center;flex-shrink:0;background:var(--card-bg);border:1px solid var(--border);color:var(--muted);}
+.qitem .qt{font-size:12.5px;font-weight:600;}
+.qitem .qd{font:600 10.5px var(--mono);color:var(--faint);margin-top:2px;}
+.qitem .qs{margin-left:auto;flex-shrink:0;display:inline-flex;align-items:center;gap:6px;font:700 10px var(--mono);letter-spacing:.03em;padding:4px 9px;border-radius:20px;}
+.qs.queued{background:rgba(251,192,45,.16);color:#9A6B00;}
+.qs.syncing{background:rgba(0,148,212,.12);color:var(--blue);}
+.qs.synced{background:rgba(31,162,74,.14);color:var(--green);}
+.qs.conflict{background:rgba(229,72,77,.14);color:var(--red);}
+[data-theme="dark"] .qs.queued,[data-theme="glass"] .qs.queued,[data-theme="reduced"] .qs.queued{color:var(--yellow);}
+.qs .dot{width:6px;height:6px;border-radius:50%;background:currentColor;}
+@media (prefers-reduced-motion:no-preference){.qs.syncing .dot{animation:blink 1s ease-in-out infinite;}}
+@keyframes blink{50%{opacity:.3;}}
+.qitem.conflict{border-color:rgba(229,72,77,.5);}
+
+/* conflict resolution */
+.confhead{display:flex;align-items:center;gap:12px;padding:13px 14px;border-radius:13px;background:rgba(229,72,77,.1);border:1px solid rgba(229,72,77,.3);}
+.confhead .seal2{width:42px;height:42px;border-radius:11px;background:rgba(229,72,77,.16);color:var(--red);display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.confhead .ht{font-weight:700;font-size:14.5px;}
+.confhead .hs{font-size:11px;color:var(--muted);margin-top:2px;line-height:1.4;}
+.versus{display:grid;grid-template-columns:1fr 1fr;gap:11px;}
+[data-surface="mobile"] .versus{grid-template-columns:1fr;}
+.ver{border:1px solid var(--card-bd);border-radius:12px;background:var(--surface2);padding:12px;}
+.ver.dev{border-color:rgba(0,148,212,.4);}
+.ver .vl{font:700 9.5px var(--mono);letter-spacing:.04em;text-transform:uppercase;color:var(--muted);margin-bottom:9px;display:flex;align-items:center;gap:6px;}
+.ver.dev .vl{color:var(--blue);}
+.ver .vtime{font:700 22px var(--mono);}
+.ver .vsub{font-size:11px;color:var(--muted);margin-top:3px;line-height:1.4;}
+.ver .vkey{margin-top:9px;font:600 10px var(--mono);color:var(--faint);padding-top:9px;border-top:1px solid var(--border);}
+.choices{display:flex;flex-direction:column;gap:8px;}
+.choice{display:flex;align-items:center;gap:11px;padding:12px 13px;border:1.5px solid var(--card-bd);border-radius:11px;cursor:default;}
+.choice.sel{border-color:var(--blue);background:rgba(0,148,212,.07);}
+.choice .rad{width:17px;height:17px;border-radius:50%;border:2px solid var(--card-bd);flex-shrink:0;}
+.choice.sel .rad{border-color:var(--blue);background:radial-gradient(circle,var(--blue) 42%,transparent 46%);}
+.choice .ct{font-size:12.5px;font-weight:600;}
+.choice .cd{font-size:10.5px;color:var(--muted);margin-top:1px;}
+
+/* two-up showcase (geofence screen) */
+.showgrid{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+[data-surface="mobile"] .showgrid{grid-template-columns:1fr;}
+.showcard{border:1px solid var(--card-bd);border-radius:14px;background:var(--surface);overflow:hidden;display:flex;flex-direction:column;}
+.showcard .sc-h{padding:11px 13px;font-weight:700;font-size:13px;display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--border);}
+.showcard .sc-h.ok{color:var(--green);}.showcard .sc-h.bad{color:var(--red);}
+.showcard .sc-b{padding:13px;display:flex;flex-direction:column;gap:11px;}
+
+/* ── Slice-6 leave additions ── */
+/* balance tiles */
+.tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:11px;}
+[data-surface="mobile"] .tiles{grid-template-columns:1fr;}
+.tile{border:1px solid var(--card-bd);border-radius:14px;background:var(--surface2);padding:13px 14px;display:flex;flex-direction:column;gap:3px;}
+.tile.hi{border-color:rgba(31,162,74,.4);background:rgba(31,162,74,.06);}
+.tile.sick{border-color:rgba(0,148,212,.35);background:rgba(0,148,212,.06);}
+.tile.carry{border-color:rgba(251,192,45,.45);background:rgba(251,192,45,.08);}
+.tile .tl{font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:700;display:flex;align-items:center;gap:6px;}
+.tile .big{font:700 30px var(--mono);line-height:1.05;letter-spacing:-.01em;}
+.tile .big small{font-size:13px;font-weight:600;color:var(--muted);letter-spacing:0;}
+.tile.hi .big{color:var(--green);}.tile.sick .big{color:var(--blue);}
+.tile .sub{font-size:10.5px;color:var(--muted);line-height:1.4;}
+.tile .split{display:flex;gap:12px;margin-top:2px;}
+.tile .split div .n{font:700 16px var(--mono);}.tile .split div .k{font-size:9.5px;color:var(--faint);text-transform:uppercase;letter-spacing:.04em;font-weight:700;}
+
+/* form fields */
+.fg{display:grid;grid-template-columns:1fr 1fr;gap:12px 13px;}
+[data-surface="mobile"] .fg{grid-template-columns:1fr;}
+.field label{display:block;font-size:10.5px;color:var(--muted);margin-bottom:5px;font-weight:600;}
+.field .req{color:var(--red);}
+.field input,.field select,.field textarea{width:100%;border:1px solid var(--border);border-radius:9px;padding:10px 11px;background:var(--field);color:var(--text);font:inherit;font-size:13px;resize:none;}
+.field textarea{min-height:60px;line-height:1.5;}
+.field .full,.full{grid-column:1/-1;}
+
+/* leave type segmented */
+.ltypes{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+.ltype{border:1.5px solid var(--card-bd);border-radius:12px;padding:12px 13px;display:flex;gap:10px;align-items:center;}
+.ltype.sel-a{border-color:var(--green);background:rgba(31,162,74,.07);}
+.ltype.sel-s{border-color:var(--blue);background:rgba(0,148,212,.07);}
+.ltype .li{width:32px;height:32px;border-radius:9px;display:flex;align-items:center;justify-content:center;flex-shrink:0;background:var(--surface2);color:var(--faint);}
+.ltype.sel-a .li{background:rgba(31,162,74,.16);color:var(--green);}
+.ltype.sel-s .li{background:rgba(0,148,212,.14);color:var(--blue);}
+.ltype .tt{font-weight:700;font-size:13.5px;}.ltype .td{font-size:10px;color:var(--muted);margin-top:1px;}
+.ltype .rad{margin-left:auto;width:16px;height:16px;border-radius:50%;border:2px solid var(--card-bd);flex-shrink:0;}
+.ltype.sel-a .rad{border-color:var(--green);background:radial-gradient(circle,var(--green) 42%,transparent 46%);}
+.ltype.sel-s .rad{border-color:var(--blue);background:radial-gradient(circle,var(--blue) 42%,transparent 46%);}
+
+/* submission checks */
+.checks{display:flex;flex-direction:column;gap:8px;}
+.chk{display:flex;gap:11px;align-items:flex-start;padding:10px 12px;border-radius:11px;background:var(--surface2);border:1px solid var(--card-bd);}
+.chk .ci{width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.chk.ok .ci{background:rgba(31,162,74,.16);color:var(--green);}
+.chk.bad .ci{background:rgba(229,72,77,.14);color:var(--red);}
+.chk.warn .ci{background:rgba(251,192,45,.2);color:#9A6B00;}
+[data-theme="dark"] .chk.warn .ci,[data-theme="glass"] .chk.warn .ci,[data-theme="reduced"] .chk.warn .ci{color:var(--yellow);}
+.chk .ct{font-size:12.5px;font-weight:600;}.chk .cd{font-size:10.5px;color:var(--muted);margin-top:2px;line-height:1.4;}
+.chk .ci .svg{width:14px;height:14px;}
+.hoh{margin-top:2px;padding:11px 13px;border-radius:11px;background:rgba(251,192,45,.12);border:1px solid rgba(251,192,45,.45);font-size:11.5px;line-height:1.45;display:flex;gap:9px;align-items:flex-start;color:#7a5600;}
+[data-theme="dark"] .hoh,[data-theme="glass"] .hoh,[data-theme="reduced"] .hoh{color:var(--yellow);}
+.hoh .svg{flex-shrink:0;margin-top:1px;color:var(--yellow);}
+.hoh b{font-weight:700;}
+
+/* request detail (approve) */
+.reqcard{border:1px solid var(--card-bd);border-radius:14px;background:var(--surface);overflow:hidden;}
+.reqcard .rq-h{display:flex;align-items:center;gap:12px;padding:13px 14px;border-bottom:1px solid var(--border);}
+.reqcard .rq-h .av{width:40px;height:40px;border-radius:50%;background:var(--green);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;flex-shrink:0;}
+.reqcard .rq-h .nm{font-weight:700;font-size:14px;}.reqcard .rq-h .mt{font:600 11px var(--mono);color:var(--muted);margin-top:1px;}
+.reqcard .rq-b{padding:6px 4px;}
+
+/* coverage meter */
+.cov{border:1px solid var(--card-bd);border-radius:13px;background:var(--surface2);padding:13px 14px;}
+.cov.warn{border-color:rgba(251,192,45,.5);background:rgba(251,192,45,.08);}
+.cov .cvh{display:flex;align-items:center;gap:8px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-bottom:10px;}
+.cov .cvrow{display:flex;align-items:center;gap:11px;}
+.cov .cvrole{font-size:12.5px;font-weight:600;}
+.cov .cvsub{font-size:10.5px;color:var(--muted);margin-top:1px;}
+.cov .cvcount{margin-left:auto;text-align:right;flex-shrink:0;}
+.cov .cvcount .n{font:700 18px var(--mono);}.cov.warn .cvcount .n{color:var(--red);}
+.cov .cvcount .k{font-size:9.5px;color:var(--faint);text-transform:uppercase;letter-spacing:.04em;font-weight:700;}
+.cov .cvbar{margin-top:11px;height:7px;border-radius:5px;background:var(--border);overflow:hidden;}
+.cov .cvbar i{display:block;height:100%;background:var(--green);}
+.cov.warn .cvbar i{background:var(--red);}
+
+/* acknowledge override */
+.ack{margin-top:11px;border:1px solid rgba(229,72,77,.3);border-radius:12px;background:rgba(229,72,77,.05);padding:12px 13px;}
+.ack .akt{font-weight:700;font-size:12.5px;display:flex;align-items:center;gap:7px;}
+.ack .akb{font-size:11px;color:var(--muted);margin:3px 0 10px;line-height:1.45;}
+.ackchk{display:flex;align-items:center;gap:9px;font-size:12px;font-weight:600;}
+.ackchk .box{width:18px;height:18px;border-radius:5px;border:2px solid var(--card-bd);display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.ackchk .box.on{background:var(--red);border-color:var(--red);color:#fff;}
+.ackchk .box .svg{width:12px;height:12px;}
+
+/* liability table */
+.ltable{border:1px solid var(--card-bd);border-radius:13px;overflow:hidden;background:var(--surface);}
+.lhead,.lrow{display:grid;grid-template-columns:1.6fr .9fr .9fr .9fr;gap:8px;padding:10px 13px;align-items:center;}
+.lhead{background:var(--surface2);border-bottom:1px solid var(--card-bd);font-size:9.5px;text-transform:uppercase;letter-spacing:.04em;color:var(--faint);font-weight:700;}
+.lrow{border-bottom:1px solid var(--border);font-size:12.5px;}
+.lrow:last-child{border-bottom:none;}
+[data-surface="mobile"] .lhead,[data-surface="mobile"] .lrow{grid-template-columns:1.4fr 1fr;}
+[data-surface="mobile"] .lhead .hide,[data-surface="mobile"] .lrow .hide{display:none;}
+.lrow .who .nm{font-weight:600;}.lrow .who .rl{font:600 10px var(--mono);color:var(--faint);margin-top:1px;}
+.lrow .num{font-family:var(--mono);font-variant-numeric:tabular-nums;text-align:right;}
+.lrow .liab{font-weight:700;text-align:right;}
+.lrow.excl{opacity:.55;}
+.lrow.excl .liab{color:var(--faint);font-weight:600;font-size:11px;}
+.lna{display:inline-flex;align-items:center;gap:5px;font:700 10px var(--mono);color:#9A6B00;background:rgba(251,192,45,.16);border:1px solid rgba(251,192,45,.45);border-radius:6px;padding:2px 7px;}
+[data-theme="dark"] .lna,[data-theme="glass"] .lna,[data-theme="reduced"] .lna{color:var(--yellow);}
+.ltotal{display:flex;align-items:center;gap:12px;padding:14px;border-radius:13px;background:var(--surface2);border:1px solid var(--card-bd);}
+.ltotal .tk{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:700;}
+.ltotal .tv{font:700 26px var(--mono);letter-spacing:-.01em;margin-top:2px;}
+[data-surface="kiosk"] .ltotal .tv{font-size:30px;}
+.ltotal .tmeta{margin-left:auto;text-align:right;font-size:10.5px;color:var(--muted);line-height:1.5;flex-shrink:0;}
+.moneybig{font:700 32px var(--mono);letter-spacing:-.01em;}
+.formula{display:inline-flex;align-items:center;gap:6px;font:600 10.5px var(--mono);color:var(--muted);background:var(--surface2);border:1px solid var(--border);border-radius:7px;padding:5px 9px;}
+
+/* ── Slice-7 KPI scorecard ── */
+/* RAG summary bar */
+.ragbar{display:flex;flex-wrap:wrap;gap:9px;align-items:center;}
+.ragpill{display:inline-flex;align-items:center;gap:7px;padding:7px 13px;border-radius:11px;border:1px solid var(--card-bd);background:var(--surface2);font-size:12px;font-weight:600;}
+.ragpill .n{font:700 16px var(--mono);}
+.ragpill.g{border-color:rgba(31,162,74,.4);}.ragpill.g .n{color:var(--green);}
+.ragpill.a{border-color:rgba(251,192,45,.5);}.ragpill.a .n{color:#9A6B00;}
+.ragpill.r{border-color:rgba(229,72,77,.4);}.ragpill.r .n{color:var(--red);}
+.ragpill.na .n{color:var(--faint);}
+[data-theme="dark"] .ragpill.a .n,[data-theme="glass"] .ragpill.a .n,[data-theme="reduced"] .ragpill.a .n{color:var(--yellow);}
+.ragdot{width:9px;height:9px;border-radius:50%;flex-shrink:0;}
+.ragdot.g{background:var(--green);}.ragdot.a{background:var(--yellow);}.ragdot.r{background:var(--red);}.ragdot.na{background:var(--faint);}
+.scope{display:inline-flex;align-items:center;gap:6px;font:600 10.5px var(--mono);color:var(--muted);background:var(--surface2);border:1px solid var(--border);border-radius:7px;padding:5px 9px;}
+
+/* category header */
+.kcat{font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:700;display:flex;align-items:center;gap:8px;margin:4px 0 2px;}
+.kcat .ln{flex:1;height:1px;background:var(--border);}
+
+/* KPI grid + card */
+.kgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;}
+[data-surface="tablet"] .kgrid{grid-template-columns:repeat(2,1fr);}
+[data-surface="mobile"] .kgrid{grid-template-columns:1fr;}
+[data-surface="kiosk"] .kgrid{grid-template-columns:repeat(2,1fr);}
+.kcard{border:1px solid var(--card-bd);border-left-width:4px;border-radius:13px;background:var(--surface);padding:13px 14px;display:flex;flex-direction:column;gap:7px;position:relative;}
+.kcard.g{border-left-color:var(--green);}.kcard.a{border-left-color:var(--yellow);}.kcard.r{border-left-color:var(--red);}.kcard.n{border-left-color:var(--faint);}
+.kcard.na{border-left-color:var(--yellow);background:repeating-linear-gradient(135deg,color-mix(in srgb,var(--yellow) 7%,transparent),color-mix(in srgb,var(--yellow) 7%,transparent) 10px,transparent 10px,transparent 20px);}
+.kcard .khead{display:flex;align-items:flex-start;gap:9px;}
+.kcard .kn{font-size:12.5px;font-weight:700;line-height:1.3;flex:1;}
+.kcard .kstat{flex-shrink:0;display:inline-flex;align-items:center;gap:5px;font:700 9.5px var(--mono);letter-spacing:.04em;padding:3px 8px;border-radius:20px;text-transform:uppercase;}
+.kstat.g{background:rgba(31,162,74,.14);color:var(--green);}.kstat.a{background:rgba(251,192,45,.18);color:#9A6B00;}.kstat.r{background:rgba(229,72,77,.14);color:var(--red);}.kstat.n{background:var(--surface2);color:var(--faint);}
+.kstat.na{background:rgba(251,192,45,.16);color:#9A6B00;}
+[data-theme="dark"] .kstat.a,[data-theme="glass"] .kstat.a,[data-theme="reduced"] .kstat.a,[data-theme="dark"] .kstat.na,[data-theme="glass"] .kstat.na,[data-theme="reduced"] .kstat.na{color:var(--yellow);}
+.kcard .kv{font:700 27px var(--mono);letter-spacing:-.01em;line-height:1;}
+[data-surface="kiosk"] .kcard .kv{font-size:31px;}
+.kcard .kv.navb{font-size:15px;color:#9A6B00;display:inline-flex;align-items:center;gap:7px;}
+[data-theme="dark"] .kcard .kv.navb,[data-theme="glass"] .kcard .kv.navb,[data-theme="reduced"] .kcard .kv.navb{color:var(--yellow);}
+.kcard .ksub{font-size:10.5px;color:var(--faint);}
+.kcard .kfoot{margin-top:auto;padding-top:8px;border-top:1px solid var(--border);display:flex;flex-direction:column;gap:4px;}
+.kcard .krow{display:flex;align-items:center;gap:8px;font-size:10.5px;}
+.kcard .krow .kk{color:var(--faint);text-transform:uppercase;letter-spacing:.04em;font-weight:700;font-size:9px;width:52px;flex-shrink:0;}
+.kcard .krow .kf{font:600 10.5px var(--mono);color:var(--muted);}
+.kcard .krow .kt{margin-left:auto;font:700 11px var(--mono);}
+.kcard .naband{display:inline-flex;align-items:center;gap:6px;font:700 10px var(--mono);color:#9A6B00;}
+[data-theme="dark"] .kcard .naband,[data-theme="glass"] .kcard .naband,[data-theme="reduced"] .kcard .naband{color:var(--yellow);}
+
+/* ESS my-kpi headline */
+.myhead{display:flex;align-items:center;gap:12px;padding:14px;border-radius:14px;background:var(--surface2);border:1px solid var(--card-bd);}
+.myhead .av{width:42px;height:42px;border-radius:50%;background:var(--green);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;flex-shrink:0;}
+.myhead .nm{font-weight:700;font-size:14px;}.myhead .mt{font:600 11px var(--mono);color:var(--muted);margin-top:1px;}
+
+/* switcher bar (kit) */
+.bar{display:flex;flex-wrap:wrap;gap:12px;align-items:center;padding:9px 14px;background:#11161b;color:#cfd8de;border-bottom:1px solid #1e262d;font-size:11.5px;}
+.bar .grp{display:flex;align-items:center;gap:5px;}
+.bar .lbl{color:#7c8893;font-weight:600;text-transform:uppercase;letter-spacing:.05em;font-size:9.5px;}
+.bar button{border:1px solid #2a333b;background:#1a2127;color:#aeb9c1;border-radius:6px;padding:4px 8px;cursor:pointer;font:inherit;font-size:11px;}
+.bar button.on{background:var(--green);color:#fff;border-color:var(--green);}
+.bar .ac{margin-left:auto;color:#6f7c85;}.bar .ac b{color:#9FE3BD;}
+</style>
+</head>
+<body>
+<template id="__bundler_thumbnail" data-bg-color="#0E4D34"><svg viewBox="0 0 1200 800" xmlns="http://www.w3.org/2000/svg"><rect width="1200" height="800" fill="#0E4D34"/><g stroke-linecap="round"><path d="M430 470v-90" stroke="#E5484D" stroke-width="40"/><path d="M540 470v-160" stroke="#FBC02D" stroke-width="40"/><path d="M650 470v-230" stroke="#9FE3BD" stroke-width="40"/><path d="M760 470v-120" stroke="#9FE3BD" stroke-width="40"/></g><path d="M400 470h390" stroke="#fff" stroke-width="8"/><text x="600" y="600" text-anchor="middle" font-family="monospace" font-size="36" font-weight="700" fill="#fff" letter-spacing="6">KPI</text><text x="600" y="650" text-anchor="middle" font-family="monospace" font-size="22" fill="#9FE3BD" letter-spacing="4">SCORECARD · C3 · E8</text></svg></template>
+
+<div class="bar">
+ <div class="grp"><span class="lbl">Screen</span><span id="screens"></span></div>
+ <div class="grp"><span class="lbl">State</span><span id="states"></span></div>
+ <div class="grp"><span class="lbl">Viewer</span><span id="roles"></span></div>
+ <div class="grp"><span class="lbl">Theme</span><span id="themes"></span></div>
+ <div class="grp"><span class="lbl">Surface</span><span id="surfaces"></span></div>
+ <div class="grp"><span class="lbl">Lang</span><span id="langs"></span></div>
+ <div class="ac" id="acline"></div>
+</div>
+<div class="stage"><div class="frame" id="frame"></div></div>
+
+<script>
+// Slice 7 · KPI scorecard — bilingual catalogue + live compute (ports the app's HR KPI workbook)
+// name/formula/target carry {en,sw}; target is a plain string where language-neutral. AC-UNI-07.
+const KPIS={
+ headcount_growth:{cat:'workforce',name:{en:'Headcount Growth',sw:'Ukuaji wa idadi ya wafanyakazi'},formula:{en:'Current HC − Previous HC',sw:'Idadi ya sasa − ya awali'},target:{en:'As per budget',sw:'Kadiri ya bajeti'},dir:'monitor',icon:'users'},
+ turnover:{cat:'workforce',name:{en:'Employee Turnover Rate',sw:'Kiwango cha mauzo ya wafanyakazi'},formula:{en:'Leavers ÷ Avg HC × 100',sw:'Walioondoka ÷ wastani × 100'},target:'≤ 10%',v:8.2,t:10,dir:'down',unit:'%',icon:'trend'},
+ termination:{cat:'workforce',name:{en:'Termination Rate',sw:'Kiwango cha kusitishwa'},formula:{en:'Terminations ÷ Avg HC × 100',sw:'Kusitishwa ÷ wastani × 100'},target:'< 10%',v:3.1,t:10,dir:'down',unit:'%',icon:'trend'},
+ retention:{cat:'workforce',name:{en:'Retention Rate',sw:'Kiwango cha kubaki'},formula:{en:'Retained ÷ Total × 100',sw:'Waliobaki ÷ jumla × 100'},target:'≥ 90%',v:92.4,t:90,dir:'up',unit:'%',icon:'shield'},
+ absenteeism:{cat:'workforce',name:{en:'Absenteeism Rate',sw:'Kiwango cha kutokuwepo'},formula:{en:'Lost workdays ÷ Total workdays × 100',sw:'Siku zilizopotea ÷ jumla × 100'},target:'≤ 2%',v:2.1,t:2,dir:'down',unit:'%',icon:'clock'},
+ female_rep:{cat:'diversity',name:{en:'Female Representation',sw:'Uwakilishi wa wanawake'},formula:{en:'Female ÷ Total × 100',sw:'Wanawake ÷ jumla × 100'},target:'≥ 20%',v:18,t:20,dir:'up',unit:'%',icon:'users'},
+ young_ratio:{cat:'diversity',name:{en:'Young Employee Ratio (<35)',sw:'Uwiano wa vijana (<35)'},formula:{en:'Under 35 ÷ Total × 100',sw:'Chini ya 35 ÷ jumla × 100'},target:'30–50%',v:44,band:[30,50],dir:'band',unit:'%',icon:'users'},
+ localization:{cat:'diversity',name:{en:'Localization Ratio',sw:'Uwiano wa uzawa'},formula:{en:'Tanzanian ÷ Total × 100',sw:'Watanzania ÷ jumla × 100'},target:'≥ 95%',v:97.7,t:95,dir:'up',unit:'%',icon:'pin'},
+ female_leadership:{cat:'diversity',name:{en:'Female Leadership Ratio',sw:'Uongozi wa wanawake'},formula:{en:'Female mgrs ÷ Total mgrs × 100',sw:'Wasimamizi wanawake ÷ jumla × 100'},target:'≥ 15%',v:12,t:15,dir:'up',unit:'%',icon:'award'},
+ grievances_filed:{cat:'grievances',name:{en:'Grievances Filed',sw:'Malalamiko yaliyowasilishwa'},formula:{en:'Grievances ÷ HC × 100',sw:'Malalamiko ÷ idadi × 100'},target:'≤ 2%',v:0.5,t:2,dir:'down',unit:'%',icon:'flag'},
+ grievance_resolution:{cat:'grievances',name:{en:'Grievance Resolution Rate',sw:'Kiwango cha kutatua malalamiko'},formula:{en:'Resolved ÷ Filed × 100',sw:'Yaliyotatuliwa ÷ yaliyowasilishwa × 100'},target:'≥ 95%',v:88,t:95,dir:'up',unit:'%',icon:'check'},
+ disc_opened:{cat:'disciplinary',name:{en:'Disciplinary Cases Opened',sw:'Kesi za nidhamu zilizofunguliwa'},formula:{en:'Cases opened ÷ HC × 100',sw:'Kesi zilizofunguliwa ÷ idadi × 100'},target:'≤ 3%',v:1.2,t:3,dir:'down',unit:'%',icon:'alert'},
+ disc_closure:{cat:'disciplinary',name:{en:'Disciplinary Closure Rate',sw:'Kiwango cha kufunga nidhamu'},formula:{en:'Closed ÷ Opened × 100',sw:'Zilizofungwa ÷ zilizofunguliwa × 100'},target:'≥ 95%',v:90,t:95,dir:'up',unit:'%',icon:'check'},
+ appeal_rate:{cat:'disciplinary',name:{en:'Appeal Rate',sw:'Kiwango cha rufaa'},formula:{en:'Appeals ÷ Cases closed × 100',sw:'Rufaa ÷ kesi zilizofungwa × 100'},target:'≤ 10%',v:7,t:10,dir:'down',unit:'%',icon:'flag'},
+ leave_utilization:{cat:'leave',name:{en:'Leave Utilization',sw:'Matumizi ya likizo'},formula:{en:'Leave taken ÷ Entitled × 100',sw:'Likizo iliyotumika ÷ haki × 100'},target:'≥ 80%',v:73,t:80,dir:'up',unit:'%',icon:'calendar'},
+ time_to_fill:{cat:'recruitment',name:{en:'Time to Fill',sw:'Muda wa kujaza nafasi'},formula:{en:'Avg days to fill a vacancy',sw:'Wastani wa siku kujaza nafasi'},target:{en:'≤ 30 days',sw:'≤ siku 30'},v:27,t:30,dir:'down',unit:'days',icon:'clock'},
+ cost_per_hire:{cat:'recruitment',name:{en:'Cost per Hire',sw:'Gharama kwa ajira'},formula:{en:'Recruitment cost ÷ No. of hires',sw:'Gharama ÷ idadi ya ajira'},target:{en:'Within budget',sw:'Ndani ya bajeti'},dir:'monitor',icon:'money'},
+ offer_acceptance:{cat:'recruitment',name:{en:'Offer Acceptance Rate',sw:'Kiwango cha kukubali ofa'},formula:{en:'Accepted ÷ Total offers × 100',sw:'Zilizokubaliwa ÷ jumla × 100'},target:'≥ 90%',v:93,t:90,dir:'up',unit:'%',icon:'check'},
+ internal_promotion:{cat:'talent',name:{en:'Internal Promotion Rate',sw:'Kiwango cha kupandishwa cheo'},formula:{en:'Internal promotions ÷ Filled × 100',sw:'Kupandishwa ndani ÷ zilizojazwa × 100'},target:'≥ 30%',v:34,t:30,dir:'up',unit:'%',icon:'trend'},
+ succession:{cat:'talent',name:{en:'Succession Coverage',sw:'Uwepo wa warithi'},formula:{en:'Critical roles w/ successors ÷ Critical × 100',sw:'Nafasi muhimu zenye warithi ÷ jumla × 100'},target:'≥ 80%',v:72,t:80,dir:'up',unit:'%',icon:'users'},
+ perf_review:{cat:'performance',name:{en:'Performance Review Completion',sw:'Ukamilishaji wa tathmini'},formula:{en:'Completed ÷ Scheduled × 100',sw:'Zilizokamilika ÷ zilizopangwa × 100'},target:'100%',v:74,t:100,dir:'up',unit:'%',icon:'award'},
+ kpi_achievement:{cat:'performance',name:{en:'KPI Achievement Rate',sw:'Kiwango cha kufikia KPI'},formula:{en:'KPIs achieved ÷ Assigned × 100',sw:'KPI zilizofikiwa ÷ zilizotolewa × 100'},target:'≥ 85%',v:81,t:85,dir:'up',unit:'%',icon:'chart'},
+ high_performer:{cat:'performance',name:{en:'High Performer Ratio',sw:'Uwiano wa wafanyakazi bora'},formula:{en:'High performers ÷ Total × 100',sw:'Bora ÷ jumla × 100'},target:{en:'Monitor',sw:'Fuatilia'},dir:'monitor',icon:'award'},
+ training_completion:{cat:'learning',name:{en:'Training Completion Rate',sw:'Kiwango cha kukamilisha mafunzo'},formula:{en:'Completed ÷ Planned × 100',sw:'Yaliyokamilika ÷ yaliyopangwa × 100'},target:'≥ 90%',v:87,t:90,dir:'up',unit:'%',icon:'cap'},
+ training_hours:{cat:'learning',name:{en:'Training Hours / Employee',sw:'Saa za mafunzo / mfanyakazi'},formula:{en:'Total training hours ÷ HC',sw:'Jumla ya saa ÷ idadi'},target:{en:'≥ 24 hrs/yr',sw:'≥ saa 24/mwaka'},v:22,t:24,dir:'up',unit:'hrs',icon:'cap'},
+ satisfaction_score:{cat:'engagement',name:{en:'Employee Satisfaction',sw:'Kuridhika kwa wafanyakazi'},formula:{en:'Survey favourable %',sw:'Asilimia ya kuridhika'},target:'≥ 80%',v:82,t:80,dir:'up',unit:'%',icon:'heart'},
+ satisfaction_5pt:{cat:'engagement',name:{en:'Satisfaction Score (5-pt)',sw:'Alama ya kuridhika (5)'},formula:{en:'Avg survey score',sw:'Wastani wa alama'},target:'≥ 4.0',v:4.1,t:4,dir:'up',unit:'/5',icon:'heart'},
+ ess_adoption:{cat:'engagement',name:{en:'ESS Adoption Rate',sw:'Kiwango cha matumizi ya ESS'},formula:{en:'Active ESS users ÷ Total × 100',sw:'Watumiaji hai ÷ jumla × 100'},target:'≥ 90%',v:71,t:90,dir:'up',unit:'%',icon:'phone'},
+ online_leave:{cat:'engagement',name:{en:'Online Leave Application Rate',sw:'Kiwango cha maombi ya likizo mtandaoni'},formula:{en:'ESS leave ÷ Total leave × 100',sw:'Likizo ESS ÷ jumla × 100'},target:'100%',v:84,t:100,dir:'up',unit:'%',icon:'calendar'},
+ records_completeness:{cat:'compliance',name:{en:'Employee Records Completeness',sw:'Ukamilifu wa kumbukumbu'},formula:{en:'Complete records ÷ Total × 100',sw:'Kumbukumbu kamili ÷ jumla × 100'},target:'100%',v:98,t:100,dir:'up',unit:'%',icon:'doc'}
+};
+const KPI_CAT_ORDER=['workforce','diversity','grievances','disciplinary','leave','recruitment','talent','performance','learning','engagement','compliance'];
+
+function kpiStatus(k){
+ if(!k||k.dir==='monitor') return 'neutral';
+ if(k.dir==='up')   return k.v>=k.t?'green':(k.v>=k.t*0.9?'amber':'red');
+ if(k.dir==='down') return k.v<=k.t?'green':(k.v<=k.t*1.15?'amber':'red');
+ if(k.dir==='band'){const[lo,hi]=k.band;return(k.v>=lo&&k.v<=hi)?'green':((k.v>=lo*0.9&&k.v<=hi*1.1)?'amber':'red');}
+ return 'neutral';
+}
+
+// per-role KPI set (A2/A3 alignment — each role sees the KPIs it owns)
+const ROLE_KPIS={
+ employee:['perf_review','kpi_achievement','training_completion','leave_utilization','ess_adoption'],
+ supervisor:['absenteeism','perf_review','kpi_achievement','training_completion','leave_utilization','grievances_filed'],
+ super:['absenteeism','retention','perf_review','training_completion','internal_promotion','succession'],
+ pm:['headcount_growth','turnover','absenteeism','retention','time_to_fill','grievance_resolution','disc_closure'],
+ hod:['retention','turnover','succession','internal_promotion','perf_review','kpi_achievement','high_performer','cost_per_hire'],
+ hrofficer:['records_completeness','time_to_fill','offer_acceptance','grievance_resolution','disc_closure','training_completion','leave_utilization','online_leave'],
+ projhr:['records_completeness','absenteeism','leave_utilization','grievances_filed','grievance_resolution','disc_opened','online_leave'],
+ hrhead:['headcount_growth','turnover','retention','absenteeism','female_rep','young_ratio','localization','female_leadership','grievance_resolution','disc_closure','appeal_rate','leave_utilization','time_to_fill','cost_per_hire','offer_acceptance','internal_promotion','succession','perf_review','kpi_achievement','training_completion','training_hours','satisfaction_score','satisfaction_5pt','ess_adoption','records_completeness'],
+ payroll:['absenteeism','leave_utilization','records_completeness','cost_per_hire'],
+ finance:['headcount_growth','turnover','absenteeism','cost_per_hire','leave_utilization'],
+ sheq:['training_completion','training_hours','absenteeism'],
+ ceo:['headcount_growth','turnover','retention','female_rep','localization','succession','internal_promotion','kpi_achievement','satisfaction_score','ess_adoption'],
+ it:['ess_adoption','online_leave','records_completeness']
+};
+// R01–R13 → role key (R13 = ESS field employee; per A2/A3)
+const R2ROLE={R01:'employee',R02:'supervisor',R03:'super',R04:'pm',R05:'hrofficer',R06:'projhr',R07:'hrhead',R08:'payroll',R09:'finance',R10:'sheq',R11:'hod',R12:'it',R13:'employee'};
+const ROLE_TITLE={employee:{en:'Employee (ESS)',sw:'Mfanyakazi (ESS)'},supervisor:{en:'Supervisor',sw:'Msimamizi'},super:{en:'Superintendent',sw:'Meneja wa idara'},pm:{en:'Project Manager',sw:'Meneja wa mradi'},hod:{en:'Head of Department',sw:'Mkuu wa idara'},hrofficer:{en:'HR Officer',sw:'Afisa HR'},projhr:{en:'Project HR',sw:'HR wa mradi'},hrhead:{en:'Head of HR',sw:'Mkuu wa HR'},payroll:{en:'Payroll Officer',sw:'Afisa mishahara'},finance:{en:'Finance Manager',sw:'Meneja fedha'},sheq:{en:'SHEQ Manager',sw:'Meneja SHEQ'},ceo:{en:'CEO / COO',sw:'Mkurugenzi'},it:{en:'IT Administrator',sw:'Msimamizi TEHAMA'}};
+const ROLE_SCOPE={employee:{en:'your personal metrics',sw:'takwimu zako binafsi'},supervisor:{en:'Mwadui · your team',sw:'Mwadui · timu yako'},super:{en:'Mwadui · your remit',sw:'Mwadui · eneo lako'},pm:{en:'Mwadui project',sw:'mradi wa Mwadui'},projhr:{en:'Mwadui · your remit',sw:'Mwadui · eneo lako'},hod:{en:'organisation-wide',sw:'shirika zima'},hrofficer:{en:'organisation-wide',sw:'shirika zima'},hrhead:{en:'organisation-wide',sw:'shirika zima'},payroll:{en:'organisation-wide',sw:'shirika zima'},finance:{en:'organisation-wide',sw:'shirika zima'},sheq:{en:'organisation-wide',sw:'shirika zima'},ceo:{en:'organisation-wide',sw:'shirika zima'},it:{en:'organisation-wide',sw:'shirika zima'}};
+
+// inputs the KPI engine divides — the "data fed in" (slices 2–6)
+const KPI_INPUTS={previousHC:1180,budgetHC:1276,voluntaryLeavers:83,terminationsYTD:14,retrenchments:5,lostWorkdays:1290,totalWorkdays:61400,
+ femaleCount:226,under35Count:548,tanzanianCount:1218,femaleManagers:12,totalManagers:88,avgDaysToFill:27,offersAccepted:28,offersTotal:30,costPerHire:410000,
+ internalPromotions:9,positionsFilled:26,criticalRoles:18,criticalWithSuccessor:13,kpisAchieved:81,kpisAssigned:100,totalTrainingHours:27412,
+ surveyFavourable:82,surveyScore5:4.1,essActiveUsers:1010,smartphones:940,onlineLeaveBase:712,totalLeaveBase:842,completeRecords:1221,
+ leaveTaken:27300,leaveEntitled:37380,discOpenedBase:14,discClosedBase:13,appealsBase:1,grievOpen:6,grievClosed:23,appraisalsComplete:74,appraisalsTotal:100,HC:1246};
+
+// missing-input label per KPI, for the NOT-AVAILABLE state (LIAB-03: name the input)
+const NA_INPUT={training_hours:{en:'total training hours',sw:'jumla ya saa za mafunzo'},succession:{en:'critical-role register',sw:'rejista ya nafasi muhimu'},female_leadership:{en:'manager headcount',sw:'idadi ya wasimamizi'},offer_acceptance:{en:'offers extended',sw:'ofa zilizotolewa'},cost_per_hire:{en:'recruitment cost',sw:'gharama ya ajira'}};
+
+// live compute — returns { id: {value, v, sub} } localized to lang
+function kpiValues(lang){
+ const I=KPI_INPUTS, HC=I.HC, en=lang!=='sw';
+ const W=en?{of:'of',lv:'leavers',avg:'avg',mgr:'managers',lost:'lost workdays',exp:'expatriates',within:'within budget',ph:'smartphones + kiosks',via:'via ESS',filed:'filed',res:'resolved',op:'cases opened',cl:'closed',ap:'appeal',off:'offers',fil:'filled',rol:'roles',done:'done',hy:'hrs/yr',plan:'plan',days:'days'}
+  :{of:'kati ya',lv:'walioondoka',avg:'wastani',mgr:'wasimamizi',lost:'siku zilizopotea',exp:'wageni',within:'ndani ya bajeti',ph:'simu + vioski',via:'kupitia ESS',filed:'zimewasilishwa',res:'zimetatuliwa',op:'kesi zimefunguliwa',cl:'zimefungwa',ap:'rufaa',off:'ofa',fil:'zimejazwa',rol:'nafasi',done:'zimekamilika',hy:'saa/mwaka',plan:'mpango',days:'siku'};
+ const r1=x=>Math.round(x*10)/10, pct=(n,d)=>d?n/d*100:0, C=n=>n.toLocaleString('en-US');
+ const avgHC=(HC+I.previousHC)/2, leavers=I.voluntaryLeavers+I.terminationsYTD+I.retrenchments;
+ const discOpened=I.discOpenedBase, grievTot=I.grievOpen+I.grievClosed, appTot=I.appraisalsTotal;
+ const onlineNum=I.onlineLeaveBase, onlineDen=I.totalLeaveBase;
+ const mk=(x,sub)=>({value:r1(x)+'%',v:r1(x),sub});
+ const o={};
+ o.headcount_growth={value:'+'+(HC-I.previousHC),v:HC-I.previousHC,sub:`+${I.budgetHC-I.previousHC} ${W.plan} · ${C(HC)} HC`};
+ o.turnover=mk(pct(leavers,avgHC),`${leavers} ${W.lv} ÷ ${C(Math.round(avgHC))} ${W.avg}`);
+ o.termination=mk(pct(I.terminationsYTD,avgHC),`${I.terminationsYTD} ${en?'terminations':'kusitishwa'}`);
+ o.retention=mk(pct(I.previousHC-I.voluntaryLeavers,I.previousHC));
+ o.absenteeism=mk(pct(I.lostWorkdays,I.totalWorkdays),`${C(I.lostWorkdays)} ${W.lost}`);
+ o.female_rep=mk(pct(I.femaleCount,HC),`${I.femaleCount} ${W.of} ${C(HC)}`);
+ o.young_ratio=mk(pct(I.under35Count,HC));
+ o.localization=mk(pct(I.tanzanianCount,HC),`${HC-I.tanzanianCount} ${W.exp}`);
+ o.female_leadership=mk(pct(I.femaleManagers,I.totalManagers),`${I.femaleManagers} ${W.of} ${I.totalManagers} ${W.mgr}`);
+ o.grievances_filed=mk(pct(grievTot,HC),`${grievTot} ${W.filed}`);
+ o.grievance_resolution=mk(pct(I.grievClosed,grievTot),`${I.grievClosed} ${W.of} ${grievTot} ${W.res}`);
+ o.disc_opened=mk(pct(discOpened,HC),`${discOpened} ${W.op}`);
+ o.disc_closure=mk(pct(I.discClosedBase,discOpened),`${I.discClosedBase} ${W.of} ${discOpened} ${W.cl}`);
+ o.appeal_rate=mk(pct(I.appealsBase,I.discClosedBase),`${I.appealsBase} ${W.ap}`);
+ o.leave_utilization=mk(pct(I.leaveTaken,I.leaveEntitled),`${C(I.leaveTaken)} ${W.of} ${C(I.leaveEntitled)} ${W.days}`);
+ o.time_to_fill={value:I.avgDaysToFill+' '+W.days,v:I.avgDaysToFill,sub:''};
+ o.cost_per_hire={value:'TZS '+Math.round(I.costPerHire/1000)+'k',sub:W.within};
+ o.offer_acceptance=mk(pct(I.offersAccepted,I.offersTotal),`${I.offersAccepted} ${W.of} ${I.offersTotal} ${W.off}`);
+ o.internal_promotion=mk(pct(I.internalPromotions,I.positionsFilled),`${I.internalPromotions} ${W.of} ${I.positionsFilled} ${W.fil}`);
+ o.succession=mk(pct(I.criticalWithSuccessor,I.criticalRoles),`${I.criticalWithSuccessor} ${W.of} ${I.criticalRoles} ${W.rol}`);
+ o.perf_review=mk(pct(I.appraisalsComplete,appTot),`${I.appraisalsComplete} ${W.of} ${appTot} ${W.done}`);
+ o.kpi_achievement=mk(pct(I.kpisAchieved,I.kpisAssigned));
+ o.high_performer={value:'14%',sub:en?'rated 4–5':'daraja 4–5'};
+ o.training_completion=mk(87);
+ o.training_hours={value:r1(I.totalTrainingHours/HC)+' '+W.hy,v:I.totalTrainingHours/HC,sub:''};
+ o.satisfaction_score=mk(I.surveyFavourable);
+ o.satisfaction_5pt={value:I.surveyScore5.toFixed(1)+' / 5',v:I.surveyScore5,sub:''};
+ o.ess_adoption=mk(pct(I.essActiveUsers,HC),`${C(I.smartphones)} ${W.ph}`);
+ o.online_leave=mk(pct(onlineNum,onlineDen),`${onlineNum} ${W.of} ${onlineDen} ${W.via}`);
+ o.records_completeness=mk(pct(I.completeRecords,HC),`${C(I.completeRecords)} ${W.of} ${C(HC)}`);
+ return o;
+}
+Object.assign(window,{KPIS,KPI_CAT_ORDER,kpiStatus,ROLE_KPIS,R2ROLE,ROLE_TITLE,ROLE_SCOPE,KPI_INPUTS,NA_INPUT,kpiValues});
+
+</script>
+<script>
+// Slice 7 · KPI scorecard — chrome strings (AC-UNI-07: no key/placeholder visible)
+const T={en:{
+ reg:'registry v1.2',
+ console:'KPI scorecard', consoleSub:'Console · role-scoped · live from workforce data · C3',
+ ess:'My KPIs', essSub:'ESS · your personal metrics · E8',
+ // rag / status
+ stOn:'On track', stWatch:'Watch', stOff:'Off track', stMon:'Monitor', stNa:'N/A',
+ sumOn:'On track', sumWatch:'Watch', sumOff:'Off track', sumNa:'Not available',
+ // card labels
+ kFormula:'Formula', kTarget:'Target', naCard:'Not available', naBecause:'not provided',
+ scopeLbl:'Scope',
+ // categories
+ cat_workforce:'Workforce', cat_diversity:'Diversity & Inclusion', cat_grievances:'Grievances',
+ cat_disciplinary:'Disciplinary', cat_leave:'Leave & Attendance', cat_recruitment:'Recruitment',
+ cat_talent:'Talent Management', cat_performance:'Performance', cat_learning:'Learning & Development',
+ cat_engagement:'Engagement', cat_compliance:'Compliance',
+ // notes
+ liveNote:'Computed live from the workforce data — headcount, attendance, leave, disciplinary and training (slices 2–6).',
+ lvrNote:'Populations exclude leavers (LVR-02).',
+ naRule:'A KPI missing an input shows Not available with the input named — never a guessed or zero figure (LIAB-03).',
+ consistNote:'On / Watch / Off counts match the cards shown; Not-available and Monitor are excluded from the counts.',
+ // states
+ emptyTitle:'No KPIs in scope', emptyBody:'No metrics are assigned to this view yet. Once a period and role set are configured, cards appear here.',
+ loadingTitle:'Computing metrics…',
+ successTitle:'Scorecard snapshot published', successSub:'Saved to the period and shared to the dashboard. Values are frozen at this snapshot.',
+ errTitle:'Metrics could not be computed', errBody:'The scorecard is unavailable for this period. No values are shown rather than guessed ones (LIAB-03). Retry when the data source is back.',
+ noPermTitle:'KPI console is for management roles', noPermBody:'The console scorecard is scoped to management, HR and finance roles (A2/A3). Your metrics are on the mobile app under My KPIs.', noPermWhy:'A2/A3 · console scope · viewer',
+ offlineNote:'Offline — showing the last computed snapshot. Live values recompute on reconnect.',
+ naStateTitle:'Some inputs are missing',
+ naStateBody:'Several KPIs cannot compute because a data input has not been supplied. Each names the missing input and shows Not available — never a guessed or zero value (LIAB-03). Available KPIs still compute and count normally.',
+ // large-data
+ fullCatTitle:'Full KPI catalogue', fullCatMeta:'all 30 KPIs · 1,246-staff population · virtualised',
+ // feature-flag-off (whole module disabled)
+ foTag:'Module disabled',
+ foTitle:'KPI scorecard is turned off',
+ foBody:'This tenant does not have the KPI module enabled. The scorecard is switched off entirely — no metrics are computed and no cards are shown. This is different from having no KPIs assigned yet.',
+ foProv:'Enable the KPI module in',
+ foProvPath:'Provisioning · C21',
+ foWhy:'Feature flag KPI_MODULE = off · tenant-level',
+ retry:'Retry', close:'Close', myScope:'your personal metrics'
+},
+sw:{
+ reg:'rejista v1.2',
+ console:'Kadi ya KPI', consoleSub:'Konsoli · kwa jukumu · moja kwa moja kutoka data · C3',
+ ess:'KPI Zangu', essSub:'ESS · takwimu zako binafsi · E8',
+ stOn:'Kwenye lengo', stWatch:'Angalia', stOff:'Nje ya lengo', stMon:'Fuatilia', stNa:'Haipatikani',
+ sumOn:'Kwenye lengo', sumWatch:'Angalia', sumOff:'Nje ya lengo', sumNa:'Haipatikani',
+ kFormula:'Fomula', kTarget:'Lengo', naCard:'Haipatikani', naBecause:'haijatolewa',
+ scopeLbl:'Wigo',
+ cat_workforce:'Nguvu kazi', cat_diversity:'Uwiano & Ujumuishi', cat_grievances:'Malalamiko',
+ cat_disciplinary:'Nidhamu', cat_leave:'Likizo & Mahudhurio', cat_recruitment:'Ajira',
+ cat_talent:'Usimamizi wa vipaji', cat_performance:'Utendaji', cat_learning:'Kujifunza & Maendeleo',
+ cat_engagement:'Ushirikishwaji', cat_compliance:'Uzingatiaji',
+ liveNote:'Imekokotolewa moja kwa moja kutoka data ya nguvu kazi — idadi, mahudhurio, likizo, nidhamu na mafunzo (slice 2–6).',
+ lvrNote:'Idadi haijumuishi walioondoka (LVR-02).',
+ naRule:'KPI isiyo na kipengele inaonyesha Haipatikani na jina la kipengele — kamwe si nambari ya kubuni au sifuri (LIAB-03).',
+ consistNote:'Hesabu za Kwenye lengo / Angalia / Nje ya lengo zinalingana na kadi zinazoonyeshwa; Haipatikani na Fuatilia hazihesabiwi.',
+ emptyTitle:'Hakuna KPI kwenye wigo', emptyBody:'Hakuna takwimu zilizopangwa kwa mwonekano huu bado. Kipindi na jukumu vikipangwa, kadi zitaonekana hapa.',
+ loadingTitle:'Inakokotoa takwimu…',
+ successTitle:'Muhtasari wa kadi umechapishwa', successSub:'Umehifadhiwa kwa kipindi na kushirikishwa kwenye dashibodi. Thamani zimegandishwa kwa muhtasari huu.',
+ errTitle:'Takwimu hazikuweza kukokotolewa', errBody:'Kadi haipatikani kwa kipindi hiki. Hakuna thamani zinazoonyeshwa badala ya za kubuni (LIAB-03). Jaribu tena chanzo cha data kikirejea.',
+ noPermTitle:'Konsoli ya KPI ni kwa majukumu ya uongozi', noPermBody:'Kadi ya konsoli ni kwa majukumu ya uongozi, HR na fedha (A2/A3). Takwimu zako ziko kwenye programu ya simu chini ya KPI Zangu.', noPermWhy:'A2/A3 · wigo wa konsoli · mtazamaji',
+ offlineNote:'Nje ya mtandao — inaonyesha muhtasari wa mwisho uliokokotolewa. Thamani hai zitakokotolewa upya ukirejea.',
+ naStateTitle:'Baadhi ya vipengele havipo',
+ naStateBody:'KPI kadhaa haziwezi kukokotolewa kwa sababu kipengele cha data hakijatolewa. Kila moja inataja kipengele kilichokosekana na kuonyesha Haipatikani — kamwe si thamani ya kubuni au sifuri (LIAB-03). KPI zilizopo bado zinakokotolewa na kuhesabiwa kawaida.',
+ fullCatTitle:'Katalogi kamili ya KPI', fullCatMeta:'KPI zote 30 · idadi ya wafanyakazi 1,246 · imepunguzwa',
+ foTag:'Moduli imezimwa',
+ foTitle:'Kadi ya KPI imezimwa',
+ foBody:'Mteja huyu hana moduli ya KPI iliyowashwa. Kadi imezimwa kabisa — hakuna takwimu zinazokokotolewa wala kadi zinazoonyeshwa. Hii ni tofauti na kutokuwa na KPI zilizopangwa bado.',
+ foProv:'Washa moduli ya KPI katika',
+ foProvPath:'Utoaji · C21',
+ foWhy:'Kilamba KPI_MODULE = imezimwa · ngazi ya mteja',
+ retry:'Jaribu tena', close:'Funga', myScope:'takwimu zako binafsi'
+}};
+window.T=T;
+
+</script>
+<script>
+// Slice 7 · KPI scorecard (C3 console · E8 ESS) — flow logic (reuses Slice-4/5/6 kit)
+function t(k){return window.T[cur.lang][k];}
+const L=x=>typeof x==='string'?x:x[cur.lang];
+
+const ic={
+ users:'<svg class="svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8M22 21v-2a4 4 0 0 0-3-3.87M16 3.13A4 4 0 0 1 16 11"/></svg>',
+ trend:'<svg class="svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M23 6l-9.5 9.5-5-5L1 18M17 6h6v6"/></svg>',
+ shield:'<svg class="svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>',
+ clock:'<svg class="svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>',
+ pin:'<svg class="svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0z"/><circle cx="12" cy="10" r="2.5"/></svg>',
+ award:'<svg class="svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="8" r="6"/><path d="M8.2 13.9 7 22l5-3 5 3-1.2-8.1"/></svg>',
+ flag:'<svg class="svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1zM4 22v-7"/></svg>',
+ check:'<svg class="svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6 9 17l-5-5"/></svg>',
+ alert:'<svg class="svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></svg>',
+ calendar:'<svg class="svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>',
+ money:'<svg class="svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/><path d="M6 12h.01M18 12h.01"/></svg>',
+ cap:'<svg class="svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M22 10 12 5 2 10l10 5 10-5zM6 12v5c0 1 3 3 6 3s6-2 6-3v-5"/></svg>',
+ heart:'<svg class="svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8z"/></svg>',
+ phone:'<svg class="svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="6" y="2" width="12" height="20" rx="2.5"/><path d="M11 18h2"/></svg>',
+ doc:'<svg class="svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M9 13h6M9 17h4"/></svg>',
+ chart:'<svg class="svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 3v18h18M8 17V9M13 17V5M18 17v-6"/></svg>',
+ warn:'<svg class="svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></svg>',
+ off:'<svg class="svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M1 1l22 22M16.7 11.1A6 6 0 0 0 5 12M8.5 8.5A6 6 0 0 0 5 12M2 8.8A11 11 0 0 1 6 6M22 8.8a11 11 0 0 0-4.6-3.3M12 20h.01"/></svg>',
+ wifi:'<svg class="svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 12a10 10 0 0 1 14 0M8.5 15.5a5 5 0 0 1 7 0M12 19h.01"/></svg>',
+ sync:'<svg class="svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 12a9 9 0 1 1-3-6.7L21 8M21 3v5h-5"/></svg>',
+ lock:'<svg class="svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="5" y="11" width="14" height="9" rx="1"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>',
+ power:'<svg class="svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 3v9"/><path d="M6.6 6.6a8 8 0 1 0 10.8 0"/></svg>',
+ toggle:'<svg class="svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2" y="7" width="20" height="10" rx="5"/><circle cx="8" cy="12" r="2.6" fill="currentColor" stroke="none"/></svg>'};
+
+// ── whole-module DISABLED panel (feature-flag off) — no cards, no RAG bar, no counts ──
+function moduleOffBody(){
+ return `<div class="center">
+   <span class="ic moff">${ic.toggle}</span>
+   <span class="modtag">${t('foTag')}</span>
+   <h3>${t('foTitle')}</h3>
+   <p>${t('foBody')}</p>
+   <div class="prov">${ic.power}<span>${t('foProv')} <b>${t('foProvPath')}</b></span></div>
+   <div class="why">${t('foWhy')}</div></div>`;
+}
+
+const initials=n=>n.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
+let cur={screen:'console',state:'populated',role:'R07',theme:'light',surface:'desktop',lang:'en'};
+const ESS_EMP={n:'Joseph Mlimani',no:'TMCL-MW-4821',role:'Equipment Operator · Mwadui'};
+
+// ── app shell ──
+function app(title,sub,netOff,bodyHTML){
+ const net=netOff?`<span class="net off">${ic.off}${cur.lang==='en'?'Offline':'Nje ya mtandao'}</span>`
+  :`<span class="net">${ic.wifi}${cur.lang==='en'?'Online':'Mtandaoni'}</span>`;
+ return `<div class="app"><div class="topbar">${ic.chart}<div><div class="tt">${title}</div><div class="ts">${sub}</div></div>${net}</div>
+  <div class="body">${bodyHTML}</div></div>`;
+}
+function center(icCls,icon,title,body,extra){return `<div class="center"><span class="ic ${icCls||''}">${icon}</span><h3>${title}</h3><p>${body}</p>${extra||''}</div>`;}
+
+const CLS={green:'g',amber:'a',red:'r',neutral:'n'};
+const STLBL={green:'stOn',amber:'stWatch',red:'stOff',neutral:'stMon'};
+
+function naSet(state,ids){
+ if(state==='not-available') return ids.filter(id=>NA_INPUT[id]);
+ const first=ids.find(id=>NA_INPUT[id]); return first?[first]:[];
+}
+function kcard(id,live,isNA){
+ const k=KPIS[id], v=live[id], icon=ic[k.icon]||ic.chart, name=L(k.name);
+ if(isNA){
+  return `<div class="kcard na"><div class="khead"><div class="kn">${name}</div><span class="kstat na">${t('naCard')}</span></div>
+   <div class="kv navb">${ic.alert} ${t('naCard')}</div>
+   <div class="naband">${ic.warn} ${L(NA_INPUT[id])} — ${t('naBecause')}</div>
+   <div class="kfoot"><div class="krow"><span class="kk">${t('kFormula')}</span><span class="kf">${L(k.formula)}</span></div>
+    <div class="krow"><span class="kk">${t('kTarget')}</span><span class="kt">${L(k.target)}</span></div></div></div>`;
+ }
+ const st=kpiStatus({...k,v:v.v}), cls=CLS[st];
+ return `<div class="kcard ${cls}"><div class="khead"><div class="kn">${name}</div><span class="kstat ${cls}">${t(STLBL[st])}</span></div>
+  <div class="kv">${v.value}</div>${v.sub?`<div class="ksub">${v.sub}</div>`:''}
+  <div class="kfoot"><div class="krow"><span class="kk">${t('kFormula')}</span><span class="kf">${L(k.formula)}</span></div>
+   <div class="krow"><span class="kk">${t('kTarget')}</span><span class="kt">${L(k.target)}</span></div></div></div>`;
+}
+function ragbar(counts){
+ const p=(cls,dot,n,lbl)=>`<span class="ragpill ${cls}"><span class="ragdot ${dot}"></span><span class="n">${n}</span> ${lbl}</span>`;
+ return `<div class="ragbar">${p('g','g',counts.green,t('sumOn'))}${p('a','a',counts.amber,t('sumWatch'))}${p('r','r',counts.red,t('sumOff'))}${counts.na?p('na','na',counts.na,t('sumNa')):''}</div>`;
+}
+function sections(ids,naIds){
+ const live=kpiValues(cur.lang);
+ let html='';
+ KPI_CAT_ORDER.forEach(cat=>{
+  const inCat=ids.filter(id=>KPIS[id].cat===cat);
+  if(!inCat.length) return;
+  html+=`<div class="kcat">${t('cat_'+cat)}<span class="ln"></span></div><div class="kgrid">${inCat.map(id=>kcard(id,live,naIds.includes(id))).join('')}</div>`;
+ });
+ return html;
+}
+function counts(ids,naIds){
+ const live=kpiValues(cur.lang), c={green:0,amber:0,red:0,na:naIds.length};
+ ids.forEach(id=>{if(naIds.includes(id))return;const st=kpiStatus({...KPIS[id],v:live[id].v});if(st==='green')c.green++;else if(st==='amber')c.amber++;else if(st==='red')c.red++;});
+ return c;
+}
+
+// ── shared scorecard body across states ──
+function scoreBody(ids,scopeHTML){
+ const off=cur.state==='offline';
+ switch(cur.state){
+  case 'empty': return center('',ic.chart,t('emptyTitle'),t('emptyBody'));
+  case 'loading': return `<div class="ragbar">${'<span class="ragpill"><span class="skelrow" style="width:60px"></span></span>'.repeat(3)}</div>
+   <div class="kgrid">${'<div class="kcard n">'+'<div class="skelrow" style="width:90%;margin:6px 0"></div>'.repeat(4)+'</div>'.repeat(6)}</div>`;
+  case 'error': return `<div class="banner err">${ic.warn}<div><b>${t('errTitle')}</b><br>${t('errBody')}</div></div>
+   <button class="btn p block">${ic.sync} ${t('retry')}</button>`;
+  case 'success':{
+   const c=counts(ids,naSet('populated',ids));
+   return `<div class="seal"><span class="disc ok">${ic.check}</span><h3>${t('successTitle')}</h3><p>${t('successSub')}</p></div>${ragbar(c)}`;
+  }
+  case 'large-data':{
+   const allIds=Object.keys(KPIS), naIds=naSet('not-available',allIds);
+   return `${scopeHTML}<div class="rmeta"><span class="cnt">${t('fullCatTitle')}</span><span class="cnt">${t('fullCatMeta')}</span></div>
+    ${ragbar(counts(allIds,naIds))}<div class="note">${ic.shield}<span>${t('consistNote')} ${t('lvrNote')}</span></div>
+    ${sections(allIds,naIds)}`;
+  }
+  case 'not-available':{
+   const naIds=naSet('not-available',ids);
+   return `${scopeHTML}<div class="banner off">${ic.warn}<div><b>${t('naStateTitle')}</b><br>${t('naStateBody')}</div></div>
+    ${ragbar(counts(ids,naIds))}${sections(ids,naIds)}
+    <div class="note">${ic.alert}<span>${t('naRule')}</span></div>`;
+  }
+  default:{ // populated / offline
+   const naIds=naSet('populated',ids);
+   const banner=off?`<div class="banner off">${ic.off}<div>${t('offlineNote')}</div></div>`:'';
+   return `${scopeHTML}${banner}${ragbar(counts(ids,naIds))}
+    <div class="note">${ic.chart}<span>${t('liveNote')} ${t('lvrNote')}</span></div>
+    ${sections(ids,naIds)}
+    <div class="note">${ic.check}<span>${t('consistNote')}</span></div>`;
+  }
+ }
+}
+
+// ── console (C3) ──
+function consoleScreen(){
+ if(cur.state==='flag-off') return app(t('console'),t('consoleSub'),false,moduleOffBody());
+ const roleKey=R2ROLE[cur.role]||'hrhead';
+ if(roleKey==='employee'||cur.state==='no-permission'){
+  return app(t('console'),t('consoleSub'),false,
+   center('warn',ic.lock,t('noPermTitle'),t('noPermBody'),`<div class="why">${t('noPermWhy')} ${cur.role}</div>`));
+ }
+ const ids=ROLE_KPIS[roleKey]||[];
+ const scope=`<div class="rmeta"><span class="scope">${ic.shield} ${L(ROLE_TITLE[roleKey])} · ${cur.role}</span><span class="scope">${t('scopeLbl')}: ${L(ROLE_SCOPE[roleKey])}</span></div>`;
+ return app(t('console'),t('consoleSub'),cur.state==='offline',scoreBody(ids,scope));
+}
+
+// ── ESS My KPIs (E8) ──
+function essScreen(){
+ if(cur.state==='flag-off') return app(t('ess'),t('essSub'),false,moduleOffBody());
+ const ids=ROLE_KPIS.employee;
+ const head=`<div class="myhead"><span class="av">${initials(ESS_EMP.n)}</span>
+   <div style="flex:1"><div class="nm">${ESS_EMP.n}</div><div class="mt">${ESS_EMP.no} · ${ESS_EMP.role}</div></div></div>`;
+ const body=cur.state==='empty'||cur.state==='loading'||cur.state==='error'||cur.state==='success'
+  ? scoreBody(ids,'') : head+scoreBody(ids,'');
+ return app(t('ess'),t('essSub'),cur.state==='offline',body);
+}
+
+// ── render ──
+function render(){
+ const html=cur.screen==='ess'?essScreen():consoleScreen();
+ document.querySelector('.stage').innerHTML=`<div class="frame">${html}</div>`;
+}
+
+// ── switcher bar ──
+function seg(id,items,key){const el=document.getElementById(id);el.innerHTML=items.map(it=>{const v=Array.isArray(it)?it[0]:it,l=Array.isArray(it)?it[1]:it;return `<button data-v="${v}">${l}</button>`;}).join('');el.querySelectorAll('button').forEach(b=>b.onclick=()=>{cur[key]=b.getAttribute('data-v');sync();});}
+const AC={console:'AC-KPI-01/02/03/04 · LIAB-03 (N/A) · LVR-02',ess:'AC-KPI-04 ESS scorecard · LIAB-03 (N/A)'};
+function sync(){
+ document.documentElement.setAttribute('data-theme',cur.theme);
+ document.documentElement.setAttribute('data-surface',cur.surface);
+ [['screens','screen'],['states','state'],['roles','role'],['themes','theme'],['surfaces','surface'],['langs','lang']].forEach(([id,k])=>document.querySelectorAll('#'+id+' button').forEach(b=>b.classList.toggle('on',b.getAttribute('data-v')===cur[k])));
+ document.getElementById('acline').innerHTML=`Covers <b>${AC[cur.screen]}</b> · ${cur.theme}/${cur.surface} · viewer ${cur.role} · ${t('reg')}`;
+ render();
+}
+seg('screens',[['console','Console · C3'],['ess','My KPIs · E8']],'screen');
+seg('states',[['empty','empty'],['loading','loading'],['populated','populated'],['large-data','large-data'],['error','error'],['no-permission','no-perm'],['offline','offline'],['success','success'],['not-available','not-available'],['flag-off','flag-off']],'state');
+seg('roles',['R01','R02','R03','R04','R05','R06','R07','R08','R09','R10','R11','R12','R13'].map(r=>[r,r]),'role');
+seg('themes',[['light','Light'],['dark','Dark'],['glass','Glass'],['reduced','Reduced']],'theme');
+seg('surfaces',[['desktop','Desk'],['tablet','Tablet'],['mobile','Mobile'],['kiosk','Kiosk']],'surface');
+seg('langs',[['en','EN'],['sw','SW']],'lang');
+sync();
+
+</script>
+</body>
+</html>

@@ -1,0 +1,197 @@
+name: KIOSK Probe (site-enrolled, clock-only, single-use, PIN+photo, C20)
+
+# Kira rulings 2026-07-14, LIVE over HTTPS with raw bodies:
+#   • roster answers only for the enrolled kiosk (site workers, minimal fields);
+#   • wrong PIN → GENERIC 401 (per-person counter, no oracle);
+#   • a kiosk token CANNOT reach leave / payslip / landing / directory (403
+#     "kiosk session is clock-only" — server-side, not hidden UI);
+#   • a punch WITH photo attributes to the PIN'd person, the BINARY lands on
+#     disk and the DB stores the PATH (never base64);
+#   • the SAME token is DEAD after the punch (single-use / auto-logout);
+#   • a punch with the camera suppressed STILL SUCCEEDS and is FLAGGED
+#     "no photo / review" (records, never blocks);
+#   • C20 check 6 reports no-photo kiosk punches BY SITE with counts;
+#   • the served bundle carries the ordered EN/SW pair verbatim.
+# Cleanup removes punches, photo files, field PIN, kiosk device, sessions.
+# Sentinel: .github/RUN-KIOSK.
+on:
+  workflow_dispatch:
+  push:
+    branches: [claude/nifty-goodall-poihi4]
+    paths: ['.github/RUN-KIOSK']
+
+concurrency: { group: kiosk, cancel-in-progress: false }
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      UAT_IP: 152.239.121.249
+      UAT_CO: 11111111-1111-1111-1111-111111111111
+      BASE: https://uat.taifamining.tz
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - name: SSH path — tunnel first, direct fallback
+        env:
+          CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+          CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
+        run: |
+          mkdir -p ~/.ssh && printf '%s\n' "${{ secrets.UAT_SSH_PRIVATE_KEY }}" > ~/.ssh/uat && chmod 600 ~/.ssh/uat
+          sudo curl -sSL -o /usr/local/bin/cloudflared \
+            https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 \
+            && sudo chmod +x /usr/local/bin/cloudflared || true
+          cat > ~/.ssh/config <<EOF
+          Host uat-tunnel
+            HostName ssh.uat.taifamining.tz
+            User root
+            IdentityFile ~/.ssh/uat
+            StrictHostKeyChecking accept-new
+            ProxyCommand /usr/local/bin/cloudflared access ssh --hostname %h --service-token-id $CF_ACCESS_CLIENT_ID --service-token-secret $CF_ACCESS_CLIENT_SECRET
+          Host uat-direct
+            HostName $UAT_IP
+            User root
+            IdentityFile ~/.ssh/uat
+            StrictHostKeyChecking accept-new
+            ConnectTimeout 10
+          EOF
+          chmod 600 ~/.ssh/config
+          if timeout 30 ssh uat-tunnel true 2>/dev/null; then echo uat-tunnel > /tmp/ssh_host; exit 0; fi
+          for i in $(seq 1 60); do
+            ssh uat-direct true 2>/dev/null && { echo uat-direct > /tmp/ssh_host; exit 0; }
+            echo "waiting ($i/60)"; sleep 15
+          done
+          echo FATAL; exit 1
+
+      - name: BUILD_SHA START + seed kiosk device, worker, field PIN, R12 controls session
+        run: |
+          SSH="ssh $(cat /tmp/ssh_host)"
+          echo "── BUILD_SHA (running process) at START ──"
+          $SSH "curl -fsS http://127.0.0.1:3000/health 2>/dev/null; echo; cat /opt/hcmos/BUILD_SHA 2>/dev/null | head -c 40; echo"
+          # Photo store OUTSIDE the deploy tree; owned by the service user, 0700.
+          $SSH "mkdir -p /var/lib/hcmos/punch-photos && chmod 700 /var/lib/hcmos/punch-photos && U=\$(systemctl show -p User --value hcmos 2>/dev/null); [ -n \"\$U\" ] && chown -R \"\$U\" /var/lib/hcmos/punch-photos || true"
+          $SSH "cd /opt/hcmos && set -a && . /etc/hcmos/hcmos.env && set +a && node -e '
+            const db=require(\"./src/db\"), C=require(\"./src/crypto\");
+            const CO=\"$UAT_CO\";
+            (async()=>{ const out={};
+              await db.withOwner(async c=>{
+                const site=(await c.query(\"SELECT id, name FROM site WHERE company_id=\$1 ORDER BY name LIMIT 1\",[CO])).rows[0];
+                out.site=site.name;
+                out.emp=(await c.query(\"INSERT INTO employee(id,company_id,site_id,full_name,role_code,status,is_expat) VALUES(gen_random_uuid(),\$1,\$2,\x27Zz Kiosk Probe\x27,\x27R13\x27,\x27active\x27,false) RETURNING id\",[CO,site.id])).rows[0].id;
+                out.kiosk=(await c.query(\"INSERT INTO device(company_id,site_id,kind,status) VALUES(\$1,\$2,\x27kiosk\x27,\x27active\x27) RETURNING id\",[CO,site.id])).rows[0].id;
+                await c.query(\"INSERT INTO field_pin(company_id,employee_id,pin_hash) VALUES(\$1,\$2,\$3)\",[CO,out.emp,C.hashSecret(\"771144\")]);
+                const admin=(await c.query(\"SELECT id, role_code FROM app_user WHERE company_id=\$1 AND role_code IN (\x27R12\x27,\x27R11\x27) AND status=\x27active\x27 ORDER BY role_code DESC LIMIT 1\",[CO])).rows[0];
+                const t=C.newToken(); out.admtok=t;
+                out.admsid=(await c.query(\"INSERT INTO session(company_id,user_id,role_code,token_hash,expires_at) VALUES(\$1,\$2,\$3,\$4,now()+interval \x271 hour\x27) RETURNING id\",[CO,admin.id,admin.role_code,C.tokenHash(t)])).rows[0].id;
+              });
+              require(\"fs\").writeFileSync(\"/root/kiosk.json\",JSON.stringify(out));
+              console.log(\"seeded kiosk\",out.kiosk,\"at\",out.site); await db.close();
+            })().catch(e=>{console.error(e.message);process.exit(1);});
+          '"
+          $SSH 'cat /root/kiosk.json' > /tmp/kiosk.json
+
+      - name: KIOSK live matrix over HTTPS (raw bodies)
+        env:
+          CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+          CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
+        run: |
+          node - <<'EOF'
+          const fs = require('fs');
+          const Z = require('/tmp/kiosk.json');
+          const CF = { 'CF-Access-Client-Id': process.env.CF_ACCESS_CLIENT_ID, 'CF-Access-Client-Secret': process.env.CF_ACCESS_CLIENT_SECRET };
+          const BASE = process.env.BASE;
+          const JPEG = 'data:image/jpeg;base64,' + Buffer.alloc(256, 7).toString('base64');
+          const call = async (method, path, body, token) => {
+            const headers = { ...CF };
+            if (token) headers.authorization = `Bearer ${token}`;
+            if (body !== undefined) headers['content-type'] = 'application/json';
+            const r = await fetch(BASE+path,{method,headers,body:body!==undefined?JSON.stringify(body):undefined,signal:AbortSignal.timeout(20000)});
+            let d=null; try{d=await r.json();}catch{} return {status:r.status, body:d||{}};
+          };
+          let fail=false; const say=(ok,n,det)=>{ if(!ok)fail=true; console.log(`${ok?'PASS':'FAIL'}  ${n} — ${det}`); };
+          (async () => {
+            const ros = await call('POST','/kiosk/roster',{ device_id: Z.kiosk, q: 'Zz Kiosk Probe' });
+            say(ros.status===200 && ros.body.workers.some(w=>w.employee_id===Z.emp),
+                'roster answers for the enrolled kiosk (server-side search)', `${ros.status} site=${ros.body.site} raw=${JSON.stringify(ros.body.workers.slice(0,2))}`);
+            const bad = await call('POST','/auth/kiosk',{ device_id: Z.kiosk, employee_id: Z.emp, pin: '000000' });
+            say(bad.status===401 && bad.body.error==='authentication failed',
+                'wrong PIN → GENERIC 401', `${bad.status} raw=${JSON.stringify(bad.body)}`);
+            const ok = await call('POST','/auth/kiosk',{ device_id: Z.kiosk, employee_id: Z.emp, pin: '771144' });
+            say(ok.status===200 && ok.body.kind==='kiosk' && !!ok.body.token,
+                'correct PIN → single-use kiosk token', `${ok.status} kind=${ok.body.kind}`);
+            for (const p of ['/leave/balance','/me/payslips','/me/landing','/employees']) {
+              const r = await call('GET',p,undefined,ok.body.token);
+              say(r.status===403 && r.body.error==='kiosk session is clock-only',
+                  `kiosk token CANNOT reach ${p}`, `${r.status} raw=${JSON.stringify(r.body)}`);
+            }
+            const p1 = await call('POST','/kiosk/punch',{ direction:'in', photo: JPEG },ok.body.token);
+            say(p1.status===200 && p1.body.photo_recorded===true,
+                'punch WITH photo → 200, photo recorded', `${p1.status} raw=${JSON.stringify(p1.body)}`);
+            fs.writeFileSync('/tmp/att1.txt', p1.body.attendance_id||'');
+            const dead = await call('POST','/kiosk/punch',{ direction:'out', photo: null },ok.body.token);
+            say(dead.status===401, 'the SAME token is DEAD after the punch (auto-logout)', `${dead.status} raw=${JSON.stringify(dead.body)}`);
+            const ok2 = await call('POST','/auth/kiosk',{ device_id: Z.kiosk, employee_id: Z.emp, pin: '771144' });
+            const p2 = await call('POST','/kiosk/punch',{ direction:'out', photo: null },ok2.body.token);
+            say(p2.status===200 && p2.body.photo_recorded===false && p2.body.flagged==='no photo / review',
+                'camera suppressed → punch STILL SUCCEEDS, flagged', `${p2.status} raw=${JSON.stringify(p2.body)}`);
+            fs.writeFileSync('/tmp/att2.txt', p2.body.attendance_id||'');
+            const ctl = await call('GET','/controls',undefined,Z.admtok);
+            const chk = (ctl.body.checks||[]).find(x=>x.check==='kiosk.photo_missing');
+            say(ctl.status===200 && chk && chk.pass===false && chk.offenders.some(o=>o.no_photo_punches>=1),
+                'C20 check 6: no-photo kiosk punches BY SITE with counts', `raw=${JSON.stringify(chk)}`);
+            const shellR = await fetch(BASE+'/kiosk',{headers:CF,signal:AbortSignal.timeout(20000)});
+            const shell = await shellR.text();
+            const js = (shell.match(/src="(\/assets\/[^"]+\.js)"/)||[])[1];
+            let en=false, sw=false;
+            if (js) {
+              const bundle = await (await fetch(BASE+js,{headers:CF,signal:AbortSignal.timeout(30000)})).text();
+              en = bundle.includes('Shared kiosk, pick who is signing in');
+              sw = bundle.includes('Kioski cha pamoja, chagua anayeingia');
+            }
+            say(en && sw, 'served bundle carries the ordered EN/SW pair verbatim', `bundle=${js||'NOT FOUND'} en=${en} sw=${sw}`);
+            process.exit(fail?1:0);
+          })().catch(e=>{console.error('PROBE ERROR:',e.message);process.exit(1);});
+          EOF
+
+      - name: photo binary at rest (path in DB, file on disk) + attribution
+        run: |
+          SSH="ssh $(cat /tmp/ssh_host)"
+          EMP=$(python3 -c "import json;print(json.load(open('/tmp/kiosk.json'))['emp'])")
+          echo "── the two punches: attribution, direction, via, photo flag/path ──"
+          $SSH "sudo -u postgres psql -d hcmos -c \"
+            SELECT direction, via, photo_missing, coalesce(photo_path,'—') AS photo_path
+              FROM attendance WHERE employee_id='$EMP' ORDER BY punched_at\""
+          echo "── the photo BINARY exists on disk (never base64 in the DB) ──"
+          $SSH "P=\$(sudo -u postgres psql -d hcmos -Atc \"SELECT photo_path FROM attendance WHERE employee_id='$EMP' AND photo_missing=false\"); ls -l \"\$P\" && file \"\$P\" | head -1"
+
+      - name: audit chain + BUILD_SHA END + cleanup
+        if: always()
+        run: |
+          SSH="ssh $(cat /tmp/ssh_host)"
+          EMP=$(python3 -c "import json;print(json.load(open('/tmp/kiosk.json'))['emp'])" 2>/dev/null || echo '')
+          KIOSK=$(python3 -c "import json;print(json.load(open('/tmp/kiosk.json'))['kiosk'])" 2>/dev/null || echo '')
+          SID=$(python3 -c "import json;print(json.load(open('/tmp/kiosk.json'))['admsid'])" 2>/dev/null || echo '')
+          if [ -n "$EMP" ]; then
+            $SSH "P=\$(sudo -u postgres psql -d hcmos -Atc \"SELECT photo_path FROM attendance WHERE employee_id='$EMP' AND photo_path IS NOT NULL\"); [ -n \"\$P\" ] && rm -f \$P || true"
+            $SSH "sudo -u postgres psql -d hcmos -c \"
+              DELETE FROM attendance WHERE employee_id='$EMP';
+              DELETE FROM session WHERE device_id='$KIOSK' OR id='$SID';
+              DELETE FROM field_pin WHERE employee_id='$EMP';
+              DELETE FROM device WHERE id='$KIOSK';
+              DELETE FROM employee WHERE id='$EMP';\""
+          fi
+          echo "── audit chain: head + recompute + linkage ──"
+          $SSH "sudo -u postgres psql -d hcmos -c \"
+            SELECT (SELECT max(seq) FROM audit WHERE company_id='$UAT_CO') AS head_seq,
+                   bool_and(hash = encode(sha256(convert_to(prev_hash || concat_ws('|',
+                     company_id::text, coalesce(actor,''), coalesce(role,''), action,
+                     coalesce(entity,''), coalesce(entity_id,''), ts::text,
+                     coalesce(before::text,''), coalesce(after::text,'')), 'UTF8')),'hex')) AS recompute_ok
+              FROM audit WHERE company_id='$UAT_CO';
+            SELECT count(*) AS linkage_breaks FROM (
+              SELECT prev_hash, lag(hash) OVER (PARTITION BY company_id ORDER BY seq) AS expect FROM audit) x
+             WHERE (expect IS NULL AND prev_hash <> repeat('0',64)) OR (expect IS NOT NULL AND prev_hash <> expect)\""
+          echo "── BUILD_SHA END ──"
+          $SSH "curl -fsS http://127.0.0.1:3000/health 2>/dev/null; echo; cat /opt/hcmos/BUILD_SHA 2>/dev/null | head -c 40; echo"

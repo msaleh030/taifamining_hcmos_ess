@@ -1,0 +1,27 @@
+name: Latency Probe
+
+# Production-region shootout (Kira): Frankfurt vs Mumbai, measured from East
+# Africa via the free Globalping probe network. Read-only — no secrets, no
+# provisioning, no cost. Trigger: the .github/LATENCY-PROBE sentinel push or
+# the Actions "Run workflow" button.
+on:
+  workflow_dispatch:
+  push:
+    branches: [claude/nifty-goodall-poihi4]
+    paths: ['.github/LATENCY-PROBE']
+
+jobs:
+  probe:
+    name: East Africa -> Frankfurt vs Mumbai
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run latency probe
+        run: bash deploy/gha/latency-probe.sh
+      - name: Upload raw results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: latency-probe-results
+          path: probe-results/
+          if-no-files-found: ignore

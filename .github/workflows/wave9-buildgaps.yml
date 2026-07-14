@@ -1,0 +1,173 @@
+name: Wave9 Build-Gaps Probe (ingest 400/404, controls.run audit, /audit surface)
+
+# Wave 9 (2026-07-14): LIVE over HTTPS. Proves the four build-gap closures on the
+# box with RAW response bodies:
+#   • ingest preview with a non-array control_totals → 400 (was a 500 TypeError);
+#   • ingest approve with a malformed batch_id → 400, with an absent uuid → 404
+#     (was a 500 22P02 on the ::uuid cast);
+#   • GET /controls writes a controls.run audit row (the screen claims it does);
+#   • GET /audit is a read-only, oversight-only (R11/R12), filterable window over
+#     the chain — a non-oversight role (R07) is 403.
+# BUILD_SHA at start + end; audit chain recompute + linkage at the end (the
+# controls.run rows are legitimate forward-only appends — the head EXTENDS).
+# Cleans up only the minted sessions. Sentinel: .github/RUN-WAVE9.
+on:
+  workflow_dispatch:
+  push:
+    branches: [claude/nifty-goodall-poihi4]
+    paths: ['.github/RUN-WAVE9']
+
+concurrency: { group: wave9, cancel-in-progress: false }
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      UAT_IP: 152.239.121.249
+      UAT_CO: 11111111-1111-1111-1111-111111111111
+      BASE: https://uat.taifamining.tz
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - name: SSH path — tunnel first, direct fallback
+        env:
+          CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+          CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
+        run: |
+          mkdir -p ~/.ssh && printf '%s\n' "${{ secrets.UAT_SSH_PRIVATE_KEY }}" > ~/.ssh/uat && chmod 600 ~/.ssh/uat
+          sudo curl -sSL -o /usr/local/bin/cloudflared \
+            https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 \
+            && sudo chmod +x /usr/local/bin/cloudflared || true
+          cat > ~/.ssh/config <<EOF
+          Host uat-tunnel
+            HostName ssh.uat.taifamining.tz
+            User root
+            IdentityFile ~/.ssh/uat
+            StrictHostKeyChecking accept-new
+            ProxyCommand /usr/local/bin/cloudflared access ssh --hostname %h --service-token-id $CF_ACCESS_CLIENT_ID --service-token-secret $CF_ACCESS_CLIENT_SECRET
+          Host uat-direct
+            HostName $UAT_IP
+            User root
+            IdentityFile ~/.ssh/uat
+            StrictHostKeyChecking accept-new
+            ConnectTimeout 10
+          EOF
+          chmod 600 ~/.ssh/config
+          if timeout 30 ssh uat-tunnel true 2>/dev/null; then echo uat-tunnel > /tmp/ssh_host; echo tunnel; exit 0; fi
+          for i in $(seq 1 100); do
+            ssh uat-direct true 2>/dev/null && { echo uat-direct > /tmp/ssh_host; echo direct; exit 0; }
+            echo "waiting ($i/100)"; sleep 15
+          done
+          echo FATAL; exit 1
+
+      - name: BUILD_SHA START + mint role sessions (R11 oversight, R15 maker, R16 checker, R07 non-oversight)
+        run: |
+          SSH="ssh $(cat /tmp/ssh_host)"
+          echo "── BUILD_SHA (running process) at START of Wave 9 ──"
+          $SSH "curl -fsS http://127.0.0.1:3000/health 2>/dev/null; echo; cat /opt/hcmos/BUILD_SHA 2>/dev/null | head -c 40; echo"
+          $SSH "cd /opt/hcmos && set -a && . /etc/hcmos/hcmos.env && set +a && node -e '
+            const db=require(\"./src/db\"), C=require(\"./src/crypto\");
+            const CO=\"$UAT_CO\";
+            const mint=async(c,role)=>{ const u=(await c.query(\"SELECT id FROM app_user WHERE company_id=\$1 AND role_code=\$2 AND status=\x27active\x27 ORDER BY email LIMIT 1\",[CO,role])).rows[0];
+              if(!u) return null; const t=C.newToken();
+              const sid=(await c.query(\"INSERT INTO session(company_id,user_id,role_code,token_hash,expires_at) VALUES(\$1,\$2,\$3,\$4,now()+interval \x271 hour\x27) RETURNING id\",[CO,u.id,role,C.tokenHash(t)])).rows[0].id;
+              return {t,sid}; };
+            (async()=>{ const out={sids:[]};
+              await db.withOwner(async c=>{
+                for(const [k,role] of [[\"oversight\",\"R11\"],[\"maker\",\"R15\"],[\"checker\",\"R16\"],[\"nonov\",\"R07\"]]){
+                  const m=await mint(c,role); if(m){ out[k]=m.t; out.sids.push(m.sid); } else out[k+\"_missing\"]=role;
+                }
+              });
+              require(\"fs\").writeFileSync(\"/root/wave9.json\",JSON.stringify(out));
+              console.log(\"minted\",JSON.stringify(Object.keys(out).filter(k=>out[k+\"_missing\"]||k.endsWith(\"_missing\")).length?out:{ok:true}));
+              await db.close();
+            })().catch(e=>{console.error(e.message);process.exit(1);});
+          '"
+          $SSH 'cat /root/wave9.json' > /tmp/w9.json
+          echo "── minted role sessions (any *_missing role would be BLOCKED evidence) ──"
+          node -e 'const z=require("/tmp/w9.json"); console.log(JSON.stringify({have:["oversight","maker","checker","nonov"].filter(k=>z[k]), missing:Object.keys(z).filter(k=>k.endsWith("_missing"))}))'
+
+      - name: 9.x — ingest 400/404 + controls.run audit + /audit surface (raw bodies)
+        env:
+          CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+          CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
+        run: |
+          node - <<'EOF'
+          const Z = require('/tmp/w9.json');
+          const CF = { 'CF-Access-Client-Id': process.env.CF_ACCESS_CLIENT_ID, 'CF-Access-Client-Secret': process.env.CF_ACCESS_CLIENT_SECRET };
+          const BASE = process.env.BASE;
+          const call = async (method, path, token, body) => {
+            const headers = { ...CF, authorization: `Bearer ${token}` };
+            if (body !== undefined) headers['content-type'] = 'application/json';
+            const r = await fetch(BASE+path,{method,headers,body:body!==undefined?JSON.stringify(body):undefined,signal:AbortSignal.timeout(20000)});
+            let d=null; try{d=await r.json();}catch{} return {status:r.status, body:d||{}};
+          };
+          let fail=false; const say=(ok,n,det)=>{ if(!ok)fail=true; console.log(`${ok?'PASS':'FAIL'}  ${n} — ${det}`); };
+          (async () => {
+            if (!Z.maker || !Z.checker || !Z.oversight || !Z.nonov) {
+              say(false,'role sessions present','BLOCKED — missing '+JSON.stringify(Object.keys(Z).filter(k=>k.endsWith('_missing'))));
+              process.exit(1);
+            }
+            // 1. ingest preview: non-array control_totals → 400 (was 500).
+            const p = await call('POST','/ingest/opening-balance/preview',Z.maker,{rows:[],control_totals:{site:'NM',count:5}});
+            say(p.status===400 && /control_totals must be an array/.test(JSON.stringify(p.body)),
+                'ingest preview non-array control_totals → 400', `${p.status} raw=${JSON.stringify(p.body)}`);
+            // 2a. ingest approve: malformed batch_id → 400 (was 500 22P02).
+            const bad = await call('POST','/ingest/opening-balance/commit',Z.checker,{batch_id:'not-a-uuid'});
+            say(bad.status===400 && /invalid batch_id/.test(JSON.stringify(bad.body)),
+                'ingest approve malformed batch_id → 400', `${bad.status} raw=${JSON.stringify(bad.body)}`);
+            // 2b. ingest approve: well-formed but absent → honest 404.
+            const absent = await call('POST','/ingest/opening-balance/commit',Z.checker,{batch_id:'b0000000-0000-0000-0000-0000000000ff'});
+            say(absent.status===404, 'ingest approve absent batch_id → 404', `${absent.status} raw=${JSON.stringify(absent.body)}`);
+            // 3. controls run → 200, writes a controls.run audit row (verified on the box below).
+            const ctl = await call('GET','/controls',Z.oversight);
+            say(ctl.status===200 && Array.isArray(ctl.body.checks), 'controls run → 200 (audited on the box)',
+                `${ctl.status} all_pass=${ctl.body.all_pass} checks=${(ctl.body.checks||[]).length}`);
+            // 4a. /audit oversight read, filtered to controls.run → 200 with the fresh row.
+            const av = await call('GET','/audit?action=controls.run&limit=3',Z.oversight);
+            const rows = av.body.rows||[];
+            say(av.status===200 && rows.length>=1 && rows.every(r=>r.action==='controls.run'),
+                '/audit oversight read (action=controls.run) → 200', `${av.status} n=${rows.length} newest=${JSON.stringify(rows[0]||null).slice(0,160)}`);
+            // 4b. /audit is oversight-only — a non-oversight role (R07) is 403.
+            const deny = await call('GET','/audit',Z.nonov);
+            say(deny.status===403, '/audit refused to non-oversight R07 → 403', `${deny.status} raw=${JSON.stringify(deny.body)}`);
+            // 4c. malformed before= is a clean 400, not a 500.
+            const badpage = await call('GET','/audit?before=abc',Z.oversight);
+            say(badpage.status===400, '/audit malformed before= → 400', `${badpage.status} raw=${JSON.stringify(badpage.body)}`);
+            process.exit(fail?1:0);
+          })().catch(e=>{console.error('PROBE ERROR:',e.message);process.exit(1);});
+          EOF
+
+      - name: controls.run audit row + chain + BUILD_SHA END + cleanup
+        if: always()
+        run: |
+          SSH="ssh $(cat /tmp/ssh_host)"
+          echo "── controls.run audit: the control run wrote a row (who/role/outcome) ──"
+          $SSH "sudo -u postgres psql -d hcmos -c \"
+            SELECT split_part(actor,'@',1) AS who, role, after->>'all_pass' AS all_pass,
+                   jsonb_array_length(after->'checks') AS checks, ts
+              FROM audit WHERE company_id='$UAT_CO' AND action='controls.run' ORDER BY seq DESC LIMIT 3\""
+          echo "── audit chain: head + recompute + linkage (controls.run rows are forward-only, head EXTENDS) ──"
+          $SSH "sudo -u postgres psql -d hcmos -c \"
+            SELECT (SELECT max(seq) FROM audit WHERE company_id='$UAT_CO') AS head_seq,
+                   bool_and(hash = encode(sha256(convert_to(prev_hash || concat_ws('|',
+                     company_id::text, coalesce(actor,''), coalesce(role,''), action,
+                     coalesce(entity,''), coalesce(entity_id,''), ts::text,
+                     coalesce(before::text,''), coalesce(after::text,'')), 'UTF8')),'hex')) AS recompute_ok
+              FROM audit WHERE company_id='$UAT_CO';
+            SELECT count(*) AS linkage_breaks FROM (
+              SELECT prev_hash, lag(hash) OVER (PARTITION BY company_id ORDER BY seq) AS expect FROM audit) x
+             WHERE (expect IS NULL AND prev_hash <> repeat('0',64)) OR (expect IS NOT NULL AND prev_hash <> expect)\""
+          echo "── BUILD_SHA (running process) at END of Wave 9 ──"
+          $SSH "curl -fsS http://127.0.0.1:3000/health 2>/dev/null; echo; cat /opt/hcmos/BUILD_SHA 2>/dev/null | head -c 40; echo"
+          echo "── cleanup: minted probe sessions only (controls.run audit rows are legitimate, kept) ──"
+          $SSH "cd /opt/hcmos && set -a && . /etc/hcmos/hcmos.env && set +a && node -e '
+            const db=require(\"./src/db\");
+            (async()=>{ const Z=require(\"/root/wave9.json\");
+              await db.withOwner(async c=>{ for(const sid of (Z.sids||[])) await c.query(\"DELETE FROM session WHERE id=\$1\",[sid]); });
+              await db.close(); console.log(\"cleanup done\",(Z.sids||[]).length,\"sessions\");
+            })().catch(e=>{console.error(e.message);});
+          '"
+          $SSH "rm -f /root/wave9.json"

@@ -1,0 +1,136 @@
+'use strict';
+// Slice 6 — Leave pay & liability (LIAB-01/02/03, LVR-02, registry v1.4).
+// ONE base: leave-pay base == EX-2 daily-rate base (exact.dailyRateBase).
+//   daily rate = monthly remuneration / 30; liability = outstanding days × rate;
+//   ACTIVE staff only (leavers excluded); missing input → not-available (named),
+//   never zero.
+const { test, before, after } = require('node:test');
+const assert = require('node:assert/strict');
+const H = require('./helpers');
+const db = require('../src/db');
+const liab = require('../src/liability');
+const exact = require('../src/exact');
+const contractDef = require('../src/exact_contract');
+const { F } = H;
+
+const A = F.TENANT_A;
+const session = { company_id: A, user_id: F.USERS.FINMGR_A.id, role_code: 'R15' };
+const N = contractDef.build().length;
+
+// EX-2 base sums to 3000 (→ daily rate 3000/30 = 100). Basic sits at col 10
+// (v2.0, INCLUDED); Rotation(22)/overtime(15,21)/Night(24) are populated to
+// prove they never reach the base.
+function baseCells() {
+  const c = Array(N).fill('0');
+  c[10] = '3000';                       // Basic Salary (included)
+  c[22] = '999';                        // Rotation      — excluded
+  c[15] = '999'; c[21] = '999';         // overtime      — excluded
+  c[24] = '999';                        // Night         — excluded
+  return c;
+}
+
+// EX-2 governance gate (Kira 2026-07-14): the leave-pay base is fail-closed until
+// the classification is RATIFIED. These tests certify the MATH, so they ratify;
+// the fail-closed / unclassified-naming behaviour is proved in leave_base_ex2.test.js.
+const owner = (sql, p) => db.withOwner((c) => c.query(sql, p));
+const ratify = (v) => owner(
+  `INSERT INTO config(company_id,key,value) VALUES ($1,'exact.dailyrate.classification.ratified',$2)
+   ON CONFLICT (company_id,key) DO UPDATE SET value=EXCLUDED.value`, [A, v]);
+before(async () => { await H.start(); await ratify('true'); });
+after(async () => { await ratify('__TBC__'); await H.stop(); });
+
+test('LIAB-01 liability = outstanding days × (monthly remuneration / 30), from the one EX-2 base', async () => {
+  const cells = baseCells();
+  assert.equal(await exact.dailyRateBase(session, cells), 3000, 'overtime + rotation/night excluded (one base)');
+  assert.equal(await liab.dailyRate(session, cells), 100);         // 3000 / 30
+  const r = await liab.liabilityFor(session, { employeeId: F.EMP.DAVE, days: 10, cells });
+  assert.equal(r.available, true);
+  assert.equal(r.daily_rate, 100);
+  assert.equal(r.liability, 1000);                                 // 10 × 100
+});
+
+test('LIAB-03 missing input → not-available (input named), never zero', async () => {
+  const na = await liab.liabilityFor(session, { employeeId: F.EMP.DAVE, days: 10, cells: Array(N).fill('0') });
+  assert.equal(na.available, false);
+  assert.equal(na.missing, 'monthly remuneration');
+  assert.ok(!('liability' in na), 'not-available, never a zero liability');
+});
+
+test('LIAB-02 / LVR-02 batch liability covers ACTIVE staff only; leavers excluded; missing named', async () => {
+  const cells = baseCells();
+  const setup = await db.withOwner(async (c) => {
+    const b = (await c.query(
+      `INSERT INTO exact_batch(company_id,period,file_hash,version,status,row_count)
+       VALUES ($1,'2026-06-liab','liab-hash-2','v2.0','staged',3) RETURNING id`, [A])).rows[0];
+    const row = (empId, emp, cellArr, no) => c.query(
+      `INSERT INTO exact_row(company_id,batch_id,row_no,employee_id_raw,full_name,cells,matched_employee,match_status)
+       VALUES ($1,$2,$3,$4,'',$5,$6,'matched')`, [A, b.id, no, empId, JSON.stringify(cellArr), emp]);
+    await row('E-A-0005', F.EMP.DAVE, cells, 1);              // active → counted
+    await row('E-A-0004', F.EMP.TERM, cells, 2);              // terminated (leaver) → excluded
+    await row('E-A-0002', F.EMP.CAROL, Array(N).fill('0'), 3); // active but no remuneration → not-available
+    const c1 = (await c.query(`INSERT INTO leave_carry(company_id,employee_id,days,carried_for_year) VALUES ($1,$2,10,2026) RETURNING id`, [A, F.EMP.DAVE])).rows[0];
+    const c2 = (await c.query(`INSERT INTO leave_carry(company_id,employee_id,days,carried_for_year) VALUES ($1,$2,7,2026) RETURNING id`, [A, F.EMP.TERM])).rows[0];
+    return { batchId: b.id, carryIds: [c1.id, c2.id] };
+  });
+  try {
+    const res = await liab.batchLiability(session, setup.batchId);
+    assert.equal(res.total, 1000, 'only the active employee with remuneration contributes');
+    assert.deepEqual(res.available.map((a) => a.employee_id), [F.EMP.DAVE]);
+    assert.deepEqual(res.excluded.map((e) => e.employee_id), [F.EMP.TERM]);      // LVR-02
+    assert.deepEqual(res.not_available.map((n) => n.employee_id), [F.EMP.CAROL]);
+    assert.equal(res.not_available[0].missing, 'monthly remuneration');
+  } finally {
+    await db.withOwner(async (c) => {
+      for (const id of setup.carryIds) await c.query('DELETE FROM leave_carry WHERE id=$1', [id]);
+      await c.query('DELETE FROM exact_batch WHERE id=$1', [setup.batchId]); // cascades exact_row
+    });
+  }
+});
+
+// ── bughunt-B #6: an employee matched by MORE THAN ONE Exact row counts ONCE ──
+// openLeaveDays() returns the WHOLE outstanding balance, so each duplicate row
+// re-added the full liability to the register (double-counted totals).
+test('LIAB-04 duplicate matched rows for one employee do not double-count the liability', async () => {
+  const cells = baseCells();
+  const setup = await db.withOwner(async (c) => {
+    const b = (await c.query(
+      `INSERT INTO exact_batch(company_id,period,file_hash,version,status,row_count)
+       VALUES ($1,'2026-06-dup','liab-hash-dup','v2.0','staged',2) RETURNING id`, [A])).rows[0];
+    const row = (no) => c.query(
+      `INSERT INTO exact_row(company_id,batch_id,row_no,employee_id_raw,full_name,cells,matched_employee,match_status)
+       VALUES ($1,$2,$3,'E-A-0005','',$4,$5,'matched')`, [A, b.id, no, JSON.stringify(cells), F.EMP.DAVE]);
+    await row(1); await row(2); // the SAME employee, twice
+    const cy = (await c.query(
+      `INSERT INTO leave_carry(company_id,employee_id,days,carried_for_year) VALUES ($1,$2,10,2026) RETURNING id`,
+      [A, F.EMP.DAVE])).rows[0];
+    return { batchId: b.id, carryId: cy.id };
+  });
+  try {
+    const res = await liab.batchLiability(session, setup.batchId);
+    assert.equal(res.total, 1000, 'liability counted ONCE (10 days × 100), not doubled to 2000');
+    assert.deepEqual(res.available.map((a) => a.employee_id), [F.EMP.DAVE], 'one entry for the employee');
+    assert.deepEqual(res.excluded, [{ employee_id: F.EMP.DAVE, status: 'duplicate-row' }],
+      'the duplicate row is reported, never silently re-added');
+  } finally {
+    await db.withOwner(async (c) => {
+      await c.query('DELETE FROM leave_carry WHERE id=$1', [setup.carryId]);
+      await c.query('DELETE FROM exact_batch WHERE id=$1', [setup.batchId]);
+    });
+  }
+});
+
+// ── bughunt-B #9: a zero/garbage divisor must 409-block, never divide ─────────
+test('LIAB-05 payroll.daily_rate.divisor of 0 blocks the computation with 409 (never Infinity)', async () => {
+  const set = (v) => db.withOwner((c) =>
+    c.query(`UPDATE config SET value=$1 WHERE company_id=$2 AND key='payroll.daily_rate.divisor'`, [v, A]));
+  await set('0');
+  try {
+    await assert.rejects(liab.dailyRate(session, baseCells()), (e) => {
+      assert.equal(e.status, 409);
+      assert.match(e.message, /not a positive integer/);
+      return true;
+    });
+  } finally {
+    await set('30'); // restore the PC-1 value
+  }
+});

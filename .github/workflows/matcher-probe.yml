@@ -1,0 +1,121 @@
+name: Correction-1 Matcher Probe (hard-fail live, v2.0 contract, forensic targets, chain)
+
+# Correction 1 (Kira 2026-07-14): exact case-insensitive resolution with HARD
+# FAIL on zero/duplicate resolution, contract v2.0 = the official export layout
+# (migration 038). This probe runs AFTER the deploy and produces raw evidence:
+#   • v2.0 contract + config on the box;
+#   • scripts/probe-matcher-c1.js — HTTP + engine hard-fail exercise (MEDICAL
+#     zero-resolution, duplicated-header ambiguity, pending-Cecilia gate,
+#     positive staging path), config flips restored, batches cleaned;
+#   • the ratification forensic over the OFFICIAL file (base/allowances/daily
+#     targets + net identity) — now that 'Net Payment' resolves;
+#   • audit chain recompute + BUILD_SHA start/end.
+# Sentinel: .github/RUN-MATCHER.
+on:
+  workflow_dispatch:
+  push:
+    branches: [claude/nifty-goodall-poihi4]
+    paths: ['.github/RUN-MATCHER']
+
+concurrency: { group: matcher, cancel-in-progress: false }
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      UAT_IP: 152.239.121.249
+      UAT_CO: 11111111-1111-1111-1111-111111111111
+    steps:
+      - uses: actions/checkout@v4
+      - name: SSH path — tunnel first, direct fallback
+        env:
+          CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+          CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
+        run: |
+          mkdir -p ~/.ssh && printf '%s\n' "${{ secrets.UAT_SSH_PRIVATE_KEY }}" > ~/.ssh/uat && chmod 600 ~/.ssh/uat
+          sudo curl -sSL -o /usr/local/bin/cloudflared \
+            https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 \
+            && sudo chmod +x /usr/local/bin/cloudflared || true
+          cat > ~/.ssh/config <<EOF
+          Host uat-tunnel
+            HostName ssh.uat.taifamining.tz
+            User root
+            IdentityFile ~/.ssh/uat
+            StrictHostKeyChecking accept-new
+            ProxyCommand /usr/local/bin/cloudflared access ssh --hostname %h --service-token-id $CF_ACCESS_CLIENT_ID --service-token-secret $CF_ACCESS_CLIENT_SECRET
+          Host uat-direct
+            HostName $UAT_IP
+            User root
+            IdentityFile ~/.ssh/uat
+            StrictHostKeyChecking accept-new
+            ConnectTimeout 10
+          EOF
+          chmod 600 ~/.ssh/config
+          if timeout 30 ssh uat-tunnel true 2>/dev/null; then echo uat-tunnel > /tmp/ssh_host; exit 0; fi
+          for i in $(seq 1 60); do
+            ssh uat-direct true 2>/dev/null && { echo uat-direct > /tmp/ssh_host; exit 0; }
+            echo "waiting ($i/60)"; sleep 15
+          done
+          echo FATAL; exit 1
+
+      - name: BUILD_SHA START + contract v2.0 + config on the box
+        run: |
+          SSH="ssh $(cat /tmp/ssh_host)"
+          echo "── BUILD_SHA (running process) ──"
+          $SSH "curl -fsS http://127.0.0.1:3000/health 2>/dev/null; echo; cat /opt/hcmos/BUILD_SHA 2>/dev/null | head -c 40; echo"
+          echo "── contract v2.0: count must be 49, all pinned, official strings ──"
+          $SSH "sudo -u postgres psql -d hcmos -c \"
+            SELECT count(*) AS v2_columns, bool_and(pinned) AS all_pinned
+              FROM exact_column WHERE version='v2.0';
+            SELECT position, section, header FROM exact_column
+             WHERE version='v2.0' AND position IN (9,10,16,18,19,20,23,25,26,27,28,42,43,44)
+             ORDER BY position\""
+          echo "── config: version/rows/columns after migration 038 ──"
+          $SSH "sudo -u postgres psql -d hcmos -c \"
+            SELECT key, value FROM config
+             WHERE company_id='$UAT_CO' AND key IN
+              ('exact.contract.version','exact.header_row','exact.section_row',
+               'exact.col.gross','exact.col.roundup','exact.col.rounddown',
+               'exact.dailyrate.gross_name','exact.dailyrate.include_names',
+               'exact.dailyrate.exclude_names','exact.dailyrate.pending_names',
+               'exact.dailyrate.classification.ratified')
+             ORDER BY key\""
+
+      - name: Hard-fail matcher live (HTTP + engine, flips restored, cleanup inside)
+        run: |
+          SSH="ssh $(cat /tmp/ssh_host)"
+          $SSH "cd /opt/hcmos && set -a && . /etc/hcmos/hcmos.env && set +a && node scripts/probe-matcher-c1.js $UAT_CO"
+
+      - name: Ratification forensic over the OFFICIAL file (targets + net identity)
+        run: |
+          SSH="ssh $(cat /tmp/ssh_host)"
+          $SSH "cd /opt/hcmos && node scripts/wave3-file-forensic.js /root/uat-data/Payroll_Master_File_North_Mara.xlsx --kind payroll" \
+            | python3 -c "
+          import json,sys
+          d=json.load(sys.stdin)
+          print(json.dumps({k:d[k] for k in ('file','data_rows','tin','ratification') if k in d}, indent=2))
+          r=d.get('ratification') or {}
+          bad=[k for k in ('base_target_pass','allow_target_pass','daily_target_pass') if not r.get(k)]
+          if r.get('GROSS_TRAP_TRIPPED'): bad.append('GROSS_TRAP_TRIPPED')
+          if r.get('net_identity_fails',1)!=0: bad.append('net_identity_fails=%s'%r.get('net_identity_fails'))
+          print('FORENSIC:', 'FAIL '+','.join(bad) if bad else 'ALL TARGETS PASS')
+          sys.exit(1 if bad else 0)"
+
+      - name: audit chain + BUILD_SHA END
+        if: always()
+        run: |
+          SSH="ssh $(cat /tmp/ssh_host)"
+          echo "── audit chain: head + recompute + linkage ──"
+          $SSH "sudo -u postgres psql -d hcmos -c \"
+            SELECT (SELECT max(seq) FROM audit WHERE company_id='$UAT_CO') AS head_seq,
+                   bool_and(hash = encode(sha256(convert_to(prev_hash || concat_ws('|',
+                     company_id::text, coalesce(actor,''), coalesce(role,''), action,
+                     coalesce(entity,''), coalesce(entity_id,''), ts::text,
+                     coalesce(before::text,''), coalesce(after::text,'')), 'UTF8')),'hex')) AS recompute_ok
+              FROM audit WHERE company_id='$UAT_CO';
+            SELECT count(*) AS linkage_breaks FROM (
+              SELECT prev_hash, lag(hash) OVER (PARTITION BY company_id ORDER BY seq) AS expect FROM audit) x
+             WHERE (expect IS NULL AND prev_hash <> repeat('0',64)) OR (expect IS NOT NULL AND prev_hash <> expect)\""
+          echo "── BUILD_SHA END ──"
+          $SSH "curl -fsS http://127.0.0.1:3000/health 2>/dev/null; echo; cat /opt/hcmos/BUILD_SHA 2>/dev/null | head -c 40; echo"

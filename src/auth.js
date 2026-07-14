@@ -4,6 +4,8 @@
 const db = require('./db');
 const cfg = require('./config');
 const roles = require('./roles');
+const a3 = require('./a3');
+const sitescope = require('./sitescope');
 const C = require('./crypto');
 const { HttpError, genericAuthError } = require('./errors');
 
@@ -12,19 +14,33 @@ const isUuid = (s) => typeof s === 'string' && UUID_RE.test(s);
 const future = (ts) => ts && new Date(ts).getTime() > Date.now();
 
 // ── AUTH-01/03/04/06: console sign-in (email + password + MFA) ─────────────
-async function consoleLogin({ email, password, mfa }) {
-  if (!email || !password || !mfa) throw genericAuthError();
+// MFA (TOTP) is required unless the tenant explicitly disables it with config
+// `auth.mfa.required=0` — a UAT/CRP convenience only. The default keeps
+// AUTH-01's three-factor rule, so tenants are unchanged unless deliberately set.
+async function consoleLogin({ email, password, mfa }, meta = {}) {
+  if (!email || !password) throw genericAuthError();
 
   const r = await db.query('SELECT * FROM auth_lookup_console($1)', [email]);
   const u = r.rows[0];
+  // Always spend the scrypt cost, even for an unknown/inactive/locked account,
+  // so login timing never reveals whether the email exists (enumeration oracle).
+  const pwOk = C.verifySecret(password, (u && u.password_hash) || C.DUMMY_HASH);
   if (!u) throw genericAuthError();                       // unknown email
   if (u.company_status !== 'active') throw genericAuthError();
   if (future(u.locked_until)) throw genericAuthError();   // AC-AUTH-03: still locked
 
-  // Verify ALL THREE factors; status must be active (terminated/suspended refused).
+  // Super accounts are MFA-MANDATORY unconditionally (Kira 2026-07-13): the
+  // setup-phase auth.mfa.required=0 convenience never applies to them.
+  const mfaRequired = u.is_super_admin === true
+    || (await cfg.getInt(u.company_id, 'auth.mfa.required', 1)) !== 0;
+  if (mfaRequired && !mfa) throw genericAuthError();      // AUTH-04: never name the factor
+
+  // Verify the factors; status must be active (terminated/suspended refused).
+  // verifyTotp now accepts only the [step-1, step] window — a code from the
+  // FUTURE (the old +1 step) is never valid, halving the acceptance window.
   const ok = u.status === 'active'
-    && C.verifySecret(password, u.password_hash)
-    && C.verifyTotp(mfa, u.mfa_secret);
+    && pwOk
+    && (!mfaRequired || C.verifyTotp(mfa, u.mfa_secret));
 
   if (!ok) {
     const threshold = await cfg.getInt(u.company_id, 'auth.lockout.threshold', 5);
@@ -35,8 +51,10 @@ async function consoleLogin({ email, password, mfa }) {
 
   const ttl = await cfg.getInt(u.company_id, 'session.ttl', 3600);
   const token = C.newToken();
-  const s = await db.query('SELECT * FROM auth_console_success($1,$2,$3)',
-    [u.user_id, C.tokenHash(token), ttl]);
+  // Forward-only forensics (Kira 2026-07-13): record the source IP and whether a
+  // second factor was actually presented on this auth.signin row.
+  const s = await db.query('SELECT * FROM auth_console_success($1,$2,$3,$4,$5)',
+    [u.user_id, C.tokenHash(token), ttl, meta.source_ip || null, mfa != null && mfa !== '']);
   const land = roles.landingFor(u.role_code);
   return {
     token,
@@ -56,7 +74,6 @@ async function fieldLogin({ device_id, pin, idempotency_key }) {
   if (!d) throw genericAuthError();                       // unregistered device refused
   if (d.company_status !== 'active') throw genericAuthError();
   if (d.device_status !== 'active') throw genericAuthError();
-  if (d.user_status === 'terminated') throw genericAuthError(); // terminated refused
   if (future(d.locked_until)) throw genericAuthError();
 
   if (!C.verifySecret(pin, d.pin_hash)) {
@@ -65,6 +82,18 @@ async function fieldLogin({ device_id, pin, idempotency_key }) {
     await db.query('SELECT * FROM auth_device_fail($1,$2,$3)', [device_id, threshold, duration]);
     throw genericAuthError();
   }
+
+  // E14 (Kira 2026-07-14): identity is now PROVEN — correct PIN on the
+  // registered device. Only at this point may the account status be disclosed:
+  // a suspended (DISC-03, reversible) or terminated (LVR-01) worker gets a
+  // DISTINCT blocked answer and NO session — the client draws the E14 screen,
+  // never a raw error, never a working session. A guesser with a wrong PIN
+  // still learns nothing (AUTH-04 generic, above). The gate reads BOTH the
+  // employee record (the field/ESS source of truth — covers the no-app_user
+  // bootstrap) and the app_user (console hold); terminated outranks suspended.
+  const statuses = [d.employee_status, d.user_status].filter(Boolean);
+  if (statuses.includes('terminated')) throw new HttpError(403, 'account terminated', { blocked: 'terminated' });
+  if (statuses.includes('suspended'))  throw new HttpError(403, 'account suspended',  { blocked: 'suspended' });
 
   const ttl = await cfg.getInt(d.company_id, 'session.field.ttl', 43200);
   const defaultRole = await cfg.getConfig(d.company_id, 'field.default.role', 'R13');
@@ -87,6 +116,20 @@ async function fieldLogin({ device_id, pin, idempotency_key }) {
     route: '/' + (land.modules[0] || 'field_ops'),
     expires_at: out.expires_at,
   };
+}
+
+// PUBLIC (pre-auth) login config: tells the login UI whether to render the MFA
+// field. Reads the SAME `auth.mfa.required` key that consoleLogin enforces, so
+// the field's visibility and enforcement can never disagree (no half-flip).
+// Pre-auth there is no tenant context, so it resolves the primary (earliest
+// active) tenant — correct for the single-tenant UAT box; enforcement itself
+// always stays per-tenant on the actual login. No secrets in the response.
+async function publicAuthConfig() {
+  // SECURITY DEFINER read (tenant is under RLS; the app role has no company
+  // context pre-auth). Absent row → safe default (field shown).
+  const r = await db.query('SELECT * FROM auth_public_config()');
+  const mfaRequired = r.rows[0] ? r.rows[0].mfa_required !== false : true;
+  return { mfaRequired };
 }
 
 // Session validation — run on every authenticated request.
@@ -114,9 +157,30 @@ async function resetPassword(session, { target_user, new_password }) {
   if (!owners.includes(session.role_code)) throw new HttpError(403, 'forbidden');
 
   // Target must be in the actor's tenant — RLS makes other tenants invisible.
-  const exists = await db.withTenant(session.company_id, (c) =>
-    c.query('SELECT 1 FROM app_user WHERE id=$1', [target_user]));
-  if (exists.rows.length === 0) throw new HttpError(404, 'not found');
+  const both = await db.withTenant(session.company_id, (c) =>
+    c.query(`SELECT id, role_code, is_super_admin FROM app_user WHERE id = $1 OR id = $2`,
+      [target_user, session.user_id]));
+  const target = both.rows.find((r) => r.id === target_user);
+  const actorRow = both.rows.find((r) => r.id === session.user_id);
+  if (!target) throw new HttpError(404, 'not found');
+
+  // bughunt-B #3 (rank lattice): a reset may only TARGET a role at or below the
+  // actor's rank. Being in password.reset.owner opens the door; it must NEVER
+  // let an R03 HR Officer rotate an R12 System Administrator's / super-admin's
+  // credential and take the account over. Fail closed: a role absent from the
+  // lattice outranks everyone as a target.
+  // Super-admin split (Kira 2026-07-13): Super Admin ranks via the
+  // is_super_admin COLUMN (auth.super.rank, default 100), never via a role
+  // code — so only a super can reset a super, whatever role code either holds.
+  const ranks = new Map();
+  for (const part of String(await cfg.getConfig(session.company_id, 'auth.role.rank', '') || '').split(',')) {
+    const [role, n] = part.split(':').map((s) => s.trim());
+    if (role && Number.isFinite(Number(n))) ranks.set(role, Number(n));
+  }
+  const superRank = await cfg.getInt(session.company_id, 'auth.super.rank', 100);
+  const actorRank = actorRow && actorRow.is_super_admin ? superRank : (ranks.get(session.role_code) ?? 0);
+  const targetRank = target.is_super_admin ? superRank : (ranks.get(target.role_code) ?? Infinity);
+  if (targetRank > actorRank) throw new HttpError(403, 'cannot reset a higher-ranked account (rank lattice)');
 
   const actor = await actorEmail(session);
   const res = await db.query('SELECT * FROM auth_reset_password($1,$2,$3,$4)',
@@ -142,18 +206,77 @@ async function resetPin(session, { device_id, new_pin }) {
   return { ok: true, revoked_sessions: res.rows[0].revoked };
 }
 
+// ── P5: reset-target lookup — the console reset screens need to FIND the
+// account/device without exposing a directory to anyone else. Gated on the
+// SAME owner sets as the resets themselves; each list answers only for its
+// own owners (a pin-only owner never enumerates console accounts and vice
+// versa). Server-side ILIKE, minimal fields, capped.
+async function resetLookup(session, { q }) {
+  if (!session) throw new HttpError(401, 'authentication required');
+  const query = String(q || '').trim().slice(0, 64);
+  if (query.length < 2) throw new HttpError(400, 'query too short');
+  const pwOwners = await cfg.getOwnerRoles(session.company_id, 'password.reset.owner');
+  const pinOwners = await cfg.getOwnerRoles(session.company_id, 'pin.reset.owner');
+  const canPw = pwOwners.includes(session.role_code);
+  const canPin = pinOwners.includes(session.role_code);
+  if (!canPw && !canPin) throw new HttpError(403, 'forbidden');
+  return db.withTenant(session.company_id, async (c) => {
+    const like = `%${query}%`;
+    const users = !canPw ? [] : (await c.query(
+      `SELECT id, email, role_code FROM app_user
+        WHERE status='active' AND email ILIKE $1 ORDER BY email LIMIT 20`, [like])).rows;
+    const devices = !canPin ? [] : (await c.query(
+      `SELECT d.id, e.full_name, e.emp_no, d.kind FROM device d
+         JOIN employee e ON e.id = d.employee_id
+        WHERE d.status='active' AND (e.full_name ILIKE $1 OR e.emp_no ILIKE $1)
+        ORDER BY e.full_name LIMIT 20`, [like])).rows;
+    return { users, devices };
+  });
+}
+
 // ── AUTH-06: landing — only modules permitted for the role (A2) ────────────
 function landing(session) {
   return roles.landingFor(session.role_code);
 }
 
-// A3 confidential-field enforcement on profile reads (server-side).
+// A3 confidential-field enforcement on profile reads (server-side). Shares the
+// Slice 2 assembler so forbidden fields are absent (table not even joined).
+// This is a profile READ of an arbitrary employee id, so it MUST carry the SAME
+// two access gates as GET /employees/:id (employees.get) — A3 field-gating
+// alone is not enough: without them a site-bound role reads out-of-site
+// profiles (incl. medical/disciplinary), and a directory-denied finance role
+// reads anyone's pay/bank. Kept in lock-step with employees.js:104-118.
 async function readProfile(session, employeeId) {
   if (!isUuid(employeeId)) throw new HttpError(400, 'invalid request');
-  const r = await db.withTenant(session.company_id, (c) =>
-    c.query('SELECT * FROM employee WHERE id=$1', [employeeId]));
-  if (r.rows.length === 0) throw new HttpError(404, 'not found');
-  return roles.visibleProfile(session.role_code, r.rows[0]);
+  return db.withTenant(session.company_id, async (c) => {
+    // ESS self-service (Wave 1.3/1.4): a FIELD session (device+PIN, always R13)
+    // may read its OWN employee record and nothing else — A3 still filters every
+    // field by the R13 session role, so a pay-visible person's DEVICE never sees
+    // pay/bank/tin (D3/D4). Resolve own-employee from the device, falling back to
+    // the linked console account. For a CONSOLE session this bypass never fires.
+    let ownEmp = null;
+    if (session.device_id) {
+      ownEmp = (await c.query('SELECT employee_id FROM device WHERE id=$1', [session.device_id])).rows[0]?.employee_id
+        || (session.user_id
+          ? (await c.query('SELECT employee_id FROM app_user WHERE id=$1', [session.user_id])).rows[0]?.employee_id
+          : null);
+    }
+    const isOwnRecord = ownEmp && ownEmp === employeeId;
+
+    const deny = await cfg.getRoleSet(session.company_id, 'directory.deny.roles', 'R12,R13,R15,R16');
+    if (deny.has(session.role_code) && !isOwnRecord) throw new HttpError(403, 'forbidden');
+
+    const r = await c.query('SELECT * FROM employee WHERE id=$1', [employeeId]);
+    if (r.rows.length === 0) throw new HttpError(404, 'not found'); // RLS already hid other tenants
+    // Site check BEFORE any confidential assembly (Section 17.2): an out-of-site
+    // request 404s exactly as the directory does. Own-record is exempt (a person
+    // always sees their own site).
+    if (!isOwnRecord && await sitescope.isScoped(c, session.role_code)) {
+      const mySites = await sitescope.requesterSites(c, session);
+      if (!mySites.length || !mySites.includes(r.rows[0].site_id)) throw new HttpError(404, 'not found');
+    }
+    return a3.assembleProfile(c, session, r.rows[0]);
+  });
 }
 
 // Server-side RBAC: matrix checked here regardless of what the UI offered.
@@ -166,6 +289,6 @@ async function performAction(session, action) {
 }
 
 module.exports = {
-  consoleLogin, fieldLogin, verifySession,
-  resetPassword, resetPin, landing, readProfile, performAction,
+  consoleLogin, fieldLogin, verifySession, publicAuthConfig,
+  resetPassword, resetPin, resetLookup, landing, readProfile, performAction,
 };

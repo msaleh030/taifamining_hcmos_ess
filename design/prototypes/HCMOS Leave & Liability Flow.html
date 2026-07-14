@@ -1,0 +1,806 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light" data-surface="mobile">
+<head>
+<meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>HCMOS · Slice 6 Leave & liability (E4 · C10 · C16)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
+<style>
+:root{--green:#1FA24A;--blue:#0094D4;--yellow:#FBC02D;--red:#E5484D;--font:'IBM Plex Sans',system-ui,sans-serif;--mono:'IBM Plex Mono',monospace;--r:12px;}
+*{box-sizing:border-box;}html,body{margin:0;height:100%;}body{font-family:var(--font);background:#0b0f13;-webkit-font-smoothing:antialiased;display:flex;flex-direction:column;}
+.num{font-family:var(--mono);font-variant-numeric:tabular-nums;}
+[data-theme="light"]{--bg:#EEF1F3;--surface:#fff;--surface2:#F6F8F9;--text:#15191D;--muted:#5C6770;--faint:#8A949C;--border:#E2E7EA;--field:#F6F8F9;--card-bd:#E2E7EA;--blur:0px;--card-bg:#fff;--shadow:0 8px 30px rgba(16,24,32,.08);}
+[data-theme="dark"]{--bg:#0C1115;--surface:#141B20;--surface2:#1A2228;--text:#E7EDF1;--muted:#94A2AC;--faint:#697680;--border:#26313A;--field:#1A2228;--card-bd:#26313A;--blur:0px;--card-bg:#141B20;--shadow:0 12px 40px rgba(0,0,0,.5);}
+[data-theme="glass"]{--bg:linear-gradient(135deg,#0E4D34,#08311E 60%,#0a2a4a);--surface:rgba(255,255,255,.14);--surface2:rgba(255,255,255,.10);--text:#F2F6F4;--muted:rgba(242,246,244,.8);--faint:rgba(242,246,244,.55);--border:rgba(255,255,255,.22);--field:rgba(255,255,255,.12);--card-bd:rgba(255,255,255,.28);--blur:16px;--card-bg:rgba(255,255,255,.12);--shadow:0 18px 60px rgba(0,0,0,.35);}
+[data-theme="reduced"]{--bg:#06271A;--surface:#0C3B27;--surface2:#0A3220;--text:#fff;--muted:#CFE6DA;--faint:#9FC3B0;--border:#1C6A47;--field:#0A3220;--card-bd:#2C8A5E;--blur:0px;--card-bg:#0C3B27;--shadow:none;}
+.stage{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;padding:22px;overflow:auto;background:var(--bg);}
+.frame{position:relative;background:var(--bg);border-radius:18px;overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.45);display:flex;flex-direction:column;color:var(--text);}
+[data-surface="desktop"] .frame{width:1120px;height:660px;}
+[data-surface="tablet"] .frame{width:760px;height:600px;}
+[data-surface="mobile"] .frame{width:390px;height:760px;border-radius:30px;font-size:14px;}
+[data-surface="kiosk"] .frame{width:720px;height:840px;font-size:17px;}
+.svg{width:16px;height:16px;}
+
+/* app chrome */
+.app{flex:1;display:flex;flex-direction:column;min-height:0;background:var(--surface);}
+.topbar{display:flex;align-items:center;gap:10px;padding:14px 16px;border-bottom:1px solid var(--border);background:var(--surface);}
+[data-surface="mobile"] .topbar{padding-top:26px;}
+.topbar .tt{font-size:15px;font-weight:700;}
+.topbar .ts{font-size:10.5px;color:var(--faint);margin-top:1px;}
+.topbar .net{margin-left:auto;display:inline-flex;align-items:center;gap:5px;font:600 10px var(--mono);padding:3px 8px;border-radius:20px;background:var(--surface2);color:var(--muted);border:1px solid var(--border);}
+.topbar .net.off{background:rgba(251,192,45,.16);color:#9A6B00;border-color:rgba(251,192,45,.5);}
+[data-theme="dark"] .topbar .net.off,[data-theme="glass"] .topbar .net.off,[data-theme="reduced"] .topbar .net.off{color:var(--yellow);}
+.body{flex:1;overflow:auto;padding:16px;display:flex;flex-direction:column;gap:13px;}
+[data-surface="kiosk"] .body{padding:22px;gap:16px;}
+
+/* shift context strip */
+.shiftbar{display:flex;align-items:center;gap:12px;padding:13px 14px;border-radius:13px;background:var(--surface2);border:1px solid var(--card-bd);}
+.shiftbar .av{width:40px;height:40px;border-radius:50%;background:var(--green);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;flex-shrink:0;}
+.shiftbar .nm{font-weight:700;font-size:14px;}
+.shiftbar .mt{font:600 11px var(--mono);color:var(--muted);margin-top:1px;}
+.shiftbar .st{margin-left:auto;text-align:right;}
+.shiftbar .st .lbl{font-size:9.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--faint);font-weight:700;}
+.shiftbar .st .val{font-weight:700;font-size:13px;}
+.stat3{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--border);border:1px solid var(--card-bd);border-radius:12px;overflow:hidden;}
+.stat3 .c{background:var(--surface);padding:11px 13px;}
+.stat3 .c .lbl{font-size:9.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--faint);font-weight:700;}
+.stat3 .c .val{font:700 16px var(--mono);margin-top:3px;}
+.stat3 .c .val.g{color:var(--green);}
+
+/* geofence radar */
+.geo{position:relative;height:186px;border-radius:14px;overflow:hidden;border:1px solid var(--card-bd);background:
+ repeating-linear-gradient(0deg,transparent,transparent 21px,color-mix(in srgb,var(--border) 55%,transparent) 21px,color-mix(in srgb,var(--border) 55%,transparent) 22px),
+ repeating-linear-gradient(90deg,transparent,transparent 21px,color-mix(in srgb,var(--border) 55%,transparent) 21px,color-mix(in srgb,var(--border) 55%,transparent) 22px),
+ radial-gradient(circle at 50% 52%,var(--surface2),var(--field));display:flex;align-items:center;justify-content:center;}
+[data-surface="kiosk"] .geo{height:220px;}
+.geo .bound{position:absolute;left:50%;top:52%;transform:translate(-50%,-50%);width:150px;height:150px;border-radius:50%;border:2.5px dashed var(--green);background:rgba(31,162,74,.08);}
+.geo .bound.bad{border-color:var(--red);background:rgba(229,72,77,.07);}
+.geo .you{position:absolute;left:50%;top:52%;transform:translate(-50%,-50%);width:16px;height:16px;border-radius:50%;background:var(--blue);border:2px solid #fff;box-shadow:0 0 0 6px rgba(0,148,212,.22);z-index:2;}
+.geo .you.out{left:82%;top:26%;background:var(--red);box-shadow:0 0 0 6px rgba(229,72,77,.22);}
+@media (prefers-reduced-motion:no-preference){[data-deck] .geo .you{}.geo .pulse{position:absolute;left:50%;top:52%;transform:translate(-50%,-50%);width:16px;height:16px;border-radius:50%;background:rgba(0,148,212,.4);animation:ping 2.4s ease-out infinite;}.geo .pulse.out{left:82%;top:26%;background:rgba(229,72,77,.4);}}
+@keyframes ping{0%{width:16px;height:16px;opacity:.6;}100%{width:150px;height:150px;opacity:0;}}
+.geo .gtag{position:absolute;left:12px;bottom:11px;display:inline-flex;align-items:center;gap:6px;font-weight:700;font-size:12px;padding:6px 11px;border-radius:20px;background:var(--card-bg);border:1px solid var(--card-bd);}
+.geo .gtag.ok{color:var(--green);}.geo .gtag.bad{color:var(--red);}
+.geo .gtag .dot{width:7px;height:7px;border-radius:50%;background:currentColor;}
+.geo .locbadge{position:absolute;right:12px;top:11px;font:600 9.5px var(--mono);color:var(--muted);background:var(--card-bg);border:1px solid var(--card-bd);border-radius:6px;padding:3px 7px;}
+
+/* capture receipt */
+.receipt{border:1px solid var(--card-bd);border-radius:13px;background:var(--surface2);overflow:hidden;}
+.receipt .rh{display:flex;align-items:center;gap:8px;padding:10px 13px;border-bottom:1px solid var(--card-bd);font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:700;}
+.receipt .rr{display:flex;align-items:center;gap:10px;padding:9px 13px;font-size:12.5px;border-bottom:1px solid color-mix(in srgb,var(--border) 60%,transparent);}
+.receipt .rr:last-child{border-bottom:none;}
+.receipt .rr .k{color:var(--muted);}
+.receipt .rr .v{margin-left:auto;font:600 12px var(--mono);text-align:right;}
+.receipt .rr .v.d{color:var(--faint);font-weight:500;}
+
+/* flag pill for [SS-3 Open] */
+.flag{display:inline-flex;align-items:center;gap:5px;font:700 10px var(--mono);letter-spacing:.03em;padding:3px 8px;border-radius:6px;background:rgba(251,192,45,.18);color:#9A6B00;border:1px solid rgba(251,192,45,.5);}
+[data-theme="dark"] .flag,[data-theme="glass"] .flag,[data-theme="reduced"] .flag{color:var(--yellow);}
+.flag .dot{width:6px;height:6px;border-radius:50%;background:currentColor;}
+
+/* big punch button */
+.punch{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;border:none;border-radius:15px;padding:17px;font-weight:700;font-size:16px;cursor:pointer;color:#fff;}
+[data-surface="kiosk"] .punch{padding:22px;font-size:20px;}
+.punch.in{background:var(--green);}
+.punch.out{background:var(--surface);color:var(--red);border:1.5px solid var(--red);}
+.punch:disabled{opacity:.5;cursor:default;}
+.punch.wait{background:var(--surface2);color:var(--muted);border:1px solid var(--card-bd);}
+
+/* result seal (success/error/offline hero) */
+.seal{display:flex;flex-direction:column;align-items:center;text-align:center;gap:6px;padding:6px 6px 2px;}
+.seal .disc{width:66px;height:66px;border-radius:50%;display:flex;align-items:center;justify-content:center;}
+.seal .disc.ok{background:rgba(31,162,74,.15);color:var(--green);}
+.seal .disc.err{background:rgba(229,72,77,.14);color:var(--red);}
+.seal .disc.off{background:rgba(251,192,45,.18);color:#9A6B00;}
+[data-theme="dark"] .seal .disc.off,[data-theme="glass"] .seal .disc.off,[data-theme="reduced"] .seal .disc.off{color:var(--yellow);}
+.seal .disc .svg{width:32px;height:32px;}
+.seal h3{margin:2px 0 0;font-size:19px;}
+.seal .big{font:700 30px var(--mono);letter-spacing:-.01em;}
+.seal p{margin:0;font-size:12.5px;color:var(--muted);max-width:300px;line-height:1.45;}
+
+/* banners + notes (kit) */
+.banner{padding:11px 13px;border-radius:11px;font-size:12px;display:flex;gap:9px;align-items:flex-start;line-height:1.45;}
+.banner.off{background:rgba(251,192,45,.16);color:#9A6B00;border:1px solid rgba(251,192,45,.5);}
+.banner.err{background:rgba(229,72,77,.14);color:var(--red);border:1px solid rgba(229,72,77,.4);}
+.banner.ok{background:rgba(31,162,74,.15);color:var(--green);border:1px solid rgba(31,162,74,.4);}
+.banner.info{background:rgba(0,148,212,.1);color:var(--blue);border:1px solid rgba(0,148,212,.3);}
+[data-theme="dark"] .banner.off,[data-theme="glass"] .banner.off,[data-theme="reduced"] .banner.off{color:var(--yellow);}
+.banner .svg{flex-shrink:0;margin-top:1px;}
+.note{display:flex;gap:8px;align-items:flex-start;font-size:11px;color:var(--muted);line-height:1.5;padding:2px 2px;}
+.note .svg{flex-shrink:0;margin-top:1px;color:var(--faint);}
+.shead{font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:700;display:flex;align-items:center;gap:7px;margin:2px 0;}
+
+/* audit chip */
+.audit{display:flex;align-items:center;gap:8px;padding:9px 12px;border-radius:10px;background:rgba(0,148,212,.08);border:1px solid rgba(0,148,212,.26);font-size:11px;color:var(--muted);line-height:1.4;}
+.audit .svg{color:var(--blue);flex-shrink:0;}
+.audit .h{font:600 10px var(--mono);color:var(--blue);margin-left:auto;flex-shrink:0;}
+
+/* recent punches list */
+.plist{display:flex;flex-direction:column;gap:7px;}
+.pitem{display:flex;align-items:center;gap:11px;padding:10px 12px;border-radius:11px;background:var(--surface2);border:1px solid var(--card-bd);}
+.pitem .pi{width:30px;height:30px;border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.pitem .pi.in{background:rgba(31,162,74,.14);color:var(--green);}
+.pitem .pi.out{background:rgba(0,148,212,.12);color:var(--blue);}
+.pitem .pt{font-size:12.5px;font-weight:600;}
+.pitem .pd{font-size:10.5px;color:var(--muted);margin-top:1px;}
+.pitem .ptime{margin-left:auto;font:700 13px var(--mono);}
+
+/* lock / empty states (kit) */
+.center{display:flex;flex-direction:column;align-items:center;justify-content:center;flex:1;text-align:center;padding:30px;gap:12px;color:var(--muted);}
+.center .ic{width:56px;height:56px;border-radius:16px;display:flex;align-items:center;justify-content:center;background:var(--surface2);color:var(--faint);}
+.center .ic.warn{background:rgba(251,192,45,.16);color:#9A6B00;}
+.center .ic.err{background:rgba(229,72,77,.13);color:var(--red);}
+[data-theme="dark"] .center .ic.warn,[data-theme="glass"] .center .ic.warn,[data-theme="reduced"] .center .ic.warn{color:var(--yellow);}
+.center .ic .svg{width:26px;height:26px;}
+.center h3{margin:0;color:var(--text);font-size:17px;}
+.center p{margin:0;font-size:12.5px;max-width:320px;line-height:1.5;}
+.center .why{font:600 11px var(--mono);background:var(--surface2);border:1px solid var(--border);border-radius:7px;padding:6px 10px;color:var(--muted);}
+.center .btn{margin-top:4px;}
+
+/* skeleton */
+.skelrow{height:16px;border-radius:6px;background:linear-gradient(90deg,var(--surface2),var(--field),var(--surface2));background-size:200% 100%;animation:sh 1.2s linear infinite;}
+@keyframes sh{to{background-position:-200% 0;}}
+
+/* buttons */
+.btn{border:none;border-radius:10px;padding:11px 16px;font-weight:600;font-size:13px;cursor:pointer;display:inline-flex;align-items:center;gap:7px;justify-content:center;}
+.btn.p{background:var(--green);color:#fff;}.btn.g{background:transparent;border:1px solid var(--border);color:var(--text);}
+.btn.b{background:var(--blue);color:#fff;}.btn.w{background:var(--yellow);color:#5a3d00;}
+.btn.block{width:100%;}
+.btn:disabled{opacity:.5;}
+
+/* roster (large-data / kiosk assisted) */
+.rsearch{display:flex;align-items:center;gap:9px;padding:11px 13px;border-radius:12px;background:var(--field);border:1px solid var(--border);color:var(--faint);font-size:13px;}
+.rmeta{display:flex;align-items:center;justify-content:space-between;font-size:11px;color:var(--muted);}
+.rmeta .cnt{font:600 11px var(--mono);}
+.roster{border:1px solid var(--card-bd);border-radius:13px;overflow:hidden;background:var(--surface);}
+.rrow{display:flex;align-items:center;gap:11px;padding:11px 13px;border-bottom:1px solid var(--border);}
+.rrow:last-child{border-bottom:none;}
+.rrow .av{width:34px;height:34px;border-radius:50%;background:var(--surface2);color:var(--muted);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px;flex-shrink:0;border:1px solid var(--card-bd);}
+.rrow .rn{font-size:13px;font-weight:600;}
+.rrow .rs{font:600 10.5px var(--mono);color:var(--faint);margin-top:1px;}
+.rrow .rb{margin-left:auto;font-size:11.5px;font-weight:600;color:var(--green);border:1px solid var(--card-bd);border-radius:8px;padding:6px 12px;background:var(--surface2);flex-shrink:0;}
+.vhint{text-align:center;font:600 10px var(--mono);color:var(--faint);padding:9px;background:var(--surface2);}
+
+/* sync queue */
+.qitem{border:1px solid var(--card-bd);border-radius:12px;background:var(--surface2);padding:11px 13px;display:flex;align-items:center;gap:11px;}
+.qitem .qi{width:32px;height:32px;border-radius:9px;display:flex;align-items:center;justify-content:center;flex-shrink:0;background:var(--card-bg);border:1px solid var(--border);color:var(--muted);}
+.qitem .qt{font-size:12.5px;font-weight:600;}
+.qitem .qd{font:600 10.5px var(--mono);color:var(--faint);margin-top:2px;}
+.qitem .qs{margin-left:auto;flex-shrink:0;display:inline-flex;align-items:center;gap:6px;font:700 10px var(--mono);letter-spacing:.03em;padding:4px 9px;border-radius:20px;}
+.qs.queued{background:rgba(251,192,45,.16);color:#9A6B00;}
+.qs.syncing{background:rgba(0,148,212,.12);color:var(--blue);}
+.qs.synced{background:rgba(31,162,74,.14);color:var(--green);}
+.qs.conflict{background:rgba(229,72,77,.14);color:var(--red);}
+[data-theme="dark"] .qs.queued,[data-theme="glass"] .qs.queued,[data-theme="reduced"] .qs.queued{color:var(--yellow);}
+.qs .dot{width:6px;height:6px;border-radius:50%;background:currentColor;}
+@media (prefers-reduced-motion:no-preference){.qs.syncing .dot{animation:blink 1s ease-in-out infinite;}}
+@keyframes blink{50%{opacity:.3;}}
+.qitem.conflict{border-color:rgba(229,72,77,.5);}
+
+/* conflict resolution */
+.confhead{display:flex;align-items:center;gap:12px;padding:13px 14px;border-radius:13px;background:rgba(229,72,77,.1);border:1px solid rgba(229,72,77,.3);}
+.confhead .seal2{width:42px;height:42px;border-radius:11px;background:rgba(229,72,77,.16);color:var(--red);display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.confhead .ht{font-weight:700;font-size:14.5px;}
+.confhead .hs{font-size:11px;color:var(--muted);margin-top:2px;line-height:1.4;}
+.versus{display:grid;grid-template-columns:1fr 1fr;gap:11px;}
+[data-surface="mobile"] .versus{grid-template-columns:1fr;}
+.ver{border:1px solid var(--card-bd);border-radius:12px;background:var(--surface2);padding:12px;}
+.ver.dev{border-color:rgba(0,148,212,.4);}
+.ver .vl{font:700 9.5px var(--mono);letter-spacing:.04em;text-transform:uppercase;color:var(--muted);margin-bottom:9px;display:flex;align-items:center;gap:6px;}
+.ver.dev .vl{color:var(--blue);}
+.ver .vtime{font:700 22px var(--mono);}
+.ver .vsub{font-size:11px;color:var(--muted);margin-top:3px;line-height:1.4;}
+.ver .vkey{margin-top:9px;font:600 10px var(--mono);color:var(--faint);padding-top:9px;border-top:1px solid var(--border);}
+.choices{display:flex;flex-direction:column;gap:8px;}
+.choice{display:flex;align-items:center;gap:11px;padding:12px 13px;border:1.5px solid var(--card-bd);border-radius:11px;cursor:default;}
+.choice.sel{border-color:var(--blue);background:rgba(0,148,212,.07);}
+.choice .rad{width:17px;height:17px;border-radius:50%;border:2px solid var(--card-bd);flex-shrink:0;}
+.choice.sel .rad{border-color:var(--blue);background:radial-gradient(circle,var(--blue) 42%,transparent 46%);}
+.choice .ct{font-size:12.5px;font-weight:600;}
+.choice .cd{font-size:10.5px;color:var(--muted);margin-top:1px;}
+
+/* two-up showcase (geofence screen) */
+.showgrid{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+[data-surface="mobile"] .showgrid{grid-template-columns:1fr;}
+.showcard{border:1px solid var(--card-bd);border-radius:14px;background:var(--surface);overflow:hidden;display:flex;flex-direction:column;}
+.showcard .sc-h{padding:11px 13px;font-weight:700;font-size:13px;display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--border);}
+.showcard .sc-h.ok{color:var(--green);}.showcard .sc-h.bad{color:var(--red);}
+.showcard .sc-b{padding:13px;display:flex;flex-direction:column;gap:11px;}
+
+/* ── Slice-6 leave additions ── */
+/* balance tiles */
+.tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:11px;}
+[data-surface="mobile"] .tiles{grid-template-columns:1fr;}
+.tile{border:1px solid var(--card-bd);border-radius:14px;background:var(--surface2);padding:13px 14px;display:flex;flex-direction:column;gap:3px;}
+.tile.hi{border-color:rgba(31,162,74,.4);background:rgba(31,162,74,.06);}
+.tile.sick{border-color:rgba(0,148,212,.35);background:rgba(0,148,212,.06);}
+.tile.carry{border-color:rgba(251,192,45,.45);background:rgba(251,192,45,.08);}
+.tile .tl{font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:700;display:flex;align-items:center;gap:6px;}
+.tile .big{font:700 30px var(--mono);line-height:1.05;letter-spacing:-.01em;}
+.tile .big small{font-size:13px;font-weight:600;color:var(--muted);letter-spacing:0;}
+.tile.hi .big{color:var(--green);}.tile.sick .big{color:var(--blue);}
+.tile .sub{font-size:10.5px;color:var(--muted);line-height:1.4;}
+.tile .split{display:flex;gap:12px;margin-top:2px;}
+.tile .split div .n{font:700 16px var(--mono);}.tile .split div .k{font-size:9.5px;color:var(--faint);text-transform:uppercase;letter-spacing:.04em;font-weight:700;}
+
+/* form fields */
+.fg{display:grid;grid-template-columns:1fr 1fr;gap:12px 13px;}
+[data-surface="mobile"] .fg{grid-template-columns:1fr;}
+.field label{display:block;font-size:10.5px;color:var(--muted);margin-bottom:5px;font-weight:600;}
+.field .req{color:var(--red);}
+.field input,.field select,.field textarea{width:100%;border:1px solid var(--border);border-radius:9px;padding:10px 11px;background:var(--field);color:var(--text);font:inherit;font-size:13px;resize:none;}
+.field textarea{min-height:60px;line-height:1.5;}
+.field .full,.full{grid-column:1/-1;}
+
+/* leave type segmented */
+.ltypes{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+.ltype{border:1.5px solid var(--card-bd);border-radius:12px;padding:12px 13px;display:flex;gap:10px;align-items:center;}
+.ltype.sel-a{border-color:var(--green);background:rgba(31,162,74,.07);}
+.ltype.sel-s{border-color:var(--blue);background:rgba(0,148,212,.07);}
+.ltype .li{width:32px;height:32px;border-radius:9px;display:flex;align-items:center;justify-content:center;flex-shrink:0;background:var(--surface2);color:var(--faint);}
+.ltype.sel-a .li{background:rgba(31,162,74,.16);color:var(--green);}
+.ltype.sel-s .li{background:rgba(0,148,212,.14);color:var(--blue);}
+.ltype .tt{font-weight:700;font-size:13.5px;}.ltype .td{font-size:10px;color:var(--muted);margin-top:1px;}
+.ltype .rad{margin-left:auto;width:16px;height:16px;border-radius:50%;border:2px solid var(--card-bd);flex-shrink:0;}
+.ltype.sel-a .rad{border-color:var(--green);background:radial-gradient(circle,var(--green) 42%,transparent 46%);}
+.ltype.sel-s .rad{border-color:var(--blue);background:radial-gradient(circle,var(--blue) 42%,transparent 46%);}
+
+/* submission checks */
+.checks{display:flex;flex-direction:column;gap:8px;}
+.chk{display:flex;gap:11px;align-items:flex-start;padding:10px 12px;border-radius:11px;background:var(--surface2);border:1px solid var(--card-bd);}
+.chk .ci{width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.chk.ok .ci{background:rgba(31,162,74,.16);color:var(--green);}
+.chk.bad .ci{background:rgba(229,72,77,.14);color:var(--red);}
+.chk.warn .ci{background:rgba(251,192,45,.2);color:#9A6B00;}
+[data-theme="dark"] .chk.warn .ci,[data-theme="glass"] .chk.warn .ci,[data-theme="reduced"] .chk.warn .ci{color:var(--yellow);}
+.chk .ct{font-size:12.5px;font-weight:600;}.chk .cd{font-size:10.5px;color:var(--muted);margin-top:2px;line-height:1.4;}
+.chk .ci .svg{width:14px;height:14px;}
+.hoh{margin-top:2px;padding:11px 13px;border-radius:11px;background:rgba(251,192,45,.12);border:1px solid rgba(251,192,45,.45);font-size:11.5px;line-height:1.45;display:flex;gap:9px;align-items:flex-start;color:#7a5600;}
+[data-theme="dark"] .hoh,[data-theme="glass"] .hoh,[data-theme="reduced"] .hoh{color:var(--yellow);}
+.hoh .svg{flex-shrink:0;margin-top:1px;color:var(--yellow);}
+.hoh b{font-weight:700;}
+
+/* request detail (approve) */
+.reqcard{border:1px solid var(--card-bd);border-radius:14px;background:var(--surface);overflow:hidden;}
+.reqcard .rq-h{display:flex;align-items:center;gap:12px;padding:13px 14px;border-bottom:1px solid var(--border);}
+.reqcard .rq-h .av{width:40px;height:40px;border-radius:50%;background:var(--green);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;flex-shrink:0;}
+.reqcard .rq-h .nm{font-weight:700;font-size:14px;}.reqcard .rq-h .mt{font:600 11px var(--mono);color:var(--muted);margin-top:1px;}
+.reqcard .rq-b{padding:6px 4px;}
+
+/* coverage meter */
+.cov{border:1px solid var(--card-bd);border-radius:13px;background:var(--surface2);padding:13px 14px;}
+.cov.warn{border-color:rgba(251,192,45,.5);background:rgba(251,192,45,.08);}
+.cov .cvh{display:flex;align-items:center;gap:8px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-bottom:10px;}
+.cov .cvrow{display:flex;align-items:center;gap:11px;}
+.cov .cvrole{font-size:12.5px;font-weight:600;}
+.cov .cvsub{font-size:10.5px;color:var(--muted);margin-top:1px;}
+.cov .cvcount{margin-left:auto;text-align:right;flex-shrink:0;}
+.cov .cvcount .n{font:700 18px var(--mono);}.cov.warn .cvcount .n{color:var(--red);}
+.cov .cvcount .k{font-size:9.5px;color:var(--faint);text-transform:uppercase;letter-spacing:.04em;font-weight:700;}
+.cov .cvbar{margin-top:11px;height:7px;border-radius:5px;background:var(--border);overflow:hidden;}
+.cov .cvbar i{display:block;height:100%;background:var(--green);}
+.cov.warn .cvbar i{background:var(--red);}
+
+/* acknowledge override */
+.ack{margin-top:11px;border:1px solid rgba(229,72,77,.3);border-radius:12px;background:rgba(229,72,77,.05);padding:12px 13px;}
+.ack .akt{font-weight:700;font-size:12.5px;display:flex;align-items:center;gap:7px;}
+.ack .akb{font-size:11px;color:var(--muted);margin:3px 0 10px;line-height:1.45;}
+.ackchk{display:flex;align-items:center;gap:9px;font-size:12px;font-weight:600;}
+.ackchk .box{width:18px;height:18px;border-radius:5px;border:2px solid var(--card-bd);display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.ackchk .box.on{background:var(--red);border-color:var(--red);color:#fff;}
+.ackchk .box .svg{width:12px;height:12px;}
+
+/* liability table */
+.ltable{border:1px solid var(--card-bd);border-radius:13px;overflow:hidden;background:var(--surface);}
+.lhead,.lrow{display:grid;grid-template-columns:1.6fr .9fr .9fr .9fr;gap:8px;padding:10px 13px;align-items:center;}
+.lhead{background:var(--surface2);border-bottom:1px solid var(--card-bd);font-size:9.5px;text-transform:uppercase;letter-spacing:.04em;color:var(--faint);font-weight:700;}
+.lrow{border-bottom:1px solid var(--border);font-size:12.5px;}
+.lrow:last-child{border-bottom:none;}
+[data-surface="mobile"] .lhead,[data-surface="mobile"] .lrow{grid-template-columns:1.4fr 1fr;}
+[data-surface="mobile"] .lhead .hide,[data-surface="mobile"] .lrow .hide{display:none;}
+.lrow .who .nm{font-weight:600;}.lrow .who .rl{font:600 10px var(--mono);color:var(--faint);margin-top:1px;}
+.lrow .num{font-family:var(--mono);font-variant-numeric:tabular-nums;text-align:right;}
+.lrow .liab{font-weight:700;text-align:right;}
+.lrow.excl{opacity:.55;}
+.lrow.excl .liab{color:var(--faint);font-weight:600;font-size:11px;}
+.lna{display:inline-flex;align-items:center;gap:5px;font:700 10px var(--mono);color:#9A6B00;background:rgba(251,192,45,.16);border:1px solid rgba(251,192,45,.45);border-radius:6px;padding:2px 7px;}
+[data-theme="dark"] .lna,[data-theme="glass"] .lna,[data-theme="reduced"] .lna{color:var(--yellow);}
+.ltotal{display:flex;align-items:center;gap:12px;padding:14px;border-radius:13px;background:var(--surface2);border:1px solid var(--card-bd);}
+.ltotal .tk{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:700;}
+.ltotal .tv{font:700 26px var(--mono);letter-spacing:-.01em;margin-top:2px;}
+[data-surface="kiosk"] .ltotal .tv{font-size:30px;}
+.ltotal .tmeta{margin-left:auto;text-align:right;font-size:10.5px;color:var(--muted);line-height:1.5;flex-shrink:0;}
+.moneybig{font:700 32px var(--mono);letter-spacing:-.01em;}
+.formula{display:inline-flex;align-items:center;gap:6px;font:600 10.5px var(--mono);color:var(--muted);background:var(--surface2);border:1px solid var(--border);border-radius:7px;padding:5px 9px;}
+
+/* switcher bar (kit) */
+.bar{display:flex;flex-wrap:wrap;gap:12px;align-items:center;padding:9px 14px;background:#11161b;color:#cfd8de;border-bottom:1px solid #1e262d;font-size:11.5px;}
+.bar .grp{display:flex;align-items:center;gap:5px;}
+.bar .lbl{color:#7c8893;font-weight:600;text-transform:uppercase;letter-spacing:.05em;font-size:9.5px;}
+.bar button{border:1px solid #2a333b;background:#1a2127;color:#aeb9c1;border-radius:6px;padding:4px 8px;cursor:pointer;font:inherit;font-size:11px;}
+.bar button.on{background:var(--green);color:#fff;border-color:var(--green);}
+.bar .ac{margin-left:auto;color:#6f7c85;}.bar .ac b{color:#9FE3BD;}
+</style>
+</head>
+<body>
+<template id="__bundler_thumbnail" data-bg-color="#0E4D34"><svg viewBox="0 0 1200 800" xmlns="http://www.w3.org/2000/svg"><rect width="1200" height="800" fill="#0E4D34"/><rect x="470" y="210" width="260" height="200" rx="16" fill="none" stroke="#FBC02D" stroke-width="9"/><path d="M470 268h260M540 210v-32M660 210v-32" stroke="#FBC02D" stroke-width="9"/><path d="M528 330l40 40 90-92" fill="none" stroke="#9FE3BD" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/><text x="600" y="520" text-anchor="middle" font-family="monospace" font-size="34" font-weight="700" fill="#fff" letter-spacing="5">LEAVE</text><text x="600" y="570" text-anchor="middle" font-family="monospace" font-size="22" fill="#9FE3BD" letter-spacing="4">& LIABILITY · E4·C10·C16</text></svg></template>
+
+<div class="bar">
+ <div class="grp"><span class="lbl">Screen</span><span id="screens"></span></div>
+ <div class="grp"><span class="lbl">State</span><span id="states"></span></div>
+ <div class="grp"><span class="lbl">Viewer</span><span id="roles"></span></div>
+ <div class="grp"><span class="lbl">Theme</span><span id="themes"></span></div>
+ <div class="grp"><span class="lbl">Surface</span><span id="surfaces"></span></div>
+ <div class="grp"><span class="lbl">Lang</span><span id="langs"></span></div>
+ <div class="ac" id="acline"></div>
+</div>
+<div class="stage"><div class="frame" id="frame"></div></div>
+
+<script>
+// Slice 6 · Leave & liability (E4 apply · C10 approve · C16 liability) — bilingual strings
+// AC-UNI-07: no key/placeholder ever visible; all registry values CONFIRMED (RTL/CR/TM/001/2026).
+const T={en:{
+ reg:'RTL/CR/TM/001/2026',
+ // screen titles
+ apply:'Apply for leave', applySub:'ESS · balance, overlap & 14-day checks at submission · E4',
+ approve:'Leave approvals', approveSub:'Console · approve / reject with coverage check · C10',
+ liability:'Leave liability', liabilitySub:'Console · outstanding days in money · C16',
+ // balances
+ annualTitle:'Annual leave', sickTitle:'Sick leave', carryTitle:'Carry-over',
+ remaining:'remaining', entitlement:'Entitlement', taken:'Taken', pending:'Pending',
+ rotation:'Rotation', days:'days', dayU:'d',
+ annualEntNote:'4 weeks · 7×7×7 rotation (LR-1)',
+ entTiers:'7×7×7 = 4 weeks · 8/2 = 2 weeks · 9/3 = none (LR-1)',
+ basisNote:'Balances in days on the 30-day basis (LR-2).',
+ carryLapse:'Lapses 31 Dec 2026 · after one year (LR-4).',
+ sickFull:'full-pay', sickHalf:'half-pay', sickSplit:'63 + 63',
+ sickCertRule:'A medical certificate is required from day one (LR-7).',
+ // apply form
+ leaveType:'Leave type', tAnnual:'Annual', tAnnualD:'Paid · from balance', tSick:'Sick', tSickD:'63 full + 63 half · cert required',
+ fromDate:'From', toDate:'To', reqDays:'Days requested', reason:'Reason / notes',
+ reasonPH:'Reason for leave (optional for annual)…', reasonVal:'Family visit — upcountry travel.',
+ cert:'Medical certificate', certReq:'Required from day one', certAttached:'medical-cert-2026.pdf', attachCert:'Attach certificate',
+ // checks (LV-02)
+ checksTitle:'Submission checks',
+ chkBalance:'Within balance', chkBalanceOk:'10 of 19 days remaining after this request.',
+ chkBalanceBad:'Over balance — 22 days requested, 19 remaining.',
+ chkOverlap:'No overlapping request', chkOverlapOk:'No approved or pending leave in this range.',
+ chkOverlapBad:'Overlaps an approved request (12–15 Aug).',
+ chkContinuous:'Within 14 continuous days', chkContinuousOk:'9 continuous days.',
+ chkContinuousBad:'22 continuous days — over the 14-day limit (LR-5).',
+ hohTitle:'Head-of-HR approval path',
+ hohBody:'A request over 14 continuous days can still proceed, but only via Head-of-HR approval (LR-5). It routes for that exception once any hard blocks above are cleared.',
+ routeHoH:'Route for Head-of-HR approval',
+ // buttons
+ submitApply:'Submit application', cancel:'Cancel', retry:'Retry', close:'Close',
+ approveBtn:'Approve', rejectBtn:'Reject', approveOverride:'Approve with override',
+ queuedBtn:'Queued · will submit on reconnect', selectPeriod:'Select as-at date',
+ // apply states
+ emptyApplyTitle:'Start a leave application',
+ emptyApplyBody:'Pick a leave type and dates. Your balance, overlaps and the 14-day limit are checked before anything is sent.',
+ successApplyTitle:'Application submitted',
+ successApplySub:'Sent to your approver. You will be notified of the decision in ESS.',
+ offApplyTitle:'Offline — application queued',
+ offApplyBody:'You are offline. The application is stored on the device and submits on reconnect. Balance and overlap are re-checked server-side at submission — nothing is sent yet.',
+ errApplyTitle:'Cannot submit — checks failed',
+ errApplyBody:'Over-balance and overlapping dates are hard blocks — fix them before submitting. Nothing is sent until every check passes.',
+ noEntTitle:'No annual leave entitlement',
+ noEntBody:'This rotation carries no annual leave entitlement (9/3 rotation, LR-1). Annual leave cannot be applied for. Sick leave and its rules still apply.',
+ noEntWhy:'LR-1 · 9/3 rotation · 0 days',
+ requestSummary:'Request', appliedFor:'Applied for',
+ // approve extras
+ selfTitle:'You cannot approve this', selfBody:'The approver is never the applicant and duties are segregated per the matrix (SOD-01). Your role has no approval right over this request.', selfWhy:'SOD-01 · matrix unchanged · viewer',
+ errApproveTitle:'Action failed', errApproveBody:'The decision was not recorded. Nothing changed — the request is still pending. Try again.',
+ offApproveNote:'Offline — your decision is queued and applies on reconnect. Balance and coverage are re-checked server-side. Nothing is committed yet.',
+ pendingCount:'512 pending · Mwadui', pendingShown:'showing 40 of 512 · virtualised',
+ // approve (C10)
+ pendingTitle:'Pending approvals', reqOf:'Request', balAfter:'Balance after approval',
+ matrixNote:'Approval matrix & SoD unchanged — the approver is never the applicant (SOD-01).',
+ emptyApproveTitle:'No pending approvals',
+ emptyApproveBody:'Leave requests awaiting your decision appear here.',
+ successApproveTitle:'Leave approved',
+ successApproveSub:'The employee is notified and their balance is updated.',
+ coverage:'Team coverage',
+ covOkBody:'2 of 3 storekeepers remain on shift during this leave. Coverage holds.',
+ covWarnTitle:'Coverage warning — not a block',
+ covWarnBody:'Approving this leave drops Storekeeper coverage at Mwadui to 0 of 1 present on 11–19 Aug. This is a warning, not a hard block (LR-6). You may proceed by acknowledging the gap.',
+ covRole:'Storekeeper · Mwadui', covPresent:'present during leave', covOf:'of',
+ ackTitle:'Acknowledge & proceed', ackBody:'Approve despite the coverage gap. The override is recorded in the audit with your name and role (UNI-06).',
+ ackChk:'I acknowledge the coverage gap',
+ overrideAudited:'Coverage override recorded · approver, role, before / after · UNI-06',
+ // liability (C16)
+ asAt:'As at', asAtVal:'30 Jun 2026',
+ colStaff:'Staff', colRole:'Role', colDays:'Out. days', colDaily:'Daily rate', colLiab:'Liability',
+ dailyFormula:'Daily rate = leave-pay base ÷ 30 (PC-1)',
+ exBase:'Leave-pay base = monthly remuneration excluding Rotation and Night Shift allowances and the variable overtimes (EX-2).',
+ totalTitle:'Total leave liability', activeOnly:'Active staff only — leavers excluded (LVR-02).',
+ notAvail:'Not available', naInput:'monthly remuneration missing',
+ naNote:'A missing input shows as Not available with the input named — never a guessed or zero figure (LIAB-03).',
+ exclLeaver:'excluded · leaver',
+ liabActive:'active staff', liabExcl:'leavers excluded', liabNa:'inputs not available',
+ registerTitle:'Liability register', registerShown:'showing 40 of 4,981 · virtualised',
+ noPermTitle:'No access to leave liability',
+ noPermBody:'The leave-liability view is limited to Finance and senior HR (R07, R08, R09, R11) per A3. Your role cannot see liability figures.',
+ noPermWhy:'A3 · LIAB view · viewer',
+ emptyLiabTitle:'Select an as-at date',
+ emptyLiabBody:'Choose a date to compute outstanding leave liability across active staff.',
+ errLiabTitle:'Liability could not be computed',
+ errLiabBody:'The figure for this period is unavailable. No number is shown rather than a guessed one (LIAB-03).',
+ successLiabTitle:'Liability report generated',
+ successLiabSub:'Exported for the finance hand-off, active staff only.',
+ offLiabNote:'Offline — showing the last computed figure. Live liability recomputes on reconnect.',
+ // shared
+ na:'—', loadingTitle:'Loading…', worker:'Peter Komba', workerNo:'TMCL-MW-2210', workerRole:'General Labour'
+},
+sw:{
+ reg:'RTL/CR/TM/001/2026',
+ apply:'Omba likizo', applySub:'ESS · salio, mwingiliano na ukomo wa siku 14 wakati wa kuwasilisha · E4',
+ approve:'Idhini za likizo', approveSub:'Konsoli · idhinisha / kataa na ukaguzi wa uwepo · C10',
+ liability:'Deni la likizo', liabilitySub:'Konsoli · siku zilizobaki kwa fedha · C16',
+ annualTitle:'Likizo ya mwaka', sickTitle:'Likizo ya ugonjwa', carryTitle:'Zilizohamishwa',
+ remaining:'zimebaki', entitlement:'Haki', taken:'Zilizotumika', pending:'Zinasubiri',
+ rotation:'Mzunguko', days:'siku', dayU:'siku',
+ annualEntNote:'Wiki 4 · mzunguko 7×7×7 (LR-1)',
+ entTiers:'7×7×7 = wiki 4 · 8/2 = wiki 2 · 9/3 = hakuna (LR-1)',
+ basisNote:'Salio kwa siku kwa msingi wa siku 30 (LR-2).',
+ carryLapse:'Zinaisha 31 Des 2026 · baada ya mwaka mmoja (LR-4).',
+ sickFull:'malipo kamili', sickHalf:'nusu malipo', sickSplit:'63 + 63',
+ sickCertRule:'Cheti cha daktari kinahitajika tangu siku ya kwanza (LR-7).',
+ leaveType:'Aina ya likizo', tAnnual:'Ya mwaka', tAnnualD:'Inalipwa · kutoka salio', tSick:'Ya ugonjwa', tSickD:'63 kamili + 63 nusu · cheti kinahitajika',
+ fromDate:'Kuanzia', toDate:'Hadi', reqDays:'Siku zilizoombwa', reason:'Sababu / maelezo',
+ reasonPH:'Sababu ya likizo (si lazima kwa ya mwaka)…', reasonVal:'Kutembelea familia — safari ya mkoani.',
+ cert:'Cheti cha daktari', certReq:'Kinahitajika tangu siku ya kwanza', certAttached:'cheti-cha-daktari-2026.pdf', attachCert:'Ambatisha cheti',
+ checksTitle:'Ukaguzi wa kuwasilisha',
+ chkBalance:'Ndani ya salio', chkBalanceOk:'Siku 10 kati ya 19 zitabaki baada ya ombi hili.',
+ chkBalanceBad:'Zaidi ya salio — siku 22 zimeombwa, 19 zimebaki.',
+ chkOverlap:'Hakuna ombi linaloingiliana', chkOverlapOk:'Hakuna likizo iliyoidhinishwa au inayosubiri katika kipindi hiki.',
+ chkOverlapBad:'Inaingiliana na ombi lililoidhinishwa (12–15 Ago).',
+ chkContinuous:'Ndani ya siku 14 mfululizo', chkContinuousOk:'Siku 9 mfululizo.',
+ chkContinuousBad:'Siku 22 mfululizo — zaidi ya ukomo wa siku 14 (LR-5).',
+ hohTitle:'Njia ya idhini ya Mkuu wa HR',
+ hohBody:'Ombi la zaidi ya siku 14 mfululizo linaweza kuendelea, lakini kwa idhini ya Mkuu wa HR pekee (LR-5). Linaelekezwa kwa ubaguzi huo mara vizuizi vigumu hapo juu vitakapoondolewa.',
+ routeHoH:'Elekeza kwa idhini ya Mkuu wa HR',
+ submitApply:'Wasilisha ombi', cancel:'Ghairi', retry:'Jaribu tena', close:'Funga',
+ approveBtn:'Idhinisha', rejectBtn:'Kataa', approveOverride:'Idhinisha kwa kupuuza',
+ queuedBtn:'Imesubiri · itawasilishwa ukirejea', selectPeriod:'Chagua tarehe',
+ emptyApplyTitle:'Anza ombi la likizo',
+ emptyApplyBody:'Chagua aina ya likizo na tarehe. Salio lako, mwingiliano na ukomo wa siku 14 vinakaguliwa kabla ya kutuma.',
+ successApplyTitle:'Ombi limewasilishwa',
+ successApplySub:'Limetumwa kwa mwidhinishaji wako. Utaarifiwa uamuzi katika ESS.',
+ offApplyTitle:'Nje ya mtandao — ombi limesubiri',
+ offApplyBody:'Uko nje ya mtandao. Ombi limehifadhiwa kwenye kifaa na litawasilishwa ukirejea. Salio na mwingiliano vitakaguliwa tena upande wa seva — hakuna kilichotumwa bado.',
+ errApplyTitle:'Haiwezi kuwasilisha — ukaguzi umeshindwa',
+ errApplyBody:'Kuzidi salio na tarehe zinazoingiliana ni vizuizi vigumu — virekebishe kabla ya kuwasilisha. Hakuna kinachotumwa hadi kila ukaguzi upite.',
+ noEntTitle:'Hakuna haki ya likizo ya mwaka',
+ noEntBody:'Mzunguko huu hauna haki ya likizo ya mwaka (mzunguko 9/3, LR-1). Likizo ya mwaka haiwezi kuombwa. Likizo ya ugonjwa na kanuni zake bado zinatumika.',
+ noEntWhy:'LR-1 · mzunguko 9/3 · siku 0',
+ requestSummary:'Ombi', appliedFor:'Imeombwa',
+ selfTitle:'Huwezi kuidhinisha hili', selfBody:'Mwidhinishaji si mwombaji na majukumu yamegawanywa kwa matriki (SOD-01). Jukumu lako halina ruhusa ya kuidhinisha ombi hili.', selfWhy:'SOD-01 · matriki haijabadilika · mtazamaji',
+ errApproveTitle:'Kitendo kimeshindwa', errApproveBody:'Uamuzi haukurekodiwa. Hakuna kilichobadilika — ombi bado linasubiri. Jaribu tena.',
+ offApproveNote:'Nje ya mtandao — uamuzi wako umesubiri na utatumika ukirejea. Salio na uwepo vinakaguliwa upande wa seva. Hakuna kilichohifadhiwa bado.',
+ pendingCount:'512 zinasubiri · Mwadui', pendingShown:'inaonyesha 40 kati ya 512 · imepunguzwa',
+ pendingTitle:'Idhini zinazosubiri', reqOf:'Ombi', balAfter:'Salio baada ya idhini',
+ matrixNote:'Matriki ya idhini na SoD hayajabadilika — mwidhinishaji si mwombaji (SOD-01).',
+ emptyApproveTitle:'Hakuna idhini zinazosubiri',
+ emptyApproveBody:'Maombi ya likizo yanayosubiri uamuzi wako yataonekana hapa.',
+ successApproveTitle:'Likizo imeidhinishwa',
+ successApproveSub:'Mfanyakazi amearifiwa na salio lake limesasishwa.',
+ coverage:'Uwepo wa timu',
+ covOkBody:'Watunza-ghala 2 kati ya 3 wanabaki kazini wakati wa likizo hii. Uwepo unatosha.',
+ covWarnTitle:'Onyo la uwepo — si kizuizi',
+ covWarnBody:'Kuidhinisha likizo hii kunashusha uwepo wa Mtunza-ghala Mwadui hadi 0 kati ya 1 tarehe 11–19 Ago. Hili ni onyo, si kizuizi kigumu (LR-6). Unaweza kuendelea kwa kukubali pengo.',
+ covRole:'Mtunza-ghala · Mwadui', covPresent:'wapo wakati wa likizo', covOf:'kati ya',
+ ackTitle:'Kubali & endelea', ackBody:'Idhinisha licha ya pengo la uwepo. Kupuuza kunarekodiwa kwenye ukaguzi na jina lako na jukumu (UNI-06).',
+ ackChk:'Ninakubali pengo la uwepo',
+ overrideAudited:'Kupuuza uwepo kumerekodiwa · mwidhinishaji, jukumu, kabla / baada · UNI-06',
+ asAt:'Hadi tarehe', asAtVal:'30 Jun 2026',
+ colStaff:'Mfanyakazi', colRole:'Jukumu', colDays:'Siku', colDaily:'Kiwango/siku', colLiab:'Deni',
+ dailyFormula:'Kiwango/siku = msingi wa malipo ya likizo ÷ 30 (PC-1)',
+ exBase:'Msingi wa malipo ya likizo = malipo ya mwezi bila posho za Mzunguko na Zamu ya Usiku na ziada zinazobadilika (EX-2).',
+ totalTitle:'Jumla ya deni la likizo', activeOnly:'Wafanyakazi hai pekee — walioondoka hawamo (LVR-02).',
+ notAvail:'Haipatikani', naInput:'malipo ya mwezi hayapo',
+ naNote:'Kipengele kilichokosekana kinaonyeshwa kama Haipatikani na jina la kipengele — kamwe si nambari ya kubuni au sifuri (LIAB-03).',
+ exclLeaver:'hayumo · aliyeondoka',
+ liabActive:'wafanyakazi hai', liabExcl:'walioondoka hawamo', liabNa:'vipengele havipatikani',
+ registerTitle:'Rejista ya deni', registerShown:'inaonyesha 40 kati ya 4,981 · imepunguzwa',
+ noPermTitle:'Huna ufikiaji wa deni la likizo',
+ noPermBody:'Mwonekano wa deni la likizo ni kwa Fedha na HR wakuu (R07, R08, R09, R11) kwa A3 pekee. Jukumu lako haliwezi kuona takwimu za deni.',
+ noPermWhy:'A3 · mwonekano wa LIAB · mtazamaji',
+ emptyLiabTitle:'Chagua tarehe',
+ emptyLiabBody:'Chagua tarehe kukokotoa deni la likizo lililobaki kwa wafanyakazi hai.',
+ errLiabTitle:'Deni halikuweza kukokotolewa',
+ errLiabBody:'Takwimu ya kipindi hiki haipatikani. Hakuna nambari inayoonyeshwa badala ya ya kubuni (LIAB-03).',
+ successLiabTitle:'Ripoti ya deni imetengenezwa',
+ successLiabSub:'Imehamishwa kwa Fedha, wafanyakazi hai pekee.',
+ offLiabNote:'Nje ya mtandao — inaonyesha takwimu ya mwisho iliyokokotolewa. Deni hai litakokotolewa upya ukirejea.',
+ na:'—', loadingTitle:'Inapakia…', worker:'Peter Komba', workerNo:'TMCL-MW-2210', workerRole:'Kibarua'
+}};
+window.T=T;
+
+</script>
+<script>
+// Slice 6 · Leave & liability (E4 · C10 · C16) — flow logic (reuses Slice-4/5 kit)
+function t(k){return window.T[cur.lang][k];}
+
+const ic={
+ calendar:'<svg class="svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>',
+ leave:'<svg class="svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M17.8 19.2 16 11l3.5-3.5a2.1 2.1 0 0 0-3-3L13 8 4.8 6.2a1 1 0 0 0-1 .3l-.9.9 6 3.5-2.5 2.5H3.5l-1 1 3.5 2 2 3.5 1-1v-2.9l2.5-2.5 3.5 6 .9-.9a1 1 0 0 0 .3-1z"/></svg>',
+ cross:'<svg class="svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="6" width="18" height="14" rx="2"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M12 11v6M9 14h6"/></svg>',
+ check:'<svg class="svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6 9 17l-5-5"/></svg>',
+ x:'<svg class="svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M18 6 6 18M6 6l12 12"/></svg>',
+ warn:'<svg class="svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></svg>',
+ off:'<svg class="svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M1 1l22 22M16.7 11.1A6 6 0 0 0 5 12M8.5 8.5A6 6 0 0 0 5 12M2 8.8A11 11 0 0 1 6 6M22 8.8a11 11 0 0 0-4.6-3.3M12 20h.01"/></svg>',
+ wifi:'<svg class="svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 12a10 10 0 0 1 14 0M8.5 15.5a5 5 0 0 1 7 0M12 19h.01"/></svg>',
+ sync:'<svg class="svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 12a9 9 0 1 1-3-6.7L21 8M21 3v5h-5"/></svg>',
+ shield:'<svg class="svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>',
+ lock:'<svg class="svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="5" y="11" width="14" height="9" rx="1"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>',
+ search:'<svg class="svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>',
+ users:'<svg class="svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8M22 21v-2a4 4 0 0 0-3-3.87M16 3.13A4 4 0 0 1 16 11"/></svg>',
+ money:'<svg class="svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/><path d="M6 12h.01M18 12h.01"/></svg>',
+ doc:'<svg class="svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M9 13h6M9 17h4"/></svg>',
+ user:'<svg class="svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8"/></svg>',
+ clock:'<svg class="svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>'};
+
+const initials=n=>n.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
+const fmt=n=>n.toLocaleString('en-US');
+const money=n=>'TZS '+fmt(n);
+
+let cur={screen:'apply',state:'populated',role:'R13',theme:'light',surface:'mobile',lang:'en'};
+
+const LIAB_VIEW=['R07','R08','R09','R11'];
+const APPLICANT={n:'Amina Juma',no:'TMCL-MW-3341',role:'Storekeeper · Mwadui',remaining:15,req:9,after:6,range:'11–19 Aug 2026'};
+const LIAB=[
+ {n:'Peter Komba',role:'General Labour',monthly:2160000,days:19},
+ {n:'Grace Ndaki',role:'Site Supervisor',monthly:4500000,days:12},
+ {n:'Amina Juma',role:'Storekeeper',monthly:2700000,days:7},
+ {n:'Joseph Mlimani',role:'Equipment Operator',monthly:3600000,days:22},
+ {n:'Fatuma Chacha',role:'Storekeeper',monthly:null,days:9},
+ {n:'Daniel Mwaky',role:'Driver',monthly:2400000,days:14,leaver:true}];
+
+// ── app shell (kit) ──
+function app(title,sub,netOff,bodyHTML){
+ const net=netOff
+  ?`<span class="net off">${ic.off}${cur.lang==='en'?'Offline':'Nje ya mtandao'}</span>`
+  :`<span class="net">${ic.wifi}${cur.lang==='en'?'Online':'Mtandaoni'}</span>`;
+ return `<div class="app"><div class="topbar">${ic.leave}<div><div class="tt">${title}</div><div class="ts">${sub}</div></div>${net}</div>
+  <div class="body">${bodyHTML}</div></div>`;
+}
+function center(icCls,icon,title,body,extra){
+ return `<div class="center"><span class="ic ${icCls||''}">${icon}</span><h3>${title}</h3><p>${body}</p>${extra||''}</div>`;
+}
+function auditRow(txt){return `<div class="audit">${ic.shield}<span>${txt}</span><span class="h">#c4e1…9a</span></div>`;}
+function skel(n){return '<div class="skelrow" style="width:100%;margin:9px 0"></div>'.repeat(n);}
+
+// ── balance tiles ──
+function tiles(active){ // 'annual' | 'sick'
+ const annual=`<div class="tile ${active==='annual'?'hi':''}"><div class="tl">${ic.leave} ${t('annualTitle')}</div>
+   <div class="big">19<small> ${t('days')} ${t('remaining')}</small></div>
+   <div class="split"><div><div class="k">${t('entitlement')}</div><div class="n">28</div></div><div><div class="k">${t('taken')}</div><div class="n">9</div></div></div>
+   <div class="sub">${t('annualEntNote')}</div></div>`;
+ const sick=`<div class="tile ${active==='sick'?'sick':''}"><div class="tl">${ic.cross} ${t('sickTitle')}</div>
+   <div class="big">63<small> ${t('sickFull')}</small></div>
+   <div class="split"><div><div class="k">${t('sickHalf')}</div><div class="n">63</div></div></div>
+   <div class="sub">${t('sickCertRule')}</div></div>`;
+ const carry=`<div class="tile carry"><div class="tl">${ic.clock} ${t('carryTitle')}</div>
+   <div class="big">6<small> ${t('days')}</small></div>
+   <div class="sub">${t('carryLapse')}</div></div>`;
+ return `<div class="tiles">${annual}${sick}${carry}</div>`;
+}
+
+// ── apply form ──
+function form(sick){
+ return `<div class="shead">${ic.leave} ${t('leaveType')}</div>
+  <div class="ltypes">
+   <div class="ltype ${sick?'':'sel-a'}"><span class="li">${ic.leave}</span><div><div class="tt">${t('tAnnual')}</div><div class="td">${t('tAnnualD')}</div></div><span class="rad"></span></div>
+   <div class="ltype ${sick?'sel-s':''}"><span class="li">${ic.cross}</span><div><div class="tt">${t('tSick')}</div><div class="td">${t('tSickD')}</div></div><span class="rad"></span></div></div>
+  <div class="fg">
+   <div class="field"><label>${t('fromDate')} <span class="req">*</span></label><input value="2026-08-11" readonly></div>
+   <div class="field"><label>${t('toDate')} <span class="req">*</span></label><input value="2026-08-19" readonly></div>
+   <div class="field ${sick?'':'full'}"><label>${t('reqDays')}</label><input value="9 ${t('days')}" readonly></div>
+   ${sick?`<div class="field"><label>${t('cert')} <span class="req">*</span></label>
+     <div style="display:flex;align-items:center;gap:8px;border:1px solid var(--border);border-radius:9px;padding:9px 11px;background:var(--field);font-size:12px"><span style="color:var(--green)">${ic.doc}</span>${t('certAttached')}</div></div>`:''}
+   <div class="field full"><label>${t('reason')}</label><textarea readonly>${t('reasonVal')}</textarea></div>
+  </div>`;
+}
+function chk(kind,title,desc){
+ const i=kind==='bad'?ic.x:kind==='warn'?ic.warn:ic.check;
+ return `<div class="chk ${kind}"><span class="ci">${i}</span><div><div class="ct">${title}</div><div class="cd">${desc}</div></div></div>`;
+}
+function checks(scenario){ // 'ok' | 'blocked' | 'sick'
+ let rows;
+ if(scenario==='blocked'){
+  rows=chk('bad',t('chkBalance'),t('chkBalanceBad'))+chk('bad',t('chkOverlap'),t('chkOverlapBad'))+chk('warn',t('chkContinuous'),t('chkContinuousBad'));
+ }else if(scenario==='sick'){
+  rows=chk('ok',t('chkBalance'),`63 ${t('sickFull')} + 63 ${t('sickHalf')} ${t('remaining')}.`)+chk('ok',t('chkOverlap'),t('chkOverlapOk'))+chk('ok',t('cert'),t('sickCertRule'));
+ }else{
+  rows=chk('ok',t('chkBalance'),t('chkBalanceOk'))+chk('ok',t('chkOverlap'),t('chkOverlapOk'))+chk('ok',t('chkContinuous'),t('chkContinuousOk'));
+ }
+ const hoh=scenario==='blocked'?`<div class="hoh">${ic.warn}<div><b>${t('hohTitle')}.</b> ${t('hohBody')}</div></div>`:'';
+ return `<div class="shead">${ic.shield} ${t('checksTitle')}</div><div class="checks">${rows}</div>${hoh}`;
+}
+
+// ── APPLY screen (E4) ──
+function applyScreen(){
+ const off=cur.state==='offline';
+ const wrap=b=>app(t('apply'),t('applySub'),off,b);
+ switch(cur.state){
+  case 'empty': return wrap(center('',ic.calendar,t('emptyApplyTitle'),t('emptyApplyBody')));
+  case 'loading': return wrap(`<div class="tiles">${'<div class="tile">'+skel(3)+'</div>'.repeat(3)}</div>${skel(5)}`);
+  case 'no-permission':
+   return wrap(center('warn',ic.leave,t('noEntTitle'),t('noEntBody'),`<div class="why">${t('noEntWhy')}</div>`));
+  case 'success':
+   return wrap(`<div class="seal"><span class="disc ok">${ic.check}</span><h3>${t('successApplyTitle')}</h3><p>${t('successApplySub')}</p></div>
+    <div class="receipt"><div class="rh">${ic.leave} ${t('requestSummary')}</div>
+     <div class="rr"><span class="k">${t('leaveType')}</span><span class="v">${t('tAnnual')} · 9 ${t('days')}</span></div>
+     <div class="rr"><span class="k">${t('fromDate')} – ${t('toDate')}</span><span class="v">11–19 Aug 2026</span></div>
+     <div class="rr"><span class="k">${t('annualTitle')}</span><span class="v">10 / 19 ${t('days')}</span></div></div>
+    ${auditRow(t('overrideAudited').replace(/·.*/,'· UNI-06'))}`);
+  case 'error':
+   return wrap(`<div class="banner err">${ic.warn}<div><b>${t('errApplyTitle')}</b><br>${t('errApplyBody')}</div></div>
+    ${form(false)}${checks('blocked')}
+    <div style="display:flex;gap:9px"><button class="btn g" style="flex:1">${t('cancel')}</button><button class="btn p" style="flex:2" disabled>${t('submitApply')}</button></div>
+    <button class="btn g block" disabled>${ic.shield} ${t('routeHoH')}</button>`);
+  case 'offline':
+   return wrap(`<div class="banner off">${ic.off}<div><b>${t('offApplyTitle')}</b><br>${t('offApplyBody')}</div></div>
+    ${form(false)}${checks('ok')}
+    <button class="btn w block" disabled>${ic.sync} ${t('queuedBtn')}</button>`);
+  case 'sick-leave':
+   return wrap(`${tiles('sick')}<div class="note">${ic.cross}<span>${t('sickCertRule')}</span></div>
+    ${form(true)}${checks('sick')}
+    <button class="btn b block">${ic.check} ${t('submitApply')}</button>`);
+  default: // populated / large-data
+   return wrap(`${tiles('annual')}<div class="note">${ic.calendar}<span>${t('basisNote')} ${t('entTiers')}</span></div>
+    ${form(false)}${checks('ok')}
+    <div style="display:flex;gap:9px"><button class="btn g" style="flex:1">${t('cancel')}</button><button class="btn p" style="flex:2">${ic.check} ${t('submitApply')}</button></div>`);
+ }
+}
+
+// ── request card + coverage (approve) ──
+function reqCard(){
+ return `<div class="reqcard"><div class="rq-h"><span class="av">${initials(APPLICANT.n)}</span>
+   <div style="flex:1"><div class="nm">${APPLICANT.n}</div><div class="mt">${APPLICANT.no} · ${APPLICANT.role}</div></div>
+   <span class="flag" style="background:rgba(31,162,74,.12);color:var(--green);border-color:rgba(31,162,74,.3)">${ic.leave} ${t('tAnnual')} · 9 ${t('days')}</span></div>
+   <div class="rq-b"><div class="receipt" style="border:none;border-radius:0;background:transparent">
+    <div class="rr"><span class="k">${t('fromDate')} – ${t('toDate')}</span><span class="v">${APPLICANT.range}</span></div>
+    <div class="rr"><span class="k">${t('reqDays')}</span><span class="v">9 ${t('days')}</span></div>
+    <div class="rr"><span class="k">${t('balAfter')}</span><span class="v">${APPLICANT.after} / ${APPLICANT.remaining} ${t('days')}</span></div></div></div></div>`;
+}
+function cov(mode){ // 'ok' | 'warn'
+ const warn=mode==='warn';
+ return `<div class="cov ${warn?'warn':''}"><div class="cvh">${ic.users} ${t('coverage')}</div>
+   <div class="cvrow"><div><div class="cvrole">${t('covRole')}</div><div class="cvsub">${t('covPresent')}</div></div>
+    <div class="cvcount"><div class="n">${warn?'0':'2'} ${t('covOf')} ${warn?'1':'3'}</div><div class="k">${t('covPresent')}</div></div></div>
+   <div class="cvbar"><i style="width:${warn?'6':'66'}%"></i></div>
+   <div class="cvsub" style="margin-top:9px">${warn?t('covWarnBody'):t('covOkBody')}</div></div>`;
+}
+function ackBlock(){
+ return `<div class="ack"><div class="akt">${ic.shield} ${t('ackTitle')}</div><div class="akb">${t('ackBody')}</div>
+   <div class="ackchk"><span class="box on">${ic.check}</span>${t('ackChk')}</div></div>`;
+}
+
+// ── APPROVE screen (C10) ──
+function approveScreen(){
+ const off=cur.state==='offline';
+ const wrap=b=>app(t('approve'),t('approveSub'),off,b);
+ switch(cur.state){
+  case 'empty': return wrap(center('',ic.calendar,t('emptyApproveTitle'),t('emptyApproveBody')));
+  case 'loading': return wrap(skel(7));
+  case 'no-permission':
+   return wrap(center('err',ic.lock,t('selfTitle'),t('selfBody'),`<div class="why">${t('selfWhy')} ${cur.role}</div>`));
+  case 'success':
+   return wrap(`<div class="seal"><span class="disc ok">${ic.check}</span><h3>${t('successApproveTitle')}</h3><p>${t('successApproveSub')}</p></div>
+    ${reqCard()}${auditRow(t('overrideAudited'))}
+    <div class="note">${ic.shield}<span>${t('matrixNote')}</span></div>`);
+  case 'error':
+   return wrap(`<div class="banner err">${ic.warn}<div><b>${t('errApproveTitle')}</b><br>${t('errApproveBody')}</div></div>
+    ${reqCard()}<button class="btn p block">${ic.sync} ${t('retry')}</button>`);
+  case 'offline':
+   return wrap(`<div class="banner off">${ic.off}<div>${t('offApproveNote')}</div></div>${reqCard()}${cov('ok')}
+    <button class="btn w block" disabled>${ic.sync} ${t('queuedBtn')}</button>`);
+  case 'large-data':{
+   const q=LIAB.slice(0,5).map(s=>`<div class="rrow"><span class="av">${initials(s.n)}</span>
+     <div style="flex:1"><div class="rn">${s.n}</div><div class="rs">${s.role}</div></div>
+     <span class="rb" style="color:var(--muted)">${s.days} ${t('dayU')} · ${t('tAnnual')}</span></div>`).join('');
+   return wrap(`<div class="rmeta"><span class="cnt">${t('pendingTitle')}</span><span class="cnt">${t('pendingCount')}</span></div>
+    <div class="rsearch">${ic.search}<span>${cur.lang==='en'?'Search applicant or team':'Tafuta mwombaji au timu'}</span></div>
+    <div class="roster">${q}<div class="vhint">${t('pendingShown')}</div></div>`);
+  }
+  case 'coverage-warn':
+   return wrap(`${reqCard()}${cov('warn')}${ackBlock()}
+    <div class="note">${ic.shield}<span>${t('matrixNote')}</span></div>
+    <div style="display:flex;gap:9px"><button class="btn g" style="flex:1">${ic.x} ${t('rejectBtn')}</button><button class="btn d" style="flex:2;background:var(--red);color:#fff">${ic.check} ${t('approveOverride')}</button></div>`);
+  default: // populated
+   return wrap(`${reqCard()}${cov('ok')}
+    <div class="note">${ic.shield}<span>${t('matrixNote')}</span></div>
+    <div style="display:flex;gap:9px"><button class="btn g" style="flex:1">${ic.x} ${t('rejectBtn')}</button><button class="btn p" style="flex:2">${ic.check} ${t('approveBtn')}</button></div>`);
+ }
+}
+
+// ── liability table ──
+function lrow(s){
+ if(s.leaver) return `<div class="lrow excl"><div class="who"><div class="nm">${s.n}</div><div class="rl">${s.role}</div></div>
+   <div class="num hide">${s.days}</div><div class="num hide">${money(Math.round(s.monthly/30))}</div><div class="liab">${t('exclLeaver')}</div></div>`;
+ if(s.monthly==null) return `<div class="lrow"><div class="who"><div class="nm">${s.n}</div><div class="rl">${s.role}</div></div>
+   <div class="num hide">${s.days}</div><div class="num hide">${t('na')}</div><div class="liab"><span class="lna">${ic.warn} ${t('notAvail')}</span></div></div>`;
+ const daily=Math.round(s.monthly/30);
+ return `<div class="lrow"><div class="who"><div class="nm">${s.n}</div><div class="rl">${s.role}</div></div>
+   <div class="num hide">${s.days}</div><div class="num hide">${fmt(daily)}</div><div class="liab num">${money(s.days*daily)}</div></div>`;
+}
+function liabTable(){
+ return `<div class="ltable">
+   <div class="lhead"><div>${t('colStaff')}</div><div class="hide num">${t('colDays')}</div><div class="hide num">${t('colDaily')}</div><div class="num">${t('colLiab')}</div></div>
+   ${LIAB.map(lrow).join('')}</div>`;
+}
+function liabTotal(){
+ const total=LIAB.filter(s=>!s.leaver&&s.monthly!=null).reduce((a,s)=>a+s.days*Math.round(s.monthly/30),0);
+ return `<div class="ltotal"><div><div class="tk">${t('totalTitle')}</div><div class="tv">${money(total)}</div></div>
+   <div class="tmeta">4 ${t('liabActive')}<br>1 ${t('liabExcl')} · 1 ${t('liabNa')}</div></div>`;
+}
+
+// ── LIABILITY screen (C16) ──
+function liabilityScreen(){
+ if(!LIAB_VIEW.includes(cur.role)||cur.state==='no-permission'){
+  return app(t('liability'),t('liabilitySub'),false,
+   center('err',ic.lock,t('noPermTitle'),t('noPermBody'),`<div class="why">${t('noPermWhy')} ${cur.role}</div>`));
+ }
+ const off=cur.state==='offline';
+ const wrap=b=>app(t('liability'),t('liabilitySub'),off,b);
+ const header=`<div class="rmeta"><span class="formula">${ic.money} ${t('dailyFormula')}</span><span class="cnt">${t('asAt')} ${t('asAtVal')}</span></div>`;
+ switch(cur.state){
+  case 'empty': return wrap(center('',ic.money,t('emptyLiabTitle'),t('emptyLiabBody')));
+  case 'loading': return wrap(skel(8));
+  case 'error':
+   return wrap(`<div class="banner err">${ic.warn}<div><b>${t('errLiabTitle')}</b><br>${t('errLiabBody')}</div></div>
+    <button class="btn p block">${ic.sync} ${t('retry')}</button>`);
+  case 'success':
+   return wrap(`<div class="seal"><span class="disc ok">${ic.check}</span><h3>${t('successLiabTitle')}</h3><p>${t('successLiabSub')}</p></div>${liabTotal()}`);
+  case 'offline':
+   return wrap(`<div class="banner off">${ic.off}<div>${t('offLiabNote')}</div></div>${header}${liabTotal()}${liabTable()}`);
+  case 'large-data':
+   return wrap(`${header}
+    <div class="ltotal"><div><div class="tk">${t('registerTitle')}</div><div class="tv">TZS 284.6M</div></div>
+     <div class="tmeta">4,981 ${t('liabActive')}<br>233 ${t('liabExcl')} · 12 ${t('liabNa')}</div></div>
+    ${liabTable()}<div class="vhint">${t('registerShown')}</div>
+    <div class="note">${ic.money}<span>${t('exBase')}</span></div>
+    <div class="note">${ic.shield}<span>${t('activeOnly')} ${t('naNote')}</span></div>`);
+  default: // populated
+   return wrap(`${header}${liabTotal()}${liabTable()}
+    <div class="note">${ic.money}<span>${t('exBase')}</span></div>
+    <div class="note">${ic.users}<span>${t('activeOnly')}</span></div>
+    <div class="note">${ic.warn}<span>${t('naNote')}</span></div>`);
+ }
+}
+
+// ── render ──
+function render(){
+ let html;
+ if(cur.screen==='approve') html=approveScreen();
+ else if(cur.screen==='liability') html=liabilityScreen();
+ else html=applyScreen();
+ document.querySelector('.stage').innerHTML=`<div class="frame">${html}</div>`;
+}
+
+// ── switcher bar ──
+function seg(id,items,key){const el=document.getElementById(id);el.innerHTML=items.map(it=>{const v=Array.isArray(it)?it[0]:it,l=Array.isArray(it)?it[1]:it;return `<button data-v="${v}">${l}</button>`;}).join('');el.querySelectorAll('button').forEach(b=>b.onclick=()=>{cur[key]=b.getAttribute('data-v');sync();});}
+const AC={
+ apply:'AC-LV-01 · LV-02 · LV-05 · LR-1/2/4/5/7',
+ approve:'AC-LV-03 coverage (LR-6) · matrix/SoD unchanged · UNI-06',
+ liability:'AC-LIAB-01/02/03 · PC-1 · LVR-02'};
+function sync(){
+ document.documentElement.setAttribute('data-theme',cur.theme);
+ document.documentElement.setAttribute('data-surface',cur.surface);
+ [['screens','screen'],['states','state'],['roles','role'],['themes','theme'],['surfaces','surface'],['langs','lang']].forEach(([id,k])=>document.querySelectorAll('#'+id+' button').forEach(b=>b.classList.toggle('on',b.getAttribute('data-v')===cur[k])));
+ document.getElementById('acline').innerHTML=`Covers <b>${AC[cur.screen]}</b> · ${cur.theme}/${cur.surface} · viewer ${cur.role} · reg ${t('reg')}`;
+ render();
+}
+seg('screens',[['apply','Apply · E4'],['approve','Approve · C10'],['liability','Liability · C16']],'screen');
+seg('states',[['empty','empty'],['loading','loading'],['populated','populated'],['large-data','large-data'],['error','error'],['no-permission','no-perm'],['offline','offline'],['success','success'],['coverage-warn','coverage-warn'],['sick-leave','sick-leave']],'state');
+seg('roles',['R01','R02','R03','R04','R05','R06','R07','R08','R09','R10','R11','R12','R13'].map(r=>[r,r]),'role');
+seg('themes',[['light','Light'],['dark','Dark'],['glass','Glass'],['reduced','Reduced']],'theme');
+seg('surfaces',[['desktop','Desk'],['tablet','Tablet'],['mobile','Mobile'],['kiosk','Kiosk']],'surface');
+seg('langs',[['en','EN'],['sw','SW']],'lang');
+sync();
+
+</script>
+</body>
+</html>

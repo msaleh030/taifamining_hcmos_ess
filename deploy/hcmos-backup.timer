@@ -1,0 +1,10 @@
+[Unit]
+Description=Nightly HCMOS Postgres backup
+
+[Timer]
+# 02:17 UTC nightly (off the :00 mark). Adjust to an in-region low-traffic window.
+OnCalendar=*-*-* 02:17:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

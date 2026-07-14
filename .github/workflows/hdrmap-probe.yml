@@ -1,0 +1,101 @@
+name: Header-Map Probe (official file position→header, vs contract v1.2)
+
+# Correction 1 (Kira 2026-07-14): the matcher moves to EXACT case-insensitive
+# resolution with HARD FAIL on zero/duplicate resolution. Six ratified names
+# (Transport Allowance(variable), Gross Salary Arrears, Terminal Dues,
+# Overdraft, Local Conveyance, TSF Allowance) currently sit in un-named
+# ALLOWANCES-N contract slots. Their POSITIONS must come from the official
+# file, never guessed — this probe prints the file's section+header band
+# position-by-position and diffs it against exact_column v1.2 on the box.
+# READ-ONLY: headers and row counts only, no cell data, no PII.
+# Sentinel: .github/RUN-HDRMAP.
+on:
+  workflow_dispatch:
+  push:
+    branches: [claude/nifty-goodall-poihi4]
+    paths: ['.github/RUN-HDRMAP']
+
+concurrency: { group: hdrmap, cancel-in-progress: false }
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      UAT_IP: 152.239.121.249
+      UAT_CO: 11111111-1111-1111-1111-111111111111
+    steps:
+      - uses: actions/checkout@v4
+      - name: SSH path — tunnel first, direct fallback
+        env:
+          CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+          CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
+        run: |
+          mkdir -p ~/.ssh && printf '%s\n' "${{ secrets.UAT_SSH_PRIVATE_KEY }}" > ~/.ssh/uat && chmod 600 ~/.ssh/uat
+          sudo curl -sSL -o /usr/local/bin/cloudflared \
+            https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 \
+            && sudo chmod +x /usr/local/bin/cloudflared || true
+          cat > ~/.ssh/config <<EOF
+          Host uat-tunnel
+            HostName ssh.uat.taifamining.tz
+            User root
+            IdentityFile ~/.ssh/uat
+            StrictHostKeyChecking accept-new
+            ProxyCommand /usr/local/bin/cloudflared access ssh --hostname %h --service-token-id $CF_ACCESS_CLIENT_ID --service-token-secret $CF_ACCESS_CLIENT_SECRET
+          Host uat-direct
+            HostName $UAT_IP
+            User root
+            IdentityFile ~/.ssh/uat
+            StrictHostKeyChecking accept-new
+            ConnectTimeout 10
+          EOF
+          chmod 600 ~/.ssh/config
+          if timeout 30 ssh uat-tunnel true 2>/dev/null; then echo uat-tunnel > /tmp/ssh_host; exit 0; fi
+          for i in $(seq 1 60); do
+            ssh uat-direct true 2>/dev/null && { echo uat-direct > /tmp/ssh_host; exit 0; }
+            echo "waiting ($i/60)"; sleep 15
+          done
+          echo FATAL; exit 1
+
+      - name: BUILD_SHA + position→header map of every payroll file on the box
+        run: |
+          SSH="ssh $(cat /tmp/ssh_host)"
+          echo "── BUILD_SHA ──"
+          $SSH "cat /opt/hcmos/BUILD_SHA 2>/dev/null | head -c 40; echo"
+          $SSH "cd /opt/hcmos && node -e '
+            const path=require(\"node:path\");
+            const {readSheet}=require(\"./scripts/xlsx-to-master.js\");
+            const files=[\"/root/uat-data/Payroll_Master_File_North_Mara.xlsx\",
+                         \"/root/uat-data/Payroll_NM_TSF_pass.xlsx\"];
+            for(const f of files){
+              let grid; try{grid=readSheet(f);}catch(e){console.log(\"FILE\",f,\"UNREADABLE:\",e.message);continue;}
+              console.log(\"════ FILE\",path.basename(f),\"grid rows:\",grid.length,\"════\");
+              // Find the header row the same way the forensic does: a row in the
+              // first 12 carrying an EMPLOYEE-ID-like AND a name-like label.
+              const nh=(s)=>String(s||\"\").trim().toLowerCase().replace(/[^a-z0-9]+/g,\" \").trim();
+              const pfSyn=[\"payroll no\",\"payroll number\",\"pf\",\"pf no\",\"payroll\",\"employee id\"];
+              const nmSyn=[\"name\",\"full name\",\"employee name\",\"names\"];
+              let hi=-1;
+              for(let i=0;i<Math.min(grid.length,12);i++){
+                const r=grid[i]||[];
+                if(r.some(h=>pfSyn.includes(nh(h))) && r.some(h=>nmSyn.includes(nh(h)))){hi=i;break;}
+              }
+              console.log(\"header row (1-based):\", hi+1);
+              if(hi<0){console.log(\"NO HEADER ROW FOUND — first rows:\",JSON.stringify(grid.slice(0,4)));continue;}
+              const sect=hi>0?(grid[hi-1]||[]):[];
+              const hdr=grid[hi]||[];
+              const n=Math.max(hdr.length,sect.length);
+              console.log(\"total header columns:\",hdr.length,\"| data rows:\",grid.length-hi-1);
+              for(let p=0;p<n;p++){
+                const h=String(hdr[p]||\"\").trim(), s=String(sect[p]||\"\").trim();
+                console.log(String(p).padStart(2,\"0\"),\"|\",JSON.stringify(h),(s?\"  [section: \"+s+\"]\":\"\"));
+              }
+            }
+          '"
+
+      - name: contract v1.2 on the box (for the position diff)
+        run: |
+          SSH="ssh $(cat /tmp/ssh_host)"
+          $SSH "sudo -u postgres psql -d hcmos -c \"
+            SELECT position, section, header, pinned FROM exact_column
+             WHERE version='v1.2' ORDER BY position\""

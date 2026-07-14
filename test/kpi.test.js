@@ -1,0 +1,137 @@
+'use strict';
+// Slice 7 — KPI compute. RAG thresholds, role-scoped scorecard (A2/A3), personal
+// My KPIs (E8, self only), leaver exclusion (LVR-02), not-available cards for
+// uncaptured inputs (never zero), and a hand-calculated fixture (tenant B).
+const { test, before, after } = require('node:test');
+const assert = require('node:assert/strict');
+const H = require('./helpers');
+const db = require('../src/db');
+const kpi = require('../src/kpi');
+const { F } = H;
+
+const A = F.TENANT_A;
+const B = F.TENANT_B;
+const r11 = { company_id: A, user_id: F.USERS.DIRECTOR_A.id, role_code: 'R11' };
+const r05 = { company_id: A, user_id: F.USERS.HSE5_A.id, role_code: 'R06' }; // SHEQ Manager (R05 absorbed, v1.6)
+const r01 = { company_id: A, user_id: F.USERS.EMP_A.id, role_code: 'R01' };
+const bSess = { company_id: B, user_id: F.USERS.BOB_B.id, role_code: 'R11' };
+
+const setCfg = (co, key, value) => db.withOwner((c) =>
+  c.query('UPDATE config SET value=$1 WHERE company_id=$2 AND key=$3', [value, co, key]));
+
+before(H.start);
+after(H.stop);
+
+test('RAG thresholds — up and down directions', () => {
+  const up = { direction: 'up', target: 100, green: 0.95, amber: 0.85 };
+  assert.equal(kpi.ragFor(up, 100).rag, 'green');
+  assert.equal(kpi.ragFor(up, 90).rag, 'amber');
+  assert.equal(kpi.ragFor(up, 50).rag, 'red');
+  const down = { direction: 'down', target: 10, green: 5, amber: 15 };
+  assert.equal(kpi.ragFor(down, 3).rag, 'green');
+  assert.equal(kpi.ragFor(down, 12).rag, 'amber');
+  assert.equal(kpi.ragFor(down, 20).rag, 'red');
+});
+
+test('role-scope: each role sees only the KPIs it owns; scorecard is feature-flagged', async () => {
+  // Flag off → scorecard not active (engine still exists).
+  const off = await kpi.scorecard(r11);
+  assert.equal(off.enabled, false);
+  assert.equal(off.cards.length, 0);
+
+  await setCfg(A, 'analytics.enabled', 'true');
+  try {
+    const sc11 = await kpi.scorecard(r11);
+    const sc05 = await kpi.scorecard(r05);
+    const sc01 = await kpi.scorecard(r01);
+    const ids = (sc) => sc.cards.map((c) => c.id);
+
+    assert.equal(sc11.enabled, true);
+    assert.ok(ids(sc11).includes('WF-01'), 'R11 owns Workforce');
+    assert.ok(!ids(sc05).includes('WF-01'), 'R06 (SHEQ) does not own Workforce');
+    assert.ok(ids(sc05).includes('SAF-01'), 'R06 owns Safety');
+    assert.ok(!ids(sc11).includes('SAF-01'), 'R11 does not own Safety');
+    // every card returned is genuinely owned by that role
+    assert.ok(sc11.cards.every((c) => c.owners.includes('R11')));
+    assert.ok(sc05.cards.every((c) => c.owners.includes('R06')));
+    assert.equal(sc01.cards.length, 0, 'R01 owns no org KPIs');
+  } finally {
+    await setCfg(A, 'analytics.enabled', 'false');
+  }
+});
+
+test('My KPIs (E8) are self only, and gated by the tenant-wide analytics flag', async () => {
+  // Flag off (default) → E8 disabled tenant-wide, regardless of role.
+  const off = await kpi.myKpis({ company_id: A, user_id: F.USERS.SITE2_A.id, role_code: 'R01' });
+  assert.equal(off.enabled, false, 'My KPIs off when analytics is off (tenant-wide)');
+  assert.equal(off.cards.length, 0);
+
+  // Give one employee a disciplinary record; another none.
+  await db.withOwner((c) => c.query(
+    `INSERT INTO disciplinary(company_id, employee_id, kind, action_type) VALUES ($1,$2,'verbal','verbal')`,
+    [A, F.EMP.DAVE]));
+  await setCfg(A, 'analytics.enabled', 'true');
+  try {
+    const daveMy = await kpi.myKpis({ company_id: A, user_id: F.USERS.SITE2_A.id, role_code: 'R01' });
+    const hoMy = await kpi.myKpis({ company_id: A, user_id: F.USERS.HO_A.id, role_code: 'R03' });
+    const disc = (my) => my.cards.find((c) => c.id === 'MY-02');
+
+    assert.equal(daveMy.enabled, true);
+    assert.equal(daveMy.employee_id, F.EMP.DAVE);
+    assert.equal(disc(daveMy).value, 1, 'sees own disciplinary record');
+    assert.equal(disc(hoMy).value, 0, 'another employee sees only their own (zero)');
+  } finally {
+    await setCfg(A, 'analytics.enabled', 'false');
+    await db.withOwner((c) => c.query(
+      `DELETE FROM disciplinary WHERE employee_id=$1 AND action_type='verbal' AND detail IS NULL`, [F.EMP.DAVE]));
+  }
+});
+
+test('LVR-02: a population KPI counts ACTIVE staff only (leavers excluded)', async () => {
+  const card = await kpi.computeOne(r11, 'WF-01');
+  const active = Number((await db.withOwner((c) => c.query(
+    `SELECT count(*)::int n FROM employee WHERE company_id=$1 AND status='active'`, [A]))).rows[0].n);
+  const all = Number((await db.withOwner((c) => c.query(
+    `SELECT count(*)::int n FROM employee WHERE company_id=$1`, [A]))).rows[0].n);
+  assert.equal(card.value, active, 'headcount equals the active population');
+  assert.ok(active < all, 'suspended/terminated staff are excluded from the population');
+});
+
+test('missing-input KPI renders not-available (input named), never zero', async () => {
+  const card = await kpi.computeOne(r11, 'ENG-01'); // survey scores not captured
+  assert.equal(card.available, false);
+  assert.equal(card.status, 'not-available');
+  assert.equal(card.missing, 'survey scores');
+  assert.ok(!('value' in card), 'never a zero or guessed value');
+});
+
+test('computed value matches a hand-calculated fixture (tenant B)', async () => {
+  // Tenant B has exactly one active employee and no disciplinary records.
+  const hc = await kpi.computeOne(bSess, 'WF-01');
+  assert.equal(hc.value, 1);
+  assert.equal(hc.rag, 'red', '1 of a 5000 target');
+
+  const disc = await kpi.computeOne(bSess, 'DISC-01');
+  assert.equal(disc.value, 0);
+  assert.equal(disc.rag, 'green', 'zero disciplinary actions');
+});
+
+// ── bughunt-B #15: 0 is a REAL target (zero leave-liability, zero disciplinary
+// actions) — only null means "no target". A truthiness check greyed-out every
+// target-0 card; the up-direction target-0 case also guarded against value/0.
+test('KPI-B15 target 0 is a real target: progress computes (never grey/NaN/Infinity)', () => {
+  // down-direction, target 0 (e.g. disciplinary actions): value 0 = perfect.
+  const perfect = kpi.ragFor({ direction: 'down', target: 0, green: 0, amber: 0 }, 0);
+  assert.equal(perfect.progress, 1);
+  assert.equal(perfect.rag, 'green');
+  const off = kpi.ragFor({ direction: 'down', target: 0, green: 0, amber: 0 }, 5);
+  assert.equal(off.progress, 0, 'missed zero-target: progress 0, not null');
+  assert.equal(off.rag, 'red');
+  // up-direction, target 0: meeting-or-exceeding is progress 1 — never value/0.
+  const up = kpi.ragFor({ direction: 'up', target: 0, green: 0.9, amber: 0.7 }, 3);
+  assert.equal(up.progress, 1);
+  assert.equal(up.rag, 'green');
+  assert.ok(Number.isFinite(up.progress), 'no Infinity from dividing by a zero target');
+  // null target still means "no target" → grey.
+  assert.equal(kpi.ragFor({ direction: 'up', target: null, green: 0.9, amber: 0.7 }, 3).rag, 'grey');
+});

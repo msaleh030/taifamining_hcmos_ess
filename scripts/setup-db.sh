@@ -44,6 +44,12 @@ PSQL -c "ALTER ROLE ${APP_ROLE} NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE"
 PSQL -tc "SELECT 1 FROM pg_database WHERE datname='${DB_NAME}'" | grep -q 1 || \
   PSQL -c "CREATE DATABASE ${DB_NAME} OWNER ${OWNER_ROLE}"
 
+# 3b. Extensions (require superuser, so provisioned here not in app migrations):
+#     pg_trgm powers indexed substring search on the employee directory at scale.
+say "ensuring extensions (pg_trgm, btree_gin)"
+PSQL -d "${DB_NAME}" -c "CREATE EXTENSION IF NOT EXISTS pg_trgm" >/dev/null
+PSQL -d "${DB_NAME}" -c "CREATE EXTENSION IF NOT EXISTS btree_gin" >/dev/null
+
 # 4. Local trust auth for the two HCMOS roles (so the JS client skips SCRAM).
 HBA="$(PSQL -tA -c 'SHOW hba_file')"
 MARKER="# >>> hcmos trust (managed by setup-db.sh) >>>"

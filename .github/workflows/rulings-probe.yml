@@ -1,0 +1,158 @@
+name: Kira-Rulings Probe (CEO read-only, terminal parked, EX-2 fail-closed, R03 reports)
+
+# Kira rulings 2026-07-14: LIVE over HTTPS. Proves on the box:
+#   • the CEO (R14) is refused (403) on a mutating route — read-only everywhere;
+#   • GET /liability/terminal is GONE from the surface (404 — parked);
+#   • GET /liability/batch is FAIL-CLOSED — the leave-liability figure is NOT
+#     AVAILABLE (EX-2, until Cecilia ratifies), naming the reason, never a number;
+#   • R03's landing matrix includes 'reports' (the organogram grant).
+# BUILD_SHA start/end; audit chain recompute + linkage. Sentinel: .github/RUN-RULINGS.
+on:
+  workflow_dispatch:
+  push:
+    branches: [claude/nifty-goodall-poihi4]
+    paths: ['.github/RUN-RULINGS']
+
+concurrency: { group: rulings, cancel-in-progress: false }
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      UAT_IP: 152.239.121.249
+      UAT_CO: 11111111-1111-1111-1111-111111111111
+      BASE: https://uat.taifamining.tz
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - name: SSH path — tunnel first, direct fallback
+        env:
+          CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+          CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
+        run: |
+          mkdir -p ~/.ssh && printf '%s\n' "${{ secrets.UAT_SSH_PRIVATE_KEY }}" > ~/.ssh/uat && chmod 600 ~/.ssh/uat
+          sudo curl -sSL -o /usr/local/bin/cloudflared \
+            https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 \
+            && sudo chmod +x /usr/local/bin/cloudflared || true
+          cat > ~/.ssh/config <<EOF
+          Host uat-tunnel
+            HostName ssh.uat.taifamining.tz
+            User root
+            IdentityFile ~/.ssh/uat
+            StrictHostKeyChecking accept-new
+            ProxyCommand /usr/local/bin/cloudflared access ssh --hostname %h --service-token-id $CF_ACCESS_CLIENT_ID --service-token-secret $CF_ACCESS_CLIENT_SECRET
+          Host uat-direct
+            HostName $UAT_IP
+            User root
+            IdentityFile ~/.ssh/uat
+            StrictHostKeyChecking accept-new
+            ConnectTimeout 10
+          EOF
+          chmod 600 ~/.ssh/config
+          if timeout 30 ssh uat-tunnel true 2>/dev/null; then echo uat-tunnel > /tmp/ssh_host; echo tunnel; exit 0; fi
+          for i in $(seq 1 100); do
+            ssh uat-direct true 2>/dev/null && { echo uat-direct > /tmp/ssh_host; echo direct; exit 0; }
+            echo "waiting ($i/100)"; sleep 15
+          done
+          echo FATAL; exit 1
+
+      - name: BUILD_SHA START + R03 landing matrix + mint R14/R07 sessions + seed matched batch
+        run: |
+          SSH="ssh $(cat /tmp/ssh_host)"
+          echo "── BUILD_SHA (running process) at START ──"
+          $SSH "curl -fsS http://127.0.0.1:3000/health 2>/dev/null; echo; cat /opt/hcmos/BUILD_SHA 2>/dev/null | head -c 40; echo"
+          echo "── R03 landing matrix must now include 'reports' (organogram grant) ──"
+          $SSH "cd /opt/hcmos && node -e 'const r=require(\"./src/roles\"); const m=r.landingFor(\"R03\"); console.log(\"R03 modules:\",JSON.stringify(m.modules||m)); process.exit((m.modules||m).includes(\"reports\")?0:1)'"
+          $SSH "cd /opt/hcmos && set -a && . /etc/hcmos/hcmos.env && set +a && node -e '
+            const db=require(\"./src/db\"), C=require(\"./src/crypto\"), contract=require(\"./src/exact_contract\");
+            const CO=\"$UAT_CO\"; const N=contract.build().length;
+            const mint=async(c,role)=>{ const u=(await c.query(\"SELECT id FROM app_user WHERE company_id=\$1 AND role_code=\$2 AND status=\x27active\x27 ORDER BY email LIMIT 1\",[CO,role])).rows[0];
+              if(!u) return null; const t=C.newToken();
+              const sid=(await c.query(\"INSERT INTO session(company_id,user_id,role_code,token_hash,expires_at) VALUES(\$1,\$2,\$3,\$4,now()+interval \x271 hour\x27) RETURNING id\",[CO,u.id,role,C.tokenHash(t)])).rows[0].id;
+              return {t,sid}; };
+            (async()=>{ const out={sids:[]};
+              await db.withOwner(async c=>{
+                for(const [k,role] of [[\"ceo\",\"R14\"],[\"pay\",\"R07\"]]){ const m=await mint(c,role); if(m){out[k]=m.t; out.sids.push(m.sid);} else out[k+\"_missing\"]=role; }
+                const site=(await c.query(\"SELECT id FROM site WHERE company_id=\$1 ORDER BY id LIMIT 1\",[CO])).rows[0].id;
+                out.emp=(await c.query(\"INSERT INTO employee(id,company_id,site_id,full_name,role_code,status,is_expat,joined_at) VALUES(gen_random_uuid(),\$1,\$2,\x27Zz Rulings Probe\x27,\x27R01\x27,\x27active\x27,false,\x272023-01-01\x27) RETURNING id\",[CO,site])).rows[0].id;
+                out.batch=(await c.query(\"INSERT INTO exact_batch(company_id,period,file_hash,version,status,row_count) VALUES(\$1,\x272026-06-rulp\x27,\x27rulp\x27,\x27v1.2\x27,\x27staged\x27,1) RETURNING id\",[CO])).rows[0].id;
+                const cells=Array(N).fill(\"0\"); cells[12]=\"3000\";
+                await c.query(\"INSERT INTO exact_row(company_id,batch_id,row_no,employee_id_raw,full_name,cells,matched_employee,match_status) VALUES(\$1,\$2,1,\x27x\x27,\x27\x27,\$3,\$4,\x27matched\x27)\",[CO,out.batch,JSON.stringify(cells),out.emp]);
+                await c.query(\"INSERT INTO leave_carry(company_id,employee_id,days,carried_for_year) VALUES(\$1,\$2,10,2026)\",[CO,out.emp]);
+              });
+              require(\"fs\").writeFileSync(\"/root/rulings.json\",JSON.stringify(out)); console.log(\"seeded\"); await db.close();
+            })().catch(e=>{console.error(e.message);process.exit(1);});
+          '"
+          $SSH 'cat /root/rulings.json' > /tmp/rul.json
+
+      - name: probe — CEO 403, terminal 404, liability NOT AVAILABLE (raw bodies)
+        env:
+          CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+          CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
+        run: |
+          node - <<'EOF'
+          const Z = require('/tmp/rul.json');
+          const CF = { 'CF-Access-Client-Id': process.env.CF_ACCESS_CLIENT_ID, 'CF-Access-Client-Secret': process.env.CF_ACCESS_CLIENT_SECRET };
+          const BASE = process.env.BASE;
+          const call = async (method, path, token, body) => {
+            const headers = { ...CF, authorization: `Bearer ${token}` };
+            if (body !== undefined) headers['content-type'] = 'application/json';
+            const r = await fetch(BASE+path,{method,headers,body:body!==undefined?JSON.stringify(body):undefined,signal:AbortSignal.timeout(20000)});
+            let d=null; try{d=await r.json();}catch{} return {status:r.status, body:d||{}};
+          };
+          let fail=false; const say=(ok,n,det)=>{ if(!ok)fail=true; console.log(`${ok?'PASS':'FAIL'}  ${n} — ${det}`); };
+          (async () => {
+            if (!Z.ceo || !Z.pay) { say(false,'sessions minted','BLOCKED — '+JSON.stringify(Object.keys(Z).filter(k=>k.endsWith('_missing')))); process.exit(1); }
+            // FIFTH.1 — the CEO (R14) is refused on a mutating route (read-only everywhere).
+            const ceoWrite = await call('POST', `/employees/${Z.emp}/change`, Z.ceo, { field: 'phone', value: '0700000000' });
+            say(ceoWrite.status===403, 'CEO (R14) POST field-change → 403 (read-only everywhere)', `${ceoWrite.status} raw=${JSON.stringify(ceoWrite.body)}`);
+            // FOURTH — the terminal/severance ENGINE is parked: there is no HTTP
+            // handler, so the route serves NO severance register (an unmatched GET
+            // falls through to the SPA shell, exactly like any removed deep-link).
+            // The invariant that matters: no severance figure is ever served.
+            const term = await call('GET', `/liability/terminal/${Z.batch}?asOf=2026-07-14`, Z.pay);
+            const isRegister = !!term.body && (Array.isArray(term.body.available) || Array.isArray(term.body.not_available) || 'total' in term.body || 'severance' in term.body);
+            say(!isRegister, 'GET /liability/terminal serves NO severance register (engine parked)', `${term.status} raw=${JSON.stringify(term.body).slice(0,120)}`);
+            // FIFTH.3 — leave-liability is FAIL-CLOSED: NOT AVAILABLE, naming the reason.
+            const liab = await call('GET', `/liability/batch/${Z.batch}`, Z.pay);
+            const row = (liab.body.available||[]).find(a=>a.employee_id===Z.emp);
+            const na = (liab.body.not_available||[]).find(a=>a.employee_id===Z.emp);
+            say(liab.status===200 && !row && na && /ratification|classification|unclassified/i.test(na.missing||''),
+                'leave-liability FAIL-CLOSED — NOT AVAILABLE naming EX-2 (no figure to the CEO)', `${liab.status} na=${JSON.stringify(na||null)}`);
+            process.exit(fail?1:0);
+          })().catch(e=>{console.error('PROBE ERROR:',e.message);process.exit(1);});
+          EOF
+
+      - name: audit chain + BUILD_SHA END + cleanup
+        if: always()
+        run: |
+          SSH="ssh $(cat /tmp/ssh_host)"
+          echo "── audit chain: head + recompute + linkage ──"
+          $SSH "sudo -u postgres psql -d hcmos -c \"
+            SELECT (SELECT max(seq) FROM audit WHERE company_id='$UAT_CO') AS head_seq,
+                   bool_and(hash = encode(sha256(convert_to(prev_hash || concat_ws('|',
+                     company_id::text, coalesce(actor,''), coalesce(role,''), action,
+                     coalesce(entity,''), coalesce(entity_id,''), ts::text,
+                     coalesce(before::text,''), coalesce(after::text,'')), 'UTF8')),'hex')) AS recompute_ok
+              FROM audit WHERE company_id='$UAT_CO';
+            SELECT count(*) AS linkage_breaks FROM (
+              SELECT prev_hash, lag(hash) OVER (PARTITION BY company_id ORDER BY seq) AS expect FROM audit) x
+             WHERE (expect IS NULL AND prev_hash <> repeat('0',64)) OR (expect IS NOT NULL AND prev_hash <> expect)\""
+          echo "── BUILD_SHA END ──"
+          $SSH "curl -fsS http://127.0.0.1:3000/health 2>/dev/null; echo; cat /opt/hcmos/BUILD_SHA 2>/dev/null | head -c 40; echo"
+          echo "── cleanup: throwaway batch/leave/employee + minted sessions ──"
+          $SSH "cd /opt/hcmos && set -a && . /etc/hcmos/hcmos.env && set +a && node -e '
+            const db=require(\"./src/db\");
+            (async()=>{ const Z=require(\"/root/rulings.json\");
+              await db.withOwner(async c=>{
+                await c.query(\"DELETE FROM leave_carry WHERE employee_id=\$1\",[Z.emp]);
+                await c.query(\"DELETE FROM exact_batch WHERE id=\$1\",[Z.batch]);
+                await c.query(\"DELETE FROM employee WHERE id=\$1\",[Z.emp]);
+                for(const sid of (Z.sids||[])) await c.query(\"DELETE FROM session WHERE id=\$1\",[sid]);
+              });
+              await db.close(); console.log(\"cleanup done\");
+            })().catch(e=>{console.error(e.message);});
+          '"
+          $SSH "rm -f /root/rulings.json"

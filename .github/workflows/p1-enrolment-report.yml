@@ -1,0 +1,76 @@
+name: P1 Enrolment Report (phone coverage, read-only)
+
+# P1.c (Kira): the enrolment link goes by SMS. Report, from the LIVE box, how
+# many of the loaded employees have a mobile number on file — total, per site,
+# and the no-phone count that becomes Taifa's problem to close. Read-only; no
+# data is changed. Sentinel: .github/RUN-P1REPORT.
+on:
+  workflow_dispatch:
+  push:
+    branches: [claude/nifty-goodall-poihi4]
+    paths: ['.github/RUN-P1REPORT']
+
+concurrency: { group: p1report, cancel-in-progress: false }
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      UAT_IP: 152.239.121.249
+      UAT_CO: 11111111-1111-1111-1111-111111111111
+    steps:
+      - uses: actions/checkout@v4
+      - name: SSH path — tunnel first, direct fallback
+        env:
+          CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+          CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
+        run: |
+          mkdir -p ~/.ssh && printf '%s\n' "${{ secrets.UAT_SSH_PRIVATE_KEY }}" > ~/.ssh/uat && chmod 600 ~/.ssh/uat
+          sudo curl -sSL -o /usr/local/bin/cloudflared \
+            https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 \
+            && sudo chmod +x /usr/local/bin/cloudflared || true
+          cat > ~/.ssh/config <<EOF
+          Host uat-tunnel
+            HostName ssh.uat.taifamining.tz
+            User root
+            IdentityFile ~/.ssh/uat
+            StrictHostKeyChecking accept-new
+            ProxyCommand /usr/local/bin/cloudflared access ssh --hostname %h --service-token-id $CF_ACCESS_CLIENT_ID --service-token-secret $CF_ACCESS_CLIENT_SECRET
+          Host uat-direct
+            HostName $UAT_IP
+            User root
+            IdentityFile ~/.ssh/uat
+            StrictHostKeyChecking accept-new
+            ConnectTimeout 10
+          EOF
+          chmod 600 ~/.ssh/config
+          if timeout 30 ssh uat-tunnel true 2>/dev/null; then echo uat-tunnel > /tmp/ssh_host; exit 0; fi
+          for i in $(seq 1 40); do
+            ssh uat-direct true 2>/dev/null && { echo uat-direct > /tmp/ssh_host; exit 0; }
+            echo "waiting ($i/40)"; sleep 15
+          done
+          echo FATAL; exit 1
+
+      - name: phone coverage — total, per site, no-phone count (read-only)
+        run: |
+          SSH="ssh $(cat /tmp/ssh_host)"
+          echo "── P1.c: mobile-number coverage of the loaded employee master (active only) ──"
+          $SSH "sudo -u postgres psql -d hcmos -c \"
+            SELECT count(*) AS active_total,
+                   count(*) FILTER (WHERE phone IS NOT NULL AND btrim(phone) <> '') AS with_phone,
+                   count(*) FILTER (WHERE phone IS NULL OR btrim(phone) = '')  AS no_phone
+              FROM employee WHERE company_id='$UAT_CO' AND status='active'\""
+          echo "── per site (active) ──"
+          $SSH "sudo -u postgres psql -d hcmos -c \"
+            SELECT s.name AS site,
+                   count(*) AS active,
+                   count(*) FILTER (WHERE e.phone IS NOT NULL AND btrim(e.phone) <> '') AS with_phone,
+                   count(*) FILTER (WHERE e.phone IS NULL OR btrim(e.phone) = '')  AS no_phone
+              FROM employee e JOIN site s ON s.id = e.site_id
+             WHERE e.company_id='$UAT_CO' AND e.status='active'
+             GROUP BY s.name ORDER BY s.name\""
+          echo "── devices already enrolled (field ESS) ──"
+          $SSH "sudo -u postgres psql -d hcmos -c \"
+            SELECT count(*) AS devices, count(DISTINCT employee_id) AS distinct_people
+              FROM device WHERE company_id='$UAT_CO' AND status='active'\""
