@@ -173,11 +173,17 @@ function main() {
       const complete = rows.filter((r) => num2(r[basicC]) > 0
         && col.tin != null && String(r[col.tin] ?? '').trim() !== ''
         && (netC < 0 || num2(r[netC]) > 0));
-      let baseSum = 0, allowSum = 0, netIdentityFails = 0;
+      // FLOAT DETERMINISM (Kira 2026-07-14): sum in INTEGER CENTS in a fixed
+      // column order and divide back ONCE — the figure is reproducible to the
+      // shilling regardless of row order (was: float accumulation over 1,386
+      // cells drifting ±1 TZS from the hand-calc by summation order).
+      const cents2 = (v) => Math.round(num2(v) * 100);
+      let baseCents = 0, allowCents = 0, netIdentityFails = 0;
       for (const r of complete) {
-        for (const n of BASE_SIX) baseSum += num2(r[cIdx[n]]);
-        if (totAllow >= 0) allowSum += num2(r[totAllow]);
+        for (const n of BASE_SIX) baseCents += cents2(r[cIdx[n]]);
+        if (totAllow >= 0) allowCents += cents2(r[totAllow]);
       }
+      const baseSum = baseCents / 100, allowSum = allowCents / 100;
       // Net identity over ALL rows (285): Overdraft is INSIDE Total Allowances
       // (an earning); the cent columns are Net-level, outside both totals.
       if (totAllow >= 0 && totDed >= 0 && netC >= 0) {
@@ -193,11 +199,10 @@ function main() {
       ratification = {
         complete_records: complete.length,           // target: 231
         base_sum: Math.round(baseSum),               // target: 332,052,804
-        // ±1 TZS: summing 231×6 decimal cells in float64 differs from Excel's
-        // SUM by up to a shilling depending on order. The DELTA is printed —
-        // a real component error would be off by thousands, never 1.
+        // EXACT since the integer-cents fix: the delta must be ZERO. If it is
+        // not, one side is wrong — report which, never widen the tolerance.
         base_target_delta: Math.round(baseSum) - T.base,
-        base_target_pass: Math.abs(Math.round(baseSum) - T.base) <= 1,
+        base_target_pass: Math.round(baseSum) === T.base,
         total_allowances_sum: Math.round(allowSum),  // target: 442,168,949
         allow_target_pass: Math.round(allowSum) === T.allow,
         mean_daily_rate: meanDaily,                  // target: 47,915

@@ -6,9 +6,11 @@
 //      AVAILABLE, naming the pending ratification.
 //   2. UNCLASSIFIED — even once ratified, an allowance column that carries money
 //      but is neither included nor excluded from the base is NOT AVAILABLE,
-//      NAMING the component (Cecilia must classify it). On the official v2.0
-//      layout this catches 'Previous Cent-Round Deduction' (25) — the one
-//      allowance component no 2026-07-14 ruling covered.
+//      NAMING the component (Cecilia must classify it). Since the cent-round
+//      ruling (Kira 2026-07-14: 'Previous Cent-Round Deduction' 25 + all cent
+//      columns EXCLUDED — rounding carries, not earned pay) EVERY allowance
+//      column is classified; the tests below synthesize the unclassified case
+//      by dropping a component, and PIN the full coverage.
 //   3. Only when ratified AND every populated pay column is classified does the
 //      base compute — the same one base ÷30 the certified LIAB-01 math pins.
 const { test, before, after } = require('node:test');
@@ -103,4 +105,61 @@ test('RATIFIED + fully classified: the figure computes (10 × 3000/30 = 1000) fr
   assert.equal(r.available, true, JSON.stringify(r));
   assert.equal(r.daily_rate, 100, '3000 / 30');
   assert.equal(r.liability, 1000, '10 × 100');
+});
+
+// ── Cent-round ruling (Kira 2026-07-14): ALL cent-round columns are EXCLUDED
+// from the base — a rounding carry is not earned pay. They live in the Net
+// formula (Net = TotAllow − TotDeduct + CentRoundUp − CentRoundDown), never
+// the base. Byte-identical headers: 25 Previous Cent-Round Deduction,
+// 28 Cent Round Up, 41 Previous Cent-Round Payment, 43 Cent Round Down.
+test('CENT-ROUND: money in any cent-round column neither blocks nor enters the base (EXCLUDED, ruled)', async () => {
+  await setCfg(RATIFIED, 'true');
+  await setCfg(INCLUDE, INCLUDE_FULL);
+  const exact = require('../src/exact');
+  const cells = baseCells();           // Basic Salary (10) = 3000
+  cells[25] = '117';                   // Previous Cent-Round Deduction — the old auto-block
+  cells[28] = '3'; cells[43] = '2';    // Cent Round Up / Down
+  cells[41] = '55';                    // Previous Cent-Round Payment
+  const r = await liab.liabilityFor(session, { employeeId: F.EMP.DAVE, days: 10, cells });
+  assert.equal(r.available, true, `cent-round money must not block: ${JSON.stringify(r)}`);
+  assert.equal(await exact.dailyRateBase(session, cells), 3000, 'and never enters the base');
+});
+
+// ── Full coverage (the ruling's own check): after the cent-round exclusion,
+// NO allowance column can auto-block — every one resolves to a ruled list.
+// Local Conveyance (23) + TSF Allowance (20) sit in PENDING (Cecilia's gate,
+// closed on purpose) — classified as gated, not silently unclassified.
+test('COVERAGE: every allowances-section column is classified (include/exclude/pending/gross) — none auto-blocks', async () => {
+  await setCfg(INCLUDE, INCLUDE_FULL);
+  const exact = require('../src/exact');
+  const cfgMod = require('../src/config');
+  const { include, exclude, pending, rows } = await exact.classificationPositions(A);
+  const normH = (s) => String(s || '').trim().toUpperCase();
+  const gross = normH(await cfgMod.getConfig(A, 'exact.dailyrate.gross_name', 'TOTAL ALLOWANCE', null));
+  const orphans = rows
+    .filter((c) => c.section === 'allowances')
+    .filter((c) => { const h = normH(c.header);
+      return h !== gross && !include.has(h) && !exclude.has(h) && !pending.has(h); })
+    .map((c) => `${c.position}:${c.header}`);
+  assert.deepEqual(orphans, [], `unclassified allowance column(s) remain: ${orphans.join(', ')}`);
+  // The ONLY gate left is Cecilia's — exactly these two, nothing else.
+  assert.deepEqual([...pending.keys()].sort(), ['LOCAL CONVEYANCE', 'TSF ALLOWANCE']);
+});
+
+// ── Float determinism (Kira 2026-07-14): fixed column order + integer cents,
+// one division at the end. The base cannot move by a shilling with the ORDER
+// of anything — config string, row, column. 0.1+0.2-class decimals included.
+test('DETERMINISM: the base is identical under any include-list order, exact on float-trap decimals', async () => {
+  await setCfg(RATIFIED, 'true');
+  const exact = require('../src/exact');
+  const cells = baseCells();
+  cells[10] = '1000000.10'; cells[12] = '0.20'; cells[13] = '0.30';   // 0.1+0.2 ≠ 0.3 in float64
+  cells[14] = '333333.33'; cells[18] = '0.07'; cells[19] = '123456.78';
+  await setCfg(INCLUDE, INCLUDE_FULL);
+  const forward = await exact.dailyRateBase(session, cells);
+  await setCfg(INCLUDE, INCLUDE_FULL.split(',').reverse().join(','));
+  const reversed = await exact.dailyRateBase(session, cells);
+  assert.equal(forward, reversed, 'config-order permutation cannot move the base');
+  assert.equal(forward, 1456790.78, 'exact to the cent (integer-cents accumulation, one division)');
+  await setCfg(INCLUDE, INCLUDE_FULL);
 });

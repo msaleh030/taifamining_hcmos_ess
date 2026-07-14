@@ -367,9 +367,17 @@ async function classificationPositions(companyId, exec = null) {
   return { include, exclude, pending, rows };
 }
 
+// FLOAT DETERMINISM (Kira 2026-07-14): the base is summed in a FIXED column
+// order (ascending contract position, never config-string order) and in INTEGER
+// CENTS — each cell rounds to cents once, the accumulation is exact integer
+// math, and the division back to shillings happens ONCE at the end. The figure
+// is reproducible to the shilling regardless of row/column/config order; an
+// auditor's re-sum can never differ by a float artifact.
+const cents = (v) => Math.round(num(v) * 100);
 async function dailyRateBase(session, cells) {
   const { include } = await classificationPositions(session.company_id);
-  return round2([...include.values()].reduce((sum, p) => sum + num(cells[p]), 0));
+  const positions = [...include.values()].sort((a, b) => a - b);
+  return positions.reduce((sum, p) => sum + cents(cells[p]), 0) / 100;
 }
 
 // EX-2 / LIAB-03 (Kira 2026-07-14): a pay column that is NEITHER included NOR

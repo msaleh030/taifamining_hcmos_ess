@@ -37,9 +37,10 @@ const NAMED = {
   8:  ['identity', 'NSSF Number'],
   // Earnings band (sums to Total Allowances — Overdraft is an EARNING, ruled
   // 2026-07-14). Ratified base SIX: 10, 12, 13, 14, 18, 19. Ratified excluded
-  // NINE: 9, 11, 15, 16, 17, 21, 22, 24, 26. PENDING Cecilia: 20, 23.
-  // Position 25 (Previous Cent-Round Deduction) is in NO ruled list — money
-  // there flags unclassified (fail-closed, named) until Kira/Cecilia rule it.
+  // TEN: 9, 11, 15, 16, 17, 21, 22, 24, 25, 26. PENDING Cecilia: 20, 23.
+  // Position 25 (Previous Cent-Round Deduction) is EXCLUDED (Kira 2026-07-14:
+  // a rounding carry, not earned pay) — as are ALL cent-round columns (28, 41,
+  // 43): they live in the Net formula, never the base.
   9:  ['allowances', 'Terminal Dues'],
   10: ['allowances', 'Basic Salary'],
   11: ['allowances', 'Gross Salary Arrears'],

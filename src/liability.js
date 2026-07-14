@@ -81,7 +81,11 @@ async function batchLiability(session, batchId) {
         ORDER BY r.row_no`, [batchId])).rows;
 
     const available = [], not_available = [], excluded = [];
-    let total = 0;
+    // FLOAT DETERMINISM (Kira 2026-07-14): the register total accumulates in
+    // INTEGER CENTS (each per-person liability is already a 2-dp figure) and
+    // divides back to shillings ONCE at the end — exact integer math, so the
+    // CEO's number cannot move by a shilling with row order.
+    let totalCents = 0;
     // bughunt-B #6: an employee matched by MORE THAN ONE Exact row counts ONCE —
     // openLeaveDays() returns their WHOLE outstanding balance, so each duplicate
     // row would re-add the full liability to the register.
@@ -92,10 +96,10 @@ async function batchLiability(session, batchId) {
       if (row.status !== 'active') { excluded.push({ employee_id: row.employee_id, status: row.status }); continue; } // LVR-02
       const days = await openLeaveDays(c, row.employee_id);
       const res = await liabilityFor(session, { employeeId: row.employee_id, days, cells: row.cells });
-      if (res.available) { available.push(res); total = round2(total + res.liability); }
+      if (res.available) { available.push(res); totalCents += Math.round(res.liability * 100); }
       else not_available.push(res);
     }
-    return { batch_id: batchId, total, available, not_available, excluded };
+    return { batch_id: batchId, total: totalCents / 100, available, not_available, excluded };
   });
 }
 

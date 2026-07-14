@@ -221,7 +221,11 @@ const DEFAULT_CONFIG = {
   // abbreviations, no whitespace tidying — and a name resolving to zero or
   // several contract columns HARD-BLOCKS the ingest (src/exact.js).
   'exact.dailyrate.include_names': 'Basic Salary,Fixed Overtime,Project Allowance,Responsibility Allowance,Housing Allowance (Fixed),Transport Allowance(Fixed)',
-  'exact.dailyrate.exclude_names': 'Rotation Allowance,Night Allowance,Overtime - Normal Days,Overtime - Holidays,Transport Allowance(variable),House Allowance(Variable),Gross Salary Arrears,Terminal Dues,Overdraft',
+  // Kira ruling 2026-07-14: ALL cent-round columns are EXCLUDED from the
+  // leave-pay base — a rounding carry is not earned pay. They live in the Net
+  // formula (Net = Total Allowances − Total Deductions + Cent Round Up − Cent
+  // Round Down), never the base. Byte-identical contract headers: 25, 28, 41, 43.
+  'exact.dailyrate.exclude_names': 'Rotation Allowance,Night Allowance,Overtime - Normal Days,Overtime - Holidays,Transport Allowance(variable),House Allowance(Variable),Gross Salary Arrears,Terminal Dues,Overdraft,Previous Cent-Round Deduction,Cent Round Up,Cent Round Down,Previous Cent-Round Payment',
   // PENDING CECILIA (do not guess): money in these components blocks the figure,
   // NAMING them. Impact at 20 days outstanding ≈ TZS 3.7M across 231 people.
   'exact.dailyrate.pending_names': 'Local Conveyance,TSF Allowance',
