@@ -1,0 +1,134 @@
+name: Pay-Ratification Probe (contract headers, config, dummy TINs, chain)
+
+# Kira 2026-07-14: verifies migration 037 landed on the box (official contract
+# headers + ratified include/exclude/pending config), assigns unique DUMMY TINs
+# to loaded employees with NO TIN (flagged via audit rows — the go-live review
+# list), and prints that list. BUILD_SHA start/end; chain recompute + linkage.
+# Sentinel: .github/RUN-RATIFY.
+on:
+  workflow_dispatch:
+  push:
+    branches: [claude/nifty-goodall-poihi4]
+    paths: ['.github/RUN-RATIFY']
+
+concurrency: { group: ratify, cancel-in-progress: false }
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      UAT_IP: 152.239.121.249
+      UAT_CO: 11111111-1111-1111-1111-111111111111
+    steps:
+      - uses: actions/checkout@v4
+      - name: SSH path — tunnel first, direct fallback
+        env:
+          CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+          CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
+        run: |
+          mkdir -p ~/.ssh && printf '%s\n' "${{ secrets.UAT_SSH_PRIVATE_KEY }}" > ~/.ssh/uat && chmod 600 ~/.ssh/uat
+          sudo curl -sSL -o /usr/local/bin/cloudflared \
+            https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 \
+            && sudo chmod +x /usr/local/bin/cloudflared || true
+          cat > ~/.ssh/config <<EOF
+          Host uat-tunnel
+            HostName ssh.uat.taifamining.tz
+            User root
+            IdentityFile ~/.ssh/uat
+            StrictHostKeyChecking accept-new
+            ProxyCommand /usr/local/bin/cloudflared access ssh --hostname %h --service-token-id $CF_ACCESS_CLIENT_ID --service-token-secret $CF_ACCESS_CLIENT_SECRET
+          Host uat-direct
+            HostName $UAT_IP
+            User root
+            IdentityFile ~/.ssh/uat
+            StrictHostKeyChecking accept-new
+            ConnectTimeout 10
+          EOF
+          chmod 600 ~/.ssh/config
+          if timeout 30 ssh uat-tunnel true 2>/dev/null; then echo uat-tunnel > /tmp/ssh_host; exit 0; fi
+          for i in $(seq 1 60); do
+            ssh uat-direct true 2>/dev/null && { echo uat-direct > /tmp/ssh_host; exit 0; }
+            echo "waiting ($i/60)"; sleep 15
+          done
+          echo FATAL; exit 1
+
+      - name: BUILD_SHA START + ratified contract headers + config on the box
+        run: |
+          SSH="ssh $(cat /tmp/ssh_host)"
+          echo "── BUILD_SHA (running process) ──"
+          $SSH "curl -fsS http://127.0.0.1:3000/health 2>/dev/null; echo; cat /opt/hcmos/BUILD_SHA 2>/dev/null | head -c 40; echo"
+          echo "── contract v1.2 allowance headers (must be the OFFICIAL strings; 16 un-named) ──"
+          $SSH "sudo -u postgres psql -d hcmos -c \"
+            SELECT position, header, pinned FROM exact_column
+             WHERE version='v1.2' AND position IN (11,12,13,14,15,16,17,19,20,21,24,26)
+             ORDER BY position\""
+          echo "── ratified config (include SIX / exclude NINE / pending TWO / ratified=true) ──"
+          $SSH "sudo -u postgres psql -d hcmos -c \"
+            SELECT key, value FROM config
+             WHERE company_id='$UAT_CO' AND key IN
+              ('exact.dailyrate.include_names','exact.dailyrate.exclude_names',
+               'exact.dailyrate.pending_names','exact.dailyrate.classification.ratified')
+             ORDER BY key\""
+
+      - name: DUMMY TINs — assign unique flagged TINs to loaded employees with none (audited, idempotent)
+        run: |
+          SSH="ssh $(cat /tmp/ssh_host)"
+          $SSH "cd /opt/hcmos && set -a && . /etc/hcmos/hcmos.env && set +a && node -e '
+            const db=require(\"./src/db\");
+            const CO=\"$UAT_CO\";
+            (async()=>{
+              await db.withOwner(async c=>{
+                // Loaded employees with NO TIN: active, with a pay/identity row that
+                // lacks tin, or no employee_pay row at all. Deterministic order.
+                const rows=(await c.query(
+                  \"SELECT e.id, e.emp_no, e.legacy_id, e.full_name, s.name AS site\" +
+                  \"  FROM employee e JOIN site s ON s.id=e.site_id\" +
+                  \"  LEFT JOIN employee_pay p ON p.employee_id=e.id\" +
+                  \" WHERE e.company_id=\$1 AND e.status=\x27active\x27\" +
+                  \"   AND (p.employee_id IS NULL OR p.tin IS NULL OR btrim(p.tin)=\x27\x27)\" +
+                  \"   AND EXISTS (SELECT 1 FROM employee_pay q WHERE q.employee_id=e.id)\" +
+                  \" ORDER BY e.legacy_id NULLS LAST, e.emp_no NULLS LAST, e.id\",[CO])).rows;
+                console.log(\"no-TIN loaded employees found:\", rows.length);
+                let n=0, assigned=0;
+                for(const r of rows){
+                  n+=1; const dummy=\"DUMMY-TIN-\"+String(n).padStart(4,\"0\");
+                  const upd=await c.query(
+                    \"UPDATE employee_pay SET tin=\$2 WHERE employee_id=\$1 AND (tin IS NULL OR btrim(tin)=\x27\x27)\",
+                    [r.id, dummy]);
+                  if(!upd.rowCount) continue;  // already assigned on a re-run
+                  assigned+=1;
+                  await c.query(\"SELECT audit_append(\$1,\$2,\$3,\$4,\$5,\$6,\$7,\$8)\",[
+                    CO, \"ratification-2026-07-14\", \"R12\", \"tin.dummy.assigned\",
+                    \"employee\", String(r.id), {tin:null},
+                    {tin:dummy, review:\"go-live\", pf:r.legacy_id||null}]);
+                  console.log(\"ASSIGNED\", dummy, \"| PF\", r.legacy_id||\"-\", \"|\", r.full_name, \"|\", r.site);
+                }
+                console.log(\"dummy TINs assigned this run:\", assigned, \"(idempotent — 0 on re-run)\");
+              });
+              await db.close();
+            })().catch(e=>{console.error(e.message);process.exit(1);});
+          '"
+          echo "── GO-LIVE REVIEW LIST (durable: audit action tin.dummy.assigned) ──"
+          $SSH "sudo -u postgres psql -d hcmos -c \"
+            SELECT after->>'tin' AS dummy_tin, after->>'pf' AS pf, entity_id AS employee_id, ts
+              FROM audit WHERE company_id='$UAT_CO' AND action='tin.dummy.assigned'
+             ORDER BY after->>'tin'\""
+
+      - name: audit chain + BUILD_SHA END
+        if: always()
+        run: |
+          SSH="ssh $(cat /tmp/ssh_host)"
+          echo "── audit chain: head + recompute + linkage (tin.dummy rows are forward-only) ──"
+          $SSH "sudo -u postgres psql -d hcmos -c \"
+            SELECT (SELECT max(seq) FROM audit WHERE company_id='$UAT_CO') AS head_seq,
+                   bool_and(hash = encode(sha256(convert_to(prev_hash || concat_ws('|',
+                     company_id::text, coalesce(actor,''), coalesce(role,''), action,
+                     coalesce(entity,''), coalesce(entity_id,''), ts::text,
+                     coalesce(before::text,''), coalesce(after::text,'')), 'UTF8')),'hex')) AS recompute_ok
+              FROM audit WHERE company_id='$UAT_CO';
+            SELECT count(*) AS linkage_breaks FROM (
+              SELECT prev_hash, lag(hash) OVER (PARTITION BY company_id ORDER BY seq) AS expect FROM audit) x
+             WHERE (expect IS NULL AND prev_hash <> repeat('0',64)) OR (expect IS NOT NULL AND prev_hash <> expect)\""
+          echo "── BUILD_SHA END ──"
+          $SSH "curl -fsS http://127.0.0.1:3000/health 2>/dev/null; echo; cat /opt/hcmos/BUILD_SHA 2>/dev/null | head -c 40; echo"
