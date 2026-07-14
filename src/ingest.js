@@ -20,6 +20,8 @@ const cfg = require('./config');
 const employees = require('./employees');
 const { HttpError } = require('./errors');
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const isUuid = (s) => typeof s === 'string' && UUID_RE.test(s);
 const round2 = (x) => Math.round(x * 100) / 100;
 const norm = (s) => String(s == null ? '' : s).trim();
 const num = (v) => { const n = Number(String(v == null ? '' : v).replace(/,/g, '').trim()); return Number.isFinite(n) ? n : NaN; };
@@ -343,6 +345,11 @@ function normSupplied(kind, supplied) {
     return { ALL: { count: Number((supplied && supplied.count) || 0),
       ...(supplied && supplied.allow_shortfall ? { allow_shortfall: true } : {}) } };
   }
+  // A non-permit kind expects control_totals as an array of per-site rows. A
+  // caller that sends a scalar/object here used to reach the for..of below and
+  // throw a raw TypeError → 500; refuse it cleanly as a 400 (client error).
+  if (supplied != null && !Array.isArray(supplied))
+    throw new HttpError(400, 'control_totals must be an array of per-site totals');
   const by = {};
   for (const s of supplied || []) {
     by[norm(s.site).toUpperCase()] = { count: Number(s.count || 0),
@@ -491,6 +498,10 @@ async function submit(session, kind, body) {
 async function approve(session, kind, body, opts = {}) {
   return db.withTenant(session.company_id, async (c) => {
     await requireLegRole(c, session, 'ingest.checker.roles', 'approve');
+    // A malformed batch_id used to reach the query as a bad ::uuid cast →
+    // Postgres 22P02 → 500. Validate the shape first: unparseable is a clean
+    // 400, well-formed-but-absent stays the honest 404 below.
+    if (!isUuid(body.batch_id)) throw new HttpError(400, 'invalid batch_id');
     const b = (await c.query('SELECT * FROM ingest_batch WHERE id=$1', [body.batch_id])).rows[0];
     if (!b) throw new HttpError(404, 'batch not found');
     if (b.kind !== kind) throw new HttpError(400, 'batch kind mismatch');

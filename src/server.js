@@ -21,6 +21,7 @@ const docalerts = require('./docalerts');
 const support = require('./support');
 const policy = require('./policy');
 const controls = require('./controls');
+const audit = require('./audit');
 const provision = require('./provision');
 const reports = require('./reports');
 const ingest = require('./ingest');
@@ -293,6 +294,14 @@ const routes = [
   // evidence grid (green + counts) distinctly from the fail-with-offenders grid.
   { method: 'GET', pattern: /^\/controls$/, allow: 'controls.view.roles',
     handler: async (req, m, url, s) => ({ status: 200, body: await controls.runControls(s) }) },
+
+  // ── Wave 9: audit read surface (AC-AUD-01). Strictly read-only window over the
+  // tamper-evident chain for the SAME oversight set (controls.view.roles =
+  // R11/R12). Newest-first, paged (?limit, ?before=<seq>), filterable by
+  // ?action / ?entity / ?actor / ?entity_id. Read-only, so the Wave-5 read-only
+  // guard is a no-op here (GET), and it is not self-audited.
+  { method: 'GET', pattern: /^\/audit$/, allow: 'controls.view.roles',
+    handler: async (req, m, url, s) => ({ status: 200, body: await audit.list(s, Object.fromEntries(url.searchParams)) }) },
 
   // ── F8: Tenant provisioning wizard (C21, TEN-01/02/03). The highest-privilege
   // action — restricted to the platform admin role (action admin.tenant.manage =

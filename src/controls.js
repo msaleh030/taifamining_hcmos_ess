@@ -19,7 +19,7 @@ const AUDIT_VERIFY = `
 // evidence ("N records checked, 0 offenders") — a green with no number could just
 // mean nothing was looked at; the count proves the control actually ran.
 async function runControls(session) {
-  return db.withTenant(session.company_id, async (c) => {
+  const result = await db.withTenant(session.company_id, async (c) => {
     const checks = [];
     const one = async (sql) => (await c.query(`SELECT count(*)::int n FROM (${sql}) t`)).rows[0].n;
     const add = (check, checked, offenders) => checks.push({ check, checked, pass: offenders.length === 0, offenders });
@@ -47,6 +47,20 @@ async function runControls(session) {
 
     return { checks, all_pass: checks.every((x) => x.pass) };
   });
+
+  // C20: the control run is itself an audited event — the screen states "the run
+  // is audited", but runControls never wrote a row, so that claim was hollow.
+  // Record who ran it and the outcome summary (per-check checked/offender
+  // counts, not the offender bodies — those can carry confidential identifiers).
+  // Forward-only via audit_append, so the hash chain extends by construction.
+  const summary = {
+    all_pass: result.all_pass,
+    checks: result.checks.map((x) => ({ check: x.check, checked: x.checked, offenders: x.offenders.length })),
+  };
+  await db.query('SELECT audit_append($1,$2,$3,$4,$5,$6,$7,$8)', [
+    session.company_id, String(session.user_id || session.device_id || 'system'),
+    session.role_code || null, 'controls.run', 'controls', null, null, summary]);
+  return result;
 }
 
 module.exports = { runControls };
