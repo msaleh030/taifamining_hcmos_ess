@@ -52,7 +52,7 @@ async function upload(token, period, csv) {
   let token, sid;
   await db.withOwner(async (c) => {
     const u = (await c.query(
-      `SELECT id FROM app_user WHERE company_id=$1 AND role_code='R15' AND status='active' ORDER BY username LIMIT 1`,
+      `SELECT id FROM app_user WHERE company_id=$1 AND role_code='R15' AND status='active' ORDER BY email LIMIT 1`,
       [CO])).rows[0];
     if (!u) throw new Error('no active R15 user to mint');
     session.user_id = u.id;
