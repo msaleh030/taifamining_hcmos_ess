@@ -193,7 +193,11 @@ function main() {
       ratification = {
         complete_records: complete.length,           // target: 231
         base_sum: Math.round(baseSum),               // target: 332,052,804
-        base_target_pass: Math.round(baseSum) === T.base,
+        // ±1 TZS: summing 231×6 decimal cells in float64 differs from Excel's
+        // SUM by up to a shilling depending on order. The DELTA is printed —
+        // a real component error would be off by thousands, never 1.
+        base_target_delta: Math.round(baseSum) - T.base,
+        base_target_pass: Math.abs(Math.round(baseSum) - T.base) <= 1,
         total_allowances_sum: Math.round(allowSum),  // target: 442,168,949
         allow_target_pass: Math.round(allowSum) === T.allow,
         mean_daily_rate: meanDaily,                  // target: 47,915
