@@ -15,6 +15,18 @@ const exact = require('./exact');
 const round2 = (x) => Math.round(x * 100) / 100;
 const REMUNERATION = 'monthly remuneration';
 
+// Wave 7 — a FINANCIAL REGISTER disclosure leaves an audit trail: who read which
+// register of which batch. Wave 5 audited confidential PROFILE reads at the
+// a3.assembleProfile boundary, but the money registers (payroll, leave-
+// liability, terminal) bypass that path — so they were invisible. Forward-only
+// via audit_append (the hash chain extends by construction). Shared so the
+// payroll and terminal registers log the same way.
+async function auditRegisterRead(session, register, batchId, lineCount) {
+  await db.query('SELECT audit_append($1,$2,$3,$4,$5,$6,$7,$8)', [
+    session.company_id, String(session.user_id || session.device_id || 'system'), session.role_code,
+    'register.read', 'exact_batch', String(batchId), null, { register, lines: lineCount }]);
+}
+
 // The single daily rate — the one EX-2 base divided by the PC-1 divisor. Leave
 // pay uses the SAME PC-1 basis as payroll; there is no separate divisor. The
 // divisor value (30) is pinned by test/liability.test.js (LIAB-01: base 3000 →
@@ -82,4 +94,17 @@ async function batchLiability(session, batchId) {
   });
 }
 
-module.exports = { dailyRate, liabilityFor, leavePay, openLeaveDays, batchLiability };
+// batchLiability with the Wave-7 register-read audit. Both callers of the
+// leave-liability figures (GET /liability/batch/:id and the leave-liability
+// register) route through here, so a disclosure is logged exactly once per read.
+async function batchLiabilityAudited(session, batchId) {
+  const result = await batchLiability(session, batchId);
+  await auditRegisterRead(session, 'leave-liability', batchId,
+    result.available.length + result.not_available.length);
+  return result;
+}
+
+module.exports = {
+  dailyRate, liabilityFor, leavePay, openLeaveDays,
+  batchLiability: batchLiabilityAudited, batchLiabilityRaw: batchLiability, auditRegisterRead,
+};

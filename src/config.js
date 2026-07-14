@@ -160,6 +160,17 @@ const DEFAULT_CONFIG = {
   'payroll.gross_components': 'house,transport,responsibility', // PC-3 (must equal PC-1's set)
   'payroll.partial_period':   PENDING,     // PC-2 [TBC]
 
+  // ── Terminal / severance dues (Wave 7) — STATUTORY BASIS GOVERNANCE-GATED ───
+  // TD-1: the days of basic wage payable per COMPLETED year of service is a legal
+  // value (ELRA / the client's terms) that MUST be confirmed in the registry,
+  // never guessed — a severance figure is too consequential to invent. It ships
+  // PENDING, so terminal.severanceFor and GET /liability/terminal/:batch BLOCK
+  // with 409 until Kira/Omid confirm it. Service length derives from
+  // employee.joined_at; the daily basic reuses the SAME PC-1 base (exact.
+  // dailyRateBase) and divisor as payroll and leave liability — ONE base.
+  'terminal.severance.days_per_year': PENDING,   // TD-1 [TBC]
+  'terminal.min_service_years':       '1',       // qualifying threshold — confirm at UAT
+
   // ── Geofence clock-in (SS-3, registry v1.4 CONFIRMED) ─────────────────────
   // Zones themselves live in geofence_zone (per site). These tune the validator.
   // CONFIRMED: accept when distance <= radius + min(device_accuracy, 50m). The

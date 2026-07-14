@@ -13,6 +13,7 @@ const employees = require('./employees');
 const disciplinary = require('./disciplinary');
 const leave = require('./leave');
 const liability = require('./liability');
+const terminal = require('./terminal');
 const kpi = require('./kpi');
 const attendance = require('./attendance');
 const exact = require('./exact');
@@ -196,6 +197,11 @@ const routes = [
     handler: async (req, m, url, s) => ({ status: 200, body: await leave.decide(s, m[1], await readJson(req)) }) },
   { method: 'GET', pattern: /^\/liability\/batch\/([0-9a-f-]+)$/i, allow: 'a3.pay.roles',
     handler: async (req, m, url, s) => ({ status: 200, body: await liability.batchLiability(s, m[1]) }) },
+  // Wave 7: terminal/severance dues — same financial gate (a3.pay.roles). BLOCKS
+  // with 409 while the statutory rate (terminal.severance.days_per_year) is
+  // PENDING — never a guessed severance figure.
+  { method: 'GET', pattern: /^\/liability\/terminal\/([0-9a-f-]+)$/i, allow: 'a3.pay.roles',
+    handler: async (req, m, url, s) => ({ status: 200, body: await terminal.batchSeverance(s, m[1], url.searchParams.get('asOf')) }) },
 
   // ── F4: KPI scorecard (role-scoped, feature-flagged) + personal My KPIs. The
   // scorecard is feature-flagged inside the engine (analytics.enabled) — the

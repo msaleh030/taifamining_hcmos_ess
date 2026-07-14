@@ -75,7 +75,10 @@ async function payrollRegister(session, batchId) {
       `SELECT matched_employee, cells FROM exact_row
         WHERE batch_id=$1 AND match_status='matched' ORDER BY row_no`, [batchId])).rows;
     const lines = rows.map((r) => ({ employee_id: r.matched_employee, net: round2(exact.num(r.cells[asCol])) }));
-    return { batch_id: batchId, status: b.status, lines, total: round2(lines.reduce((s, l) => s + l.net, 0)) };
+    const out = { batch_id: batchId, status: b.status, lines, total: round2(lines.reduce((s, l) => s + l.net, 0)) };
+    // Wave 7: a financial-register disclosure is audited (who saw which register).
+    await liability.auditRegisterRead(session, 'payroll', batchId, lines.length);
+    return out;
   });
 }
 
