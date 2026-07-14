@@ -87,7 +87,10 @@ async function login(page: Page, user: { email: string; password: string }) {
 // would fake Design acceptance. The SNAPSHOT comparison alone is suspended for
 // this set — navigation and functional assertions still run. REMOVE entries the
 // moment Design's current reference lands and the screens are re-accepted.
-const BASELINE_STALE = new Set(['c1-login-empty', 'c1-login-error', 'c20-controls']);
+// e2-ess-home joined 2026-07-14: ESS-3 completed the home ON ORDER (payslip
+// quick-action + real leave/payslip activity strip) — the Jul-5 baselines
+// predate it. Suspension, not self-re-baselining: Design re-accepts.
+const BASELINE_STALE = new Set(['c1-login-empty', 'c1-login-error', 'c20-controls', 'e2-ess-home']);
 
 async function shoot(page: Page, name: string, theme: string, surface: string) {
   await page.waitForLoadState('networkidle');
