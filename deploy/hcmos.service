@@ -18,6 +18,13 @@ PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
 ReadWritePaths=/opt/hcmos
+# KIOSK photo-on-punch (Kira 2026-07-14): punch photos are binary at rest
+# OUTSIDE the deploy tree. StateDirectory makes systemd create
+# /var/lib/hcmos/punch-photos owned by the service user and writable inside
+# the ProtectSystem=strict sandbox — without this the photo write fails and
+# every kiosk punch records flagged no-photo (it degrades, never blocks).
+StateDirectory=hcmos/punch-photos
+StateDirectoryMode=0700
 AmbientCapabilities=
 
 [Install]

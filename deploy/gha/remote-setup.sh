@@ -28,6 +28,13 @@ say "post-install (Node LTS, Postgres 16, UFW, scram, systemd)"
 cd "$APP_DIR"
 LOCAL_SRC=1 bash deploy/hostinger-post-install.sh
 
+# ── the MAIN unit ships with the repo — reinstall it on every deploy so unit
+# changes (e.g. the kiosk photo StateDirectory sandbox carve-out, 2026-07-14)
+# actually reach the box; provisioning-time installs go stale otherwise.
+install -m 644 deploy/hcmos.service /etc/systemd/system/hcmos.service
+systemctl daemon-reload
+systemctl restart hcmos
+
 # ── the RUNNING process serves THIS deploy — never trust "systemd: active" ────
 # `systemctl enable --now` never bounced a running service, so before run 29 the
 # box could pass every checkpoint while SERVING WEEKS-OLD CODE (the disk and DB
