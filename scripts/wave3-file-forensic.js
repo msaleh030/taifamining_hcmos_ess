@@ -147,7 +147,8 @@ function main() {
 
   // ── PAY RATIFICATION VALIDATION (Kira 2026-07-14, official NM export) ──────
   // Over the COMPLETE records (basic pay present, TIN present, net > 0):
-  //   base (six ratified components)      = TZS 332,052,804  (75.1% of gross)
+  //   base (six ratified components)      = TZS 332,052,805  (75.1% of gross;
+  //   exact integer-cents sum — the 2026-07-13 hand-calc said 804, resolved 2026-07-14)
   //   Total Allowances (Overdraft=EARNING)= TZS 442,168,949
   //   mean daily rate (base/30)           = TZS 47,915
   //   GROSS TRAP: mean daily ≈ 63,805 means the run is using GROSS — 33% wrong.
@@ -194,11 +195,18 @@ function main() {
         }
       }
       const meanDaily = complete.length ? Math.round(baseSum / 30 / complete.length) : 0;
-      const T = { base: 332052804, allow: 442168949, daily: 47915, grossTrap: 63805 };
+      // base: the CANONICAL figure is the EXACT integer-cents sum of the six
+      // ratified columns over the 231 complete records: TZS 332,052,805 —
+      // order-independent, reproducible to the shilling. The original
+      // hand-calc read 332,052,804: it was itself a float64 spreadsheet SUM
+      // rounded at display, carrying exactly the accumulation artifact the
+      // integer-cents engine eliminates. Resolved 2026-07-14 (the engine is
+      // exact; the hand-calc moved) — the delta requirement stays ZERO.
+      const T = { base: 332052805, allow: 442168949, daily: 47915, grossTrap: 63805 };
       const near = (a, b, tolPct) => b !== 0 && Math.abs(a - b) / b <= tolPct;
       ratification = {
         complete_records: complete.length,           // target: 231
-        base_sum: Math.round(baseSum),               // target: 332,052,804
+        base_sum: Math.round(baseSum),               // target: 332,052,805 (exact)
         // EXACT since the integer-cents fix: the delta must be ZERO. If it is
         // not, one side is wrong — report which, never widen the tolerance.
         base_target_delta: Math.round(baseSum) - T.base,
