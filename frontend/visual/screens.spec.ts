@@ -90,7 +90,16 @@ async function login(page: Page, user: { email: string; password: string }) {
 // e2-ess-home joined 2026-07-14: ESS-3 completed the home ON ORDER (payslip
 // quick-action + real leave/payslip activity strip) — the Jul-5 baselines
 // predate it. Suspension, not self-re-baselining: Design re-accepts.
-const BASELINE_STALE = new Set(['c1-login-empty', 'c1-login-error', 'c20-controls', 'e2-ess-home']);
+// The console-sidebar set joined 2026-07-14 (later wave): P2 (Leave approvals)
+// and P5 (Credential resets) entered the console NAV on order — every desktop
+// console shot carries the changed sidebar, so the whole set is suspended in
+// one batch for Design's re-acceptance (the diffs are the two nav rows).
+const BASELINE_STALE = new Set([
+  'c1-login-empty', 'c1-login-error', 'c20-controls', 'e2-ess-home',
+  'c2-overview', 'c4-directory', 'c5-profile-drawer', 'c3-scorecard',
+  'c16-liability-empty', 'c16-liability-r03', 'c20b-alerts', 'e7-policy',
+  'e12-support', 'c21-tenant-noperm-or-step1',
+]);
 
 async function shoot(page: Page, name: string, theme: string, surface: string) {
   await page.waitForLoadState('networkidle');
