@@ -166,6 +166,38 @@ test('ESS5-5 a stale/already-resolved conflict refuses; keep_device outside the 
   await cleanup();
 });
 
+// ── The FOURTH private resolver copy the ESS-5 LIVE PROBE caught ────────────
+// geofence.siteOf resolved app_user-only, so a device-only bootstrap worker
+// (no console account — the normal case for the 1,099) got 403 "no site for
+// employee" on EVERY personal clock-in. siteOf now goes through
+// src/identity.js (app_user first, then the session's device). Pin it.
+test('ESS5-7 a NO-app_user field session clocks in and out (geofence resolves the site via the DEVICE)', async () => {
+  const C = require('../src/crypto');
+  const ids = {};
+  try {
+    ids.emp = (await owner(
+      `INSERT INTO employee(id,company_id,site_id,full_name,role_code,status,is_expat)
+       VALUES (gen_random_uuid(),$1,$2,'Zz Ess5 Bootstrap','R13','active',false) RETURNING id`,
+      [A, F.SITE.A1])).rows[0].id;
+    ids.dev = (await owner(
+      `INSERT INTO device(company_id,employee_id,pin_hash,status) VALUES ($1,$2,$3,'active') RETURNING id`,
+      [A, ids.emp, C.hashSecret('707070')])).rows[0].id;
+    const login = await H.req('POST', '/auth/field', { body: { device_id: ids.dev, pin: '707070' } });
+    assert.equal(login.status, 200, JSON.stringify(login.body));
+    const tok2 = login.body.token;
+    const inn = await clockIn(tok2, at());
+    assert.equal(inn.status, 200, `bootstrap worker clocks in: ${JSON.stringify(inn.body)}`);
+    assert.equal(inn.body.accepted, true);
+    const out = await clockOut(tok2, at());
+    assert.equal(out.status, 200, `and out: ${JSON.stringify(out.body)}`);
+  } finally {
+    if (ids.emp) await owner(`DELETE FROM attendance WHERE employee_id=$1`, [ids.emp]);
+    if (ids.dev) await owner(`DELETE FROM session WHERE device_id=$1`, [ids.dev]);
+    if (ids.dev) await owner(`DELETE FROM device WHERE id=$1`, [ids.dev]);
+    if (ids.emp) await owner(`DELETE FROM employee WHERE id=$1`, [ids.emp]);
+  }
+});
+
 test('ESS5-6 clock-out closes the shift; a second clock-out 409s; the next clock-in raises NO false conflict', async () => {
   const field = await tok(F.USERS.FIELD_A);
   const inn = await clockIn(field, at());

@@ -36,12 +36,16 @@ function haversine(aLat, aLng, bLat, bLng) {
 
 const isNum = (n) => typeof n === 'number' && Number.isFinite(n);
 
-// The employee's site, resolved from their app_user → employee (RLS-scoped).
+// The employee's site, resolved through the ONE session→employee resolver
+// (src/identity.js): app_user first, then the session's DEVICE — the
+// bootstrap path for field workers with no console account. This was the
+// FOURTH private app_user-only copy; the ESS-5 live probe caught it as
+// 403 "no site for employee" on a device-only worker's clock-in.
+const { employeeOf } = require('./identity');
 async function siteOf(client, session) {
-  if (!session.user_id) return null;
-  const r = await client.query(
-    'SELECT e.site_id FROM app_user u JOIN employee e ON e.id = u.employee_id WHERE u.id=$1',
-    [session.user_id]);
+  const empId = await employeeOf(client, session);
+  if (!empId) return null;
+  const r = await client.query('SELECT site_id FROM employee WHERE id=$1', [empId]);
   return r.rows[0] ? r.rows[0].site_id : null;
 }
 
