@@ -81,6 +81,24 @@ async function assembleProfile(client, session, emp) {
       WHERE employee_id=$1 AND status='pending' ORDER BY created_at`, [emp.id]);
   out.pending_changes = pend.rows;
 
+  // Wave 5 (confidentiality forensics): a CONFIDENTIAL disclosure leaves a trail
+  // — who read which confidential blocks of whose record. A base-directory-only
+  // read is NOT logged (no confidential field crossed the boundary), so ordinary
+  // directory browsing does not flood the chain. Forward-only: a normal
+  // audit_append, so the hash chain extends by construction — the same spirit as
+  // the source_ip/mfa forensic add. Reads of 1,029 people's pay/medical/
+  // disciplinary records must not be invisible.
+  const disclosed = [];
+  if (sets.pay.has(role)) disclosed.push('pay');
+  if (sets.national_id.has(role)) disclosed.push('national_id');
+  if (sets.medical.has(role)) disclosed.push('medical');
+  if (sets.disciplinary.has(role)) disclosed.push('disciplinary');
+  if (disclosed.length) {
+    await client.query('SELECT audit_append($1,$2,$3,$4,$5,$6,$7,$8)', [
+      session.company_id, String(session.user_id || session.device_id || 'system'), role,
+      'profile.read', 'employee', String(emp.id), null, { blocks: disclosed }]);
+  }
+
   return out;
 }
 

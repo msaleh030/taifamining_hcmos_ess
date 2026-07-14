@@ -160,9 +160,12 @@ const routes = [
     handler: async (req, m, url, s) => ({ status: 200, body: await employees.submitChange(s, m[1], await readJson(req)) }) },
   { method: 'GET', pattern: /^\/employees\/([0-9a-f-]+)$/i, deny: 'directory.deny.roles',
     handler: async (req, m, url, s) => ({ status: 200, body: await employees.get(s, m[1]) }) },
-  { method: 'POST', pattern: /^\/field-change\/([0-9a-f-]+)\/approve$/i, deny: 'directory.deny.roles',
+  // readonlyOk: the expatriate field-change DECISION is R14's (CEO) sole
+  // deliberate, config-pinned write — the one exception to the Wave-5 read-only
+  // guard. Every OTHER mutating route stays barred for R14.
+  { method: 'POST', pattern: /^\/field-change\/([0-9a-f-]+)\/approve$/i, deny: 'directory.deny.roles', readonlyOk: true,
     handler: async (req, m, url, s) => ({ status: 200, body: await employees.decide(s, m[1], true) }) },
-  { method: 'POST', pattern: /^\/field-change\/([0-9a-f-]+)\/decline$/i, deny: 'directory.deny.roles',
+  { method: 'POST', pattern: /^\/field-change\/([0-9a-f-]+)\/decline$/i, deny: 'directory.deny.roles', readonlyOk: true,
     handler: async (req, m, url, s) => ({ status: 200, body: await employees.decide(s, m[1], false) }) },
 
   // ── F2: Disciplinary action + fan-out. Only permitted issuers (registry
@@ -357,6 +360,15 @@ async function guard(route, req) {
   if (route.allow) {
     const allowed = await cfg.getRoleSet(session.company_id, route.allow, '');
     if (!allowed.has(session.role_code)) throw new HttpError(403, 'forbidden');
+  }
+  // Wave 5 — CEO read-only: a strictly read-only role (auth.readonly.roles, the
+  // R14 Executive by default) may not reach ANY mutating route. Structural, so a
+  // future write route that forgets its own guard still cannot be hit by R14.
+  // The ONE deliberate exception is a route flagged `readonlyOk` — R14's
+  // config-pinned expatriate field-change decision (its maker-checker control).
+  if (route.method !== 'GET' && !route.readonlyOk) {
+    const readonly = await cfg.getRoleSet(session.company_id, 'auth.readonly.roles', 'R14');
+    if (readonly.has(session.role_code)) throw new HttpError(403, 'forbidden');
   }
   return session;
 }

@@ -71,6 +71,14 @@ const DEFAULT_CONFIG = {
   // like its predecessors (finance manages money, not people). Confirm at UAT.
   'directory.deny.roles':  'R12,R13,R15,R16',
 
+  // Wave 5 — strictly READ-ONLY roles: barred at the HTTP layer from every
+  // mutating route (POST/PUT/PATCH/DELETE), structurally, regardless of a
+  // route's own guards. The CEO/Executive (R14) is oversight-only. The ONE
+  // deliberate exception is a route flagged `readonlyOk` (R14's config-pinned
+  // expatriate field-change decision) — remove R14 from expat.checker.roles to
+  // strip that too, pending sign-off.
+  'auth.readonly.roles':   'R14',
+
   // ── Disciplinary (Slice 4, SoD matrix per registry RTL/CR/TM/001/2026) ────
   // Issuer and checker role-sets are DISJOINT, so a permitted issuer and a
   // permitted checker are always different roles (SoD by construction); the
