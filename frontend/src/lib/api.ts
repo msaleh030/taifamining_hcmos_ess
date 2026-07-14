@@ -115,6 +115,16 @@ export const api = {
   myPayslip: (batch?: string) => request<T.PayslipOut>(`/me/payslip${batch ? `?batch=${batch}` : ''}`),
   leaveApply: (body: { leave_type: string; days?: number; weeks?: number; hoh_override?: boolean }) =>
     request<unknown>('/leave/apply', { method: 'POST', body }),
+  // P2/C10 — the approval queue + decision (LV-03, SOD-01, LR-6 warn-not-block).
+  leaveQueue: () => request<T.LeaveQueueOut>('/leave/requests'),
+  leaveDecide: (id: string, body: { approve: boolean; override_ack?: boolean; note?: string }) =>
+    request<T.LeaveDecideOut>(`/leave/requests/${id}/decide`, { method: 'POST', body }),
+  // P5 — credential resets (owner-gated, rank lattice server-side, audited).
+  resetLookup: (q: string) => request<T.ResetLookupOut>('/auth/reset/lookup', { method: 'POST', body: { q } }),
+  resetPassword: (body: { target_user: string; new_password: string }) =>
+    request<T.ResetOut>('/auth/reset/password', { method: 'POST', body }),
+  resetPin: (body: { device_id: string; new_pin: string }) =>
+    request<T.ResetOut>('/auth/reset/pin', { method: 'POST', body }),
   liabilityBatch: (batchId: string) => request<T.LiabilityOut>(`/liability/batch/${batchId}`),
 
   // F4 — KPI scorecard (role-scoped, feature-flagged) + My KPIs (self only).

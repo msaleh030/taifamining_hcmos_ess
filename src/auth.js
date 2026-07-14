@@ -206,6 +206,34 @@ async function resetPin(session, { device_id, new_pin }) {
   return { ok: true, revoked_sessions: res.rows[0].revoked };
 }
 
+// ── P5: reset-target lookup — the console reset screens need to FIND the
+// account/device without exposing a directory to anyone else. Gated on the
+// SAME owner sets as the resets themselves; each list answers only for its
+// own owners (a pin-only owner never enumerates console accounts and vice
+// versa). Server-side ILIKE, minimal fields, capped.
+async function resetLookup(session, { q }) {
+  if (!session) throw new HttpError(401, 'authentication required');
+  const query = String(q || '').trim().slice(0, 64);
+  if (query.length < 2) throw new HttpError(400, 'query too short');
+  const pwOwners = await cfg.getOwnerRoles(session.company_id, 'password.reset.owner');
+  const pinOwners = await cfg.getOwnerRoles(session.company_id, 'pin.reset.owner');
+  const canPw = pwOwners.includes(session.role_code);
+  const canPin = pinOwners.includes(session.role_code);
+  if (!canPw && !canPin) throw new HttpError(403, 'forbidden');
+  return db.withTenant(session.company_id, async (c) => {
+    const like = `%${query}%`;
+    const users = !canPw ? [] : (await c.query(
+      `SELECT id, email, role_code FROM app_user
+        WHERE status='active' AND email ILIKE $1 ORDER BY email LIMIT 20`, [like])).rows;
+    const devices = !canPin ? [] : (await c.query(
+      `SELECT d.id, e.full_name, e.emp_no, d.kind FROM device d
+         JOIN employee e ON e.id = d.employee_id
+        WHERE d.status='active' AND (e.full_name ILIKE $1 OR e.emp_no ILIKE $1)
+        ORDER BY e.full_name LIMIT 20`, [like])).rows;
+    return { users, devices };
+  });
+}
+
 // ── AUTH-06: landing — only modules permitted for the role (A2) ────────────
 function landing(session) {
   return roles.landingFor(session.role_code);
@@ -262,5 +290,5 @@ async function performAction(session, action) {
 
 module.exports = {
   consoleLogin, fieldLogin, verifySession, publicAuthConfig,
-  resetPassword, resetPin, landing, readProfile, performAction,
+  resetPassword, resetPin, resetLookup, landing, readProfile, performAction,
 };

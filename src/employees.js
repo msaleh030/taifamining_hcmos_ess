@@ -305,4 +305,53 @@ async function create(exec, companyId, data = {}) {
   return r.rows[0].id;
 }
 
-module.exports = { list, get, submitChange, decide, documents, create, EDITABLE_FIELDS };
+// ── REHIRE (Kira ruling 2026-07-14, MOV-02) ─────────────────────────────────
+// a. SAME TMCL: the ORIGINAL employee row reactivates — the person recovers
+//    their number because it never left them (identity is permanent).
+// b. SERVICE CONTINUITY IS NOT A FIXED RULE: the flow FORCES the Head of HR's
+//    per-rehire decision — bridge (service anchor unchanged) or reset (the
+//    anchor moves to the rehire date) — WITH a reason, and audits it
+//    (actor, role, before/after). No silent default: a missing choice or
+//    reason refuses. joined_at is the leave-accrual anchor (cycleStartFor)
+//    and every future service-based calculation reads from it. Omid rules
+//    each case; the system records and audits, never assumes.
+async function rehire(session, employeeId, body = {}) {
+  if (!isUuid(employeeId)) throw new HttpError(400, 'invalid request');
+  const continuity = String(body.continuity || '');
+  const reason = String(body.reason || '').trim();
+  if (!['bridge', 'reset'].includes(continuity)) {
+    throw new HttpError(400, 'continuity decision required: bridge or reset — there is no default');
+  }
+  if (!reason) throw new HttpError(400, 'a reason for the continuity decision is required');
+  const rehiredAt = /^\d{4}-\d{2}-\d{2}$/.test(String(body.rehire_date || ''))
+    ? String(body.rehire_date) : new Date().toISOString().slice(0, 10);
+
+  return db.withTenant(session.company_id, async (client) => {
+    const emp = (await client.query(
+      `SELECT id, emp_no, full_name, status, joined_at::text AS joined_at, site_id
+         FROM employee WHERE id=$1 FOR UPDATE`, [employeeId])).rows[0];
+    if (!emp) throw new HttpError(404, 'not found');
+    if (emp.status === 'active') throw new HttpError(409, 'employee is already active — nothing to rehire');
+
+    const newJoined = continuity === 'reset' ? rehiredAt : emp.joined_at;
+    const siteId = isUuid(body.site_id) ? body.site_id : emp.site_id;
+    await client.query(
+      `UPDATE employee SET status='active', site_id=$2, joined_at=$3 WHERE id=$1`,
+      [employeeId, siteId, newJoined]);
+    await client.query(
+      `INSERT INTO employee_rehire(company_id, employee_id, rehired_at, continuity, reason, decided_by, prev_joined_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+      [session.company_id, employeeId, rehiredAt, continuity, reason, session.user_id, emp.joined_at]);
+    const actor = await actorEmail(client, session);
+    await client.query('SELECT audit_append($1,$2,$3,$4,$5,$6,$7,$8)', [
+      session.company_id, actor || String(session.user_id), session.role_code,
+      'employee.rehire', 'employee', employeeId,
+      { status: emp.status, joined_at: emp.joined_at },
+      { status: 'active', continuity, reason, rehired_at: rehiredAt, joined_at: newJoined,
+        emp_no: emp.emp_no /* recovered verbatim — never re-minted */ }]);
+    return { ok: true, employee_id: employeeId, emp_no: emp.emp_no,
+      continuity, service_anchor: newJoined, rehired_at: rehiredAt };
+  });
+}
+
+module.exports = { list, get, submitChange, decide, documents, create, rehire, EDITABLE_FIELDS };

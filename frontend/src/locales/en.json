@@ -1382,5 +1382,20 @@
   "kiosk.notIn": "Not clocked in — clock in first.",
   "kiosk.blockedSusp": "This account is suspended. Contact HR.",
   "kiosk.blockedTerm": "This account is closed. Contact HR.",
-  "kiosk.back": "Back"
+  "kiosk.back": "Back",
+  "resets.title": "Credential resets",
+  "resets.sub": "Password + field PIN · owner-gated · rank lattice · P5",
+  "resets.searchPH": "Search email, name or staff number",
+  "resets.newPw": "New password",
+  "resets.newPin": "New PIN",
+  "resets.okPw": "Password reset. All their sessions were signed out.",
+  "resets.okPin": "PIN reset. All device sessions were signed out.",
+  "resets.revoked": "sessions signed out",
+  "resets.latticeNote": "A reset may only target an account at or below your rank — the lattice is enforced server-side and every reset is audited.",
+  "resets.pickUser": "Console account",
+  "resets.pickDevice": "Field device",
+  "resets.noneFound": "No matches",
+  "resets.search": "Search",
+  "resets.forbidden": "Only permitted owner roles can reset credentials.",
+  "resets.failed": "The reset was not recorded. Nothing changed."
 }

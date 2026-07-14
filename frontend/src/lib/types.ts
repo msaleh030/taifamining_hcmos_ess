@@ -56,6 +56,26 @@ export interface ClockOutOut { retry?: boolean; reason?: string; zone?: string; 
 export interface AttLast { id: string; direction: 'in' | 'out'; at: string; via: string; zone?: string | null; review_flag?: string | null }
 export interface AttStatusOut { open: boolean; since: string | null; last: AttLast | null }
 export interface ConflictServer { attendance_id: string; punched_at: string; via: string; zone?: string | null }
+// P2/C10 — leave approval queue.
+export interface LeaveCoverage {
+  status: 'ok' | 'warn' | 'pending';
+  reason?: string; role?: string; present?: number; threshold?: number;
+  window?: { from: string; to: string };
+}
+export interface LeaveQueueItem {
+  id: string; employee_id: string; full_name: string; emp_no: string | null;
+  role_code: string; site: string | null; leave_type: string; days: number;
+  from_date: string | null; to_date: string | null; hoh_override: boolean;
+  applied_at: string; coverage: LeaveCoverage;
+}
+export interface LeaveQueueOut { pending: LeaveQueueItem[] }
+export interface LeaveDecideOut { id: string; status: 'approved' | 'declined'; coverage_override: boolean; coverage?: LeaveCoverage }
+// P5 — credential resets.
+export interface ResetLookupOut {
+  users: Array<{ id: string; email: string; role_code: string }>;
+  devices: Array<{ id: string; full_name: string; emp_no: string | null; kind: string }>;
+}
+export interface ResetOut { ok: boolean; revoked_sessions: number }
 export interface ResolveOut { resolved?: boolean; retry?: boolean; reason?: string; resolution?: string; attendance_id?: string; flagged?: string }
 
 export interface ExactUploadOut { batch_id: string; row_count: number; deduped?: boolean }

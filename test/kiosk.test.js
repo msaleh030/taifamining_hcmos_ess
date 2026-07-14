@@ -30,7 +30,7 @@ const ids = {};
 
 before(async () => {
   await H.start();
-  await owner(`INSERT INTO config(company_id,key,value) VALUES ($1,'attendance.photo.dir',$2)
+  await owner(`INSERT INTO config(company_id,key,value) VALUES ($1,'storage.local.root',$2)
                ON CONFLICT (company_id,key) DO UPDATE SET value=EXCLUDED.value`, [A, PHOTO_DIR]);
   ids.kiosk = (await owner(
     `INSERT INTO device(company_id,site_id,kind,status) VALUES ($1,$2,'kiosk','active') RETURNING id`,
@@ -48,12 +48,13 @@ before(async () => {
 
 after(async () => {
   await owner(`UPDATE employee SET status='active' WHERE id=$1`, [F.EMP.FIELDA]);
+  await owner(`DELETE FROM stored_object WHERE kind='punch-photo'`);
   await owner(`DELETE FROM attendance WHERE via='kiosk'`);
   await owner(`DELETE FROM session WHERE kind='kiosk'`);
   await owner(`DELETE FROM field_pin WHERE employee_id IN ($1,$2)`, [F.EMP.FIELDA, ids.fresh]);
   await owner(`DELETE FROM device WHERE id=$1`, [ids.kiosk]);
   await owner(`DELETE FROM employee WHERE id=$1`, [ids.fresh]);
-  await owner(`DELETE FROM config WHERE company_id=$1 AND key='attendance.photo.dir'`, [A]);
+  await owner(`DELETE FROM config WHERE company_id=$1 AND key='storage.local.root'`, [A]);
   fs.rmSync(PHOTO_DIR, { recursive: true, force: true });
   await H.stop();
 });
@@ -98,6 +99,15 @@ test('K3 correct PIN → single-use kiosk token; punch WITH photo attributes to 
   assert.equal(row.photo_missing, false);
   assert.ok(row.photo_path && !row.photo_path.startsWith('data:'), 'a PATH, never a data URL in the DB');
   assert.ok(fs.existsSync(row.photo_path), 'the photo binary is at rest on disk');
+  // The ONE storage foundation carries it: metadata row with integrity hash
+  // and an HONEST scan status (clamd absent in CI → 'pending'/'unavailable').
+  const obj = (await owner(
+    `SELECT kind, owner_entity, owner_id, sha256, scan_status FROM stored_object
+      WHERE owner_entity='attendance' AND owner_id=$1`, [p.body.attendance_id])).rows[0];
+  assert.ok(obj, 'stored_object metadata row exists');
+  assert.equal(obj.kind, 'punch-photo');
+  assert.match(obj.sha256, /^[0-9a-f]{64}$/, 'integrity hash recorded');
+  assert.ok(['pending', 'clean', 'unavailable'].includes(obj.scan_status), 'scan status recorded honestly');
   // SINGLE-USE: the session died with the punch.
   const again = await punch(ok.body.token, { direction: 'out', photo: null });
   assert.equal(again.status, 401, 'a second request on the same session is rejected');

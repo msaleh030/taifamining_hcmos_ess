@@ -278,8 +278,17 @@ const DEFAULT_CONFIG = {
   // ── Shared KIOSK (Kira rulings 2026-07-14) ────────────────────────────────
   // A kiosk session exists for ONE punch: short TTL + revoked on punch.
   'kiosk.session.ttl':        '120',
-  // Punch photos: BINARY ON DISK outside the deploy tree (path in the DB,
-  // never base64). Production object storage is a flagged Kira decision.
+  // ── ONE storage foundation (Kira 2026-07-14): punch photos + ESS documents
+  // + every future upload go through src/storage.js. Driver seam ('local' now;
+  // an S3-compatible object store is the production slot-in, no call-site
+  // changes). Retention is PER KIND and [TBC]: the sweep REFUSES to run for a
+  // kind whose period is unset — punch photos are biometric data under TZ
+  // PDPA and the period is Kira's ruling, never a code default.
+  'storage.driver':           'local',
+  'storage.local.root':       '/var/lib/hcmos/blob',
+  'storage.retention.punch-photo': '__TBC__', // days — PDPA ruling pending (Kira)
+  'storage.retention.ess-doc':     '__TBC__', // days — employment-record retention pending
+  // (superseded by storage.local.root — kept for old batches/records only)
   'attendance.photo.dir':     '/var/lib/hcmos/punch-photos',
   // Second factor on the shared device (the buddy-punching seam): 'photo' =
   // photo-on-punch (ruled 2026-07-14; records, never blocks). A stronger

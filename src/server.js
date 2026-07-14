@@ -108,6 +108,9 @@ const routes = [
     handler: async (req, m, url, s) => ({ status: 200, body: await auth.resetPassword(s, await readJson(req)) }) },
   { method: 'POST', pattern: /^\/auth\/reset\/pin$/,
     handler: async (req, m, url, s) => ({ status: 200, body: await auth.resetPin(s, await readJson(req)) }) },
+  // P5: reset-target lookup — owner-gated (same sets as the resets), minimal fields.
+  { method: 'POST', pattern: /^\/auth\/reset\/lookup$/,
+    handler: async (req, m, url, s) => ({ status: 200, body: await auth.resetLookup(s, await readJson(req)) }) },
 
   { method: 'GET', pattern: /^\/me\/landing$/,
     handler: async (req, m, url, s) => ({ status: 200, body: auth.landing(s) }) },
@@ -169,6 +172,10 @@ const routes = [
     handler: async (req, m, url, s) => ({ status: 200, body: await employees.documents(s, m[1]) }) },
   { method: 'POST', pattern: /^\/employees\/([0-9a-f-]+)\/change$/i, deny: 'directory.deny.roles',
     handler: async (req, m, url, s) => ({ status: 200, body: await employees.submitChange(s, m[1], await readJson(req)) }) },
+  // REHIRE (Kira 2026-07-14, MOV-02): R11 only; the continuity decision
+  // (bridge/reset) + reason are FORCED and audited; the TMCL is recovered.
+  { method: 'POST', pattern: /^\/employees\/([0-9a-f-]+)\/rehire$/i, action: 'employee.rehire',
+    handler: async (req, m, url, s) => ({ status: 200, body: await employees.rehire(s, m[1], await readJson(req)) }) },
   { method: 'GET', pattern: /^\/employees\/([0-9a-f-]+)$/i, deny: 'directory.deny.roles',
     handler: async (req, m, url, s) => ({ status: 200, body: await employees.get(s, m[1]) }) },
   // Expatriate field-change decision: MAKER = R03 (site HR), CHECKER = R11 (Head

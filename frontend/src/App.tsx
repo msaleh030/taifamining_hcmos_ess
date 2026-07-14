@@ -14,6 +14,8 @@ import Overview from './screens/Overview';
 import Directory from './screens/Directory';
 import { Scorecard, MyKpis } from './screens/Kpi';
 import Leave from './screens/Leave';
+import LeaveQueue from './screens/LeaveQueue';
+import Resets from './screens/Resets';
 import Liability from './screens/Liability';
 import Exact from './screens/Exact';
 import Alerts from './screens/Alerts';
@@ -67,6 +69,8 @@ function Console() {
     '/directory': [t('employees.directory'), t('employees.directorySub')],
     '/scorecard': [t('kpi.console'), t('kpi.consoleSub')],
     '/leave': [t('leave.apply'), t('leave.applySub')],
+    '/approvals': [t('leave.approve'), t('leave.approveSub')],
+    '/resets': [t('resets.title'), t('resets.sub')],
     '/liability': [t('leave.liability'), t('leave.liabilitySub')],
     '/exact': [t('exact.exact'), t('exact.exactSub')],
     '/alerts': [t('governance.alerts'), t('governance.alertsSub')],
@@ -89,6 +93,8 @@ function Console() {
         <Route path="/scorecard" element={<Scorecard />} />
         <Route path="/my-kpis" element={<MyKpis />} />
         <Route path="/leave" element={<Leave />} />
+        <Route path="/approvals" element={<LeaveQueue />} />
+        <Route path="/resets" element={<Resets />} />
         <Route path="/liability" element={<Liability />} />
         <Route path="/exact" element={<Exact />} />
         <Route path="/alerts" element={<Alerts />} />

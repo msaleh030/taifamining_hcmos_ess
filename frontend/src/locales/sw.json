@@ -1230,5 +1230,20 @@
   "kiosk.notIn": "Hujaingia kazini — ingia kwanza.",
   "kiosk.blockedSusp": "Akaunti hii imesimamishwa. Wasiliana na HR.",
   "kiosk.blockedTerm": "Akaunti hii imefungwa. Wasiliana na HR.",
-  "kiosk.back": "Rudi"
+  "kiosk.back": "Rudi",
+  "resets.title": "Kuweka upya vitambulisho",
+  "resets.sub": "Nenosiri + PIN ya kazini · wamiliki pekee · ngazi za madaraka · P5",
+  "resets.searchPH": "Tafuta barua pepe, jina au namba ya mfanyakazi",
+  "resets.newPw": "Nenosiri jipya",
+  "resets.newPin": "PIN mpya",
+  "resets.okPw": "Nenosiri limewekwa upya. Vipindi vyao vyote vimefungwa.",
+  "resets.okPin": "PIN imewekwa upya. Vipindi vyote vya kifaa vimefungwa.",
+  "resets.revoked": "vipindi vimefungwa",
+  "resets.latticeNote": "Kuweka upya kunaweza kulenga tu akaunti ya ngazi yako au chini — ngazi zinatekelezwa upande wa seva na kila kuweka upya kunarekodiwa.",
+  "resets.pickUser": "Akaunti ya konsoli",
+  "resets.pickDevice": "Kifaa cha kazini",
+  "resets.noneFound": "Hakuna kilichopatikana",
+  "resets.search": "Tafuta",
+  "resets.forbidden": "Majukumu ya wamiliki walioruhusiwa pekee yanaweza kuweka upya vitambulisho.",
+  "resets.failed": "Kuweka upya hakukurekodiwa. Hakuna kilichobadilika."
 }

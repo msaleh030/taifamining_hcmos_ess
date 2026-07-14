@@ -24,12 +24,11 @@
 // They are written to attendance.photo.dir on the local filesystem — OUTSIDE
 // the deploy tree — and the DB stores only the path. Never a base64 data URL
 // in the DB. Production-scale object storage is flagged to Kira separately.
-const fs = require('node:fs');
-const path = require('node:path');
 const crypto = require('node:crypto');
 const db = require('./db');
 const cfg = require('./config');
 const C = require('./crypto');
+const storage = require('./storage');
 const { HttpError, genericAuthError } = require('./errors');
 
 const isUuid = (v) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(v || ''));
@@ -89,25 +88,23 @@ async function kioskLogin({ device_id, employee_id, pin }) {
   };
 }
 
-// ── Photo at rest: decode the data URL, write BINARY to disk, return the path.
+// ── Photo at rest: decode the data URL, hand the BINARY to the ONE storage
+// foundation (src/storage.js — Kira ruling 2026-07-14: punch photos, ESS
+// documents and every future upload share it; path + sha256 in the DB, never
+// base64; virus-scan recorded; retention per kind, PDPA-gated).
 // NEVER throws into the punch: any failure returns null and the punch records
 // FLAGGED (photo_missing=true) — a shift change of 200 people is never gated
 // on a lens (records, not blocks).
-async function storePunchPhoto(companyId, attId, dataUrl) {
-  try {
-    const m = /^data:image\/(jpeg|png);base64,(.+)$/.exec(String(dataUrl || ''));
-    if (!m) return null;
-    const buf = Buffer.from(m[2], 'base64');
-    if (buf.length < 64 || buf.length > 5 * 1024 * 1024) return null; // sane bounds
-    const dir = path.join(await cfg.getConfig(companyId, 'attendance.photo.dir', '/var/lib/hcmos/punch-photos'),
-      String(companyId));
-    fs.mkdirSync(dir, { recursive: true });
-    const file = path.join(dir, `${attId}.${m[1] === 'png' ? 'png' : 'jpg'}`);
-    fs.writeFileSync(file, buf, { mode: 0o600 });
-    return file;
-  } catch {
-    return null;
-  }
+async function storePunchPhoto(client, companyId, attId, dataUrl) {
+  const m = /^data:image\/(jpeg|png);base64,(.+)$/.exec(String(dataUrl || ''));
+  if (!m) return null;
+  const buf = Buffer.from(m[2], 'base64');
+  if (buf.length < 64 || buf.length > 5 * 1024 * 1024) return null; // sane bounds
+  const stored = await storage.put(client, companyId, 'punch-photo', buf, {
+    owner_entity: 'attendance', owner_id: String(attId),
+    content_type: m[1] === 'png' ? 'image/png' : 'image/jpeg', soft: true,
+  });
+  return stored ? stored.path : null;
 }
 
 // ── The kiosk punch: attribute to the PIN'd person, attach the photo evidence,
@@ -127,7 +124,7 @@ async function punch(session, { direction, photo }) {
       if (!last || last.direction !== 'in') throw new HttpError(409, 'not clocked in');
     }
     const attId = crypto.randomUUID();
-    const photoPath = await storePunchPhoto(co, attId, photo);
+    const photoPath = await storePunchPhoto(c, co, attId, photo);
     await c.query(
       `INSERT INTO attendance(id, company_id, employee_id, direction, via, device_id, source,
                               photo_path, photo_missing)

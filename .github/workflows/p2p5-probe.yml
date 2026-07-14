@@ -1,0 +1,186 @@
+name: P2+P5 Probe (approval queue + credential resets, live over HTTPS)
+
+# P2 (C10 approval-queue screen) + P5 (password/PIN reset screens), Kira's
+# console order. The C10 queue/decide backend was proven end-to-end in the
+# ESS-6 journey; this probe re-proves it at the CURRENT build and adds the
+# P5 surfaces:
+#   • R03 (owner) finds a device via the owner-gated lookup and RESETS its
+#     PIN → sessions revoked; the OLD PIN refuses, the NEW one signs in;
+#   • R11 (in neither owner set) is refused the lookup (403);
+#   • a worker's application lands in the R11 queue and approves (P2 backend);
+#   • the served bundle carries the P2 + P5 strings in EN and SW.
+# Cleanup removes everything seeded. Chain + BUILD_SHA. Sentinel: .github/RUN-P2P5.
+on:
+  workflow_dispatch:
+  push:
+    branches: [claude/nifty-goodall-poihi4]
+    paths: ['.github/RUN-P2P5']
+
+concurrency: { group: p2p5, cancel-in-progress: false }
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      UAT_IP: 152.239.121.249
+      UAT_CO: 11111111-1111-1111-1111-111111111111
+      BASE: https://uat.taifamining.tz
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - name: SSH path — tunnel first, direct fallback
+        env:
+          CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+          CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
+        run: |
+          mkdir -p ~/.ssh && printf '%s\n' "${{ secrets.UAT_SSH_PRIVATE_KEY }}" > ~/.ssh/uat && chmod 600 ~/.ssh/uat
+          sudo curl -sSL -o /usr/local/bin/cloudflared \
+            https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 \
+            && sudo chmod +x /usr/local/bin/cloudflared || true
+          cat > ~/.ssh/config <<EOF
+          Host uat-tunnel
+            HostName ssh.uat.taifamining.tz
+            User root
+            IdentityFile ~/.ssh/uat
+            StrictHostKeyChecking accept-new
+            ProxyCommand /usr/local/bin/cloudflared access ssh --hostname %h --service-token-id $CF_ACCESS_CLIENT_ID --service-token-secret $CF_ACCESS_CLIENT_SECRET
+          Host uat-direct
+            HostName $UAT_IP
+            User root
+            IdentityFile ~/.ssh/uat
+            StrictHostKeyChecking accept-new
+            ConnectTimeout 10
+          EOF
+          chmod 600 ~/.ssh/config
+          if timeout 30 ssh uat-tunnel true 2>/dev/null; then echo uat-tunnel > /tmp/ssh_host; exit 0; fi
+          for i in $(seq 1 60); do
+            ssh uat-direct true 2>/dev/null && { echo uat-direct > /tmp/ssh_host; exit 0; }
+            echo "waiting ($i/60)"; sleep 15
+          done
+          echo FATAL; exit 1
+
+      - name: BUILD_SHA START + seed worker/device + R03 owner + R11 approver
+        run: |
+          SSH="ssh $(cat /tmp/ssh_host)"
+          echo "── BUILD_SHA (running process) at START of P2+P5 ──"
+          $SSH "curl -fsS http://127.0.0.1:3000/health 2>/dev/null; echo; cat /opt/hcmos/BUILD_SHA 2>/dev/null | head -c 40; echo"
+          $SSH "cd /opt/hcmos && set -a && . /etc/hcmos/hcmos.env && set +a && node -e '
+            const db=require(\"./src/db\"), C=require(\"./src/crypto\");
+            const CO=\"$UAT_CO\";
+            (async()=>{ const out={};
+              await db.withOwner(async c=>{
+                const site=(await c.query(\"SELECT id FROM site WHERE company_id=\$1 ORDER BY id LIMIT 1\",[CO])).rows[0].id;
+                out.emp=(await c.query(\"INSERT INTO employee(id,company_id,site_id,full_name,role_code,status,is_expat,joined_at) VALUES(gen_random_uuid(),\$1,\$2,\x27Zz P2P5 Worker\x27,\x27R13\x27,\x27active\x27,false,\x272025-01-01\x27) RETURNING id\",[CO,site])).rows[0].id;
+                out.dev=(await c.query(\"INSERT INTO device(company_id,employee_id,pin_hash,status) VALUES(\$1,\$2,\$3,\x27active\x27) RETURNING id\",[CO,out.emp,C.hashSecret(\"221133\")])).rows[0].id;
+                out.hrEmp=(await c.query(\"INSERT INTO employee(id,company_id,site_id,full_name,role_code,status,is_expat) VALUES(gen_random_uuid(),\$1,\$2,\x27Zz P2P5 HR\x27,\x27R03\x27,\x27active\x27,false) RETURNING id\",[CO,site])).rows[0].id;
+                out.hr=(await c.query(\"INSERT INTO app_user(id,company_id,employee_id,email,password_hash,role_code,status) VALUES(gen_random_uuid(),\$1,\$2,\x27zz.p2p5.hr@probe.local\x27,\$3,\x27R03\x27,\x27active\x27) RETURNING id\",[CO,out.hrEmp,C.hashSecret(\"P2p5Probe!2026\")])).rows[0].id;
+                out.apEmp=(await c.query(\"INSERT INTO employee(id,company_id,site_id,full_name,role_code,status,is_expat) VALUES(gen_random_uuid(),\$1,\$2,\x27Zz P2P5 Approver\x27,\x27R11\x27,\x27active\x27,false) RETURNING id\",[CO,site])).rows[0].id;
+                out.approver=(await c.query(\"INSERT INTO app_user(id,company_id,employee_id,email,password_hash,role_code,status) VALUES(gen_random_uuid(),\$1,\$2,\x27zz.p2p5.approver@probe.local\x27,\$3,\x27R11\x27,\x27active\x27) RETURNING id\",[CO,out.apEmp,C.hashSecret(\"P2p5Probe!2026\")])).rows[0].id;
+              });
+              require(\"fs\").writeFileSync(\"/root/p2p5.json\",JSON.stringify(out));
+              console.log(\"seeded\",JSON.stringify(out)); await db.close();
+            })().catch(e=>{console.error(e.message);process.exit(1);});
+          '"
+          $SSH 'cat /root/p2p5.json' > /tmp/p2p5.json
+
+      - name: P2 + P5 live over HTTPS (raw bodies)
+        env:
+          CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+          CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
+        run: |
+          node - <<'EOF'
+          const Z = require('/tmp/p2p5.json');
+          const CF = { 'CF-Access-Client-Id': process.env.CF_ACCESS_CLIENT_ID, 'CF-Access-Client-Secret': process.env.CF_ACCESS_CLIENT_SECRET };
+          const BASE = process.env.BASE;
+          const call = async (method, path, body, token) => {
+            const headers = { ...CF };
+            if (token) headers.authorization = `Bearer ${token}`;
+            if (body !== undefined) headers['content-type'] = 'application/json';
+            const r = await fetch(BASE+path,{method,headers,body:body!==undefined?JSON.stringify(body):undefined,signal:AbortSignal.timeout(20000)});
+            let d=null; try{d=await r.json();}catch{} return {status:r.status, body:d||{}};
+          };
+          let fail=false; const say=(ok,n,det)=>{ if(!ok)fail=true; console.log(`${ok?'PASS':'FAIL'}  ${n} — ${det}`); };
+          (async () => {
+            // ── P5 ──
+            const hr = await call('POST','/auth/console',{ email:'zz.p2p5.hr@probe.local', password:'P2p5Probe!2026' });
+            say(hr.status===200, 'P5: R03 owner console sign-in', `${hr.status}`);
+            const hrTok = hr.body.token;
+            const found = await call('POST','/auth/reset/lookup',{ q:'Zz P2P5 Worker' },hrTok);
+            const dev = (found.body.devices||[]).find((d)=>d.id===Z.dev);
+            say(found.status===200 && !!dev,
+                'P5: owner-gated lookup finds the field device (minimal fields)',
+                `${found.status} raw=${JSON.stringify(found.body).slice(0,200)}`);
+            const reset = await call('POST','/auth/reset/pin',{ device_id: Z.dev, new_pin:'775599' },hrTok);
+            say(reset.status===200 && reset.body.ok===true,
+                'P5: PIN reset records and revokes sessions', `${reset.status} raw=${JSON.stringify(reset.body)}`);
+            const oldPin = await call('POST','/auth/field',{ device_id: Z.dev, pin:'221133' });
+            say(oldPin.status===401, 'P5: the OLD PIN refuses (generic)', `${oldPin.status} raw=${JSON.stringify(oldPin.body)}`);
+            const newPin = await call('POST','/auth/field',{ device_id: Z.dev, pin:'775599' });
+            say(newPin.status===200 && !!newPin.body.token, 'P5: the NEW PIN signs in', `${newPin.status}`);
+            const wTok = newPin.body.token;
+
+            // R11 is in NEITHER owner set → the lookup refuses.
+            const ap = await call('POST','/auth/console',{ email:'zz.p2p5.approver@probe.local', password:'P2p5Probe!2026' });
+            const apTok = ap.body.token;
+            const denied = await call('POST','/auth/reset/lookup',{ q:'Zz P2P5' },apTok);
+            say(denied.status===403, 'P5: a non-owner role (R11) is refused the lookup', `${denied.status} raw=${JSON.stringify(denied.body)}`);
+
+            // ── P2 (re-proof at this build): apply → queue → approve ──
+            const applied = await call('POST','/leave/apply',{ leave_type:'annual', days:1, hoh_override:false },wTok);
+            say(applied.status===200 && !!applied.body.id, 'P2: worker applies (the E4 payload)', `${applied.status} raw=${JSON.stringify(applied.body)}`);
+            const q = await call('GET','/leave/requests',undefined,apTok);
+            const mine = (q.body.pending||[]).find((p)=>p.id===applied.body.id);
+            say(q.status===200 && !!mine && !!mine.coverage,
+                'P2: the request is IN the R11 queue with its coverage meter',
+                `${q.status} raw=${JSON.stringify(mine||{}).slice(0,220)}`);
+            const dec = await call('POST',`/leave/requests/${applied.body.id}/decide`,{ approve:true },apTok);
+            say(dec.status===200 && dec.body.status==='approved', 'P2: approved (SOD-01 held, audited)', `${dec.status} raw=${JSON.stringify(dec.body)}`);
+
+            // ── The bundle carries the P2 + P5 strings, both languages ──
+            const shellR = await fetch(BASE+'/login',{headers:CF,signal:AbortSignal.timeout(20000)});
+            const shell = await shellR.text();
+            const js = (shell.match(/src="(\/assets\/[^"]+\.js)"/)||[])[1];
+            let en=false, sw=false;
+            if (js) {
+              const bundle = await (await fetch(BASE+js,{headers:CF,signal:AbortSignal.timeout(30000)})).text();
+              en = bundle.includes('Pending approvals') && bundle.includes('Credential resets')
+                && bundle.includes('I acknowledge the coverage gap');
+              sw = bundle.includes('Idhini zinazosubiri') && bundle.includes('Kuweka upya vitambulisho')
+                && bundle.includes('Ninakubali pengo la uwepo');
+            }
+            say(en && sw, 'served bundle: P2 + P5 strings in EN and SW', `bundle=${js||'NOT FOUND'} en=${en} sw=${sw}`);
+            process.exit(fail?1:0);
+          })().catch(e=>{console.error('PROBE ERROR:',e.message);process.exit(1);});
+          EOF
+
+      - name: audit chain + BUILD_SHA END + cleanup
+        if: always()
+        run: |
+          SSH="ssh $(cat /tmp/ssh_host)"
+          EMP=$(python3 -c "import json;print(json.load(open('/tmp/p2p5.json'))['emp'])" 2>/dev/null || echo '')
+          HREMP=$(python3 -c "import json;print(json.load(open('/tmp/p2p5.json'))['hrEmp'])" 2>/dev/null || echo '')
+          APEMP=$(python3 -c "import json;print(json.load(open('/tmp/p2p5.json'))['apEmp'])" 2>/dev/null || echo '')
+          if [ -n "$EMP" ]; then
+            $SSH "sudo -u postgres psql -d hcmos -c \"
+              DELETE FROM leave_request WHERE employee_id='$EMP';
+              DELETE FROM session WHERE device_id IN (SELECT id FROM device WHERE employee_id='$EMP');
+              DELETE FROM session WHERE user_id IN (SELECT id FROM app_user WHERE email LIKE 'zz.p2p5.%@probe.local');
+              DELETE FROM device WHERE employee_id='$EMP';
+              DELETE FROM app_user WHERE email LIKE 'zz.p2p5.%@probe.local';
+              DELETE FROM employee WHERE id IN ('$EMP','$HREMP','$APEMP');\""
+          fi
+          echo "── audit chain: head + recompute + linkage ──"
+          $SSH "sudo -u postgres psql -d hcmos -c \"
+            SELECT (SELECT max(seq) FROM audit WHERE company_id='$UAT_CO') AS head_seq,
+                   bool_and(hash = encode(sha256(convert_to(prev_hash || concat_ws('|',
+                     company_id::text, coalesce(actor,''), coalesce(role,''), action,
+                     coalesce(entity,''), coalesce(entity_id,''), ts::text,
+                     coalesce(before::text,''), coalesce(after::text,'')), 'UTF8')),'hex')) AS recompute_ok
+              FROM audit WHERE company_id='$UAT_CO';
+            SELECT count(*) AS linkage_breaks FROM (
+              SELECT prev_hash, lag(hash) OVER (PARTITION BY company_id ORDER BY seq) AS expect FROM audit) x
+             WHERE (expect IS NULL AND prev_hash <> repeat('0',64)) OR (expect IS NOT NULL AND prev_hash <> expect)\""
+          echo "── BUILD_SHA END ──"
+          $SSH "curl -fsS http://127.0.0.1:3000/health 2>/dev/null; echo; cat /opt/hcmos/BUILD_SHA 2>/dev/null | head -c 40; echo"

@@ -14,6 +14,7 @@ import { setLanguage } from '../lib/i18n';
 import {
   IcGrid, IcUsers, IcChart, IcCalendar, IcMapPin, IcUpload, IcBanknote,
   IcShield, IcBell, IcFile, IcLifeBuoy, IcBuilding, IcSearch, IcLogOut, IcGlobe,
+  IcCheck, IcLock,
 } from './icons';
 
 interface NavEntry { to: string; label: string; icon: ReactNode; module?: string }
@@ -35,6 +36,7 @@ const GROUPS: NavGroup[] = [
     label: 'Operations',
     items: [
       { to: '/leave', label: 'Leave', icon: <IcCalendar />, module: 'leave' },
+      { to: '/approvals', label: 'Leave approvals', icon: <IcCheck />, module: 'leave' },
       { to: '/attendance', label: 'Attendance', icon: <IcMapPin /> },
     ],
   },
@@ -56,7 +58,10 @@ const GROUPS: NavGroup[] = [
   },
   {
     label: 'Platform',
-    items: [{ to: '/tenant', label: 'Tenant wizard', icon: <IcBuilding />, module: 'admin' }],
+    items: [
+      { to: '/resets', label: 'Credential resets', icon: <IcLock /> },
+      { to: '/tenant', label: 'Tenant wizard', icon: <IcBuilding />, module: 'admin' },
+    ],
   },
 ];
 

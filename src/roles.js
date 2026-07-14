@@ -89,6 +89,9 @@ const ACTIONS = {
   // R12 (System Admin) deliberately REMOVED — admin must not run payroll. Pinned.
   'payroll.run':         ['R15', 'R16'],
   'leave.approve':       ['R02', 'R04', 'R11'],
+  // REHIRE ruling (Kira 2026-07-14): the continuity decision is the Head of
+  // HR's alone — R11 records bridge/reset ON the rehire, with a reason.
+  'employee.rehire':     ['R11'],
 };
 
 function landingFor(role) {
