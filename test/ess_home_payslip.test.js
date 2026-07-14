@@ -47,3 +47,44 @@ test('E2 home: payslip tile present; no-backend tiles (Documents/Training/ID car
   assert.ok(!/qaDocs|qaTraining|qaId\b/.test(src.replace(/\/\/.*$/gm, '')),
     'Documents/Training/ID card have no backend — absent from the grid (deferred, not mocked)');
 });
+
+// ── The bootstrap-identity gap the ESS-3/4 LIVE PROBE caught ────────────────
+// A field worker with a device but NO app_user (the normal case for the
+// 1,099) could sign in yet got 403 "no employee for user" on every own-data
+// endpoint — three private employeeOf copies resolved through app_user only.
+// src/identity.js resolves through the session's DEVICE too. Pin it.
+const H = require('./helpers');
+const db = require('../src/db');
+const { F } = H;
+const { before, after } = require('node:test');
+
+before(H.start);
+after(H.stop);
+
+test('a NO-app_user field session reaches its own leave balance and payslips (device bootstrap)', async () => {
+  const owner = (sql, p) => db.withOwner((c) => c.query(sql, p));
+  const A = F.TENANT_A;
+  const ids = {};
+  try {
+    ids.emp = (await owner(
+      `INSERT INTO employee(id,company_id,site_id,full_name,role_code,status,is_expat)
+       VALUES (gen_random_uuid(),$1,$2,'Zz Bootstrap','R13','active',false) RETURNING id`,
+      [A, F.SITE.A1])).rows[0].id;
+    const C = require('../src/crypto');
+    ids.dev = (await owner(
+      `INSERT INTO device(company_id,employee_id,pin_hash,status) VALUES ($1,$2,$3,'active') RETURNING id`,
+      [A, ids.emp, C.hashSecret('909090')])).rows[0].id;
+    const login = await H.req('POST', '/auth/field', { body: { device_id: ids.dev, pin: '909090' } });
+    assert.equal(login.status, 200, JSON.stringify(login.body));
+    const tok = login.body.token;
+    const bal = await H.req('GET', '/leave/balance', { token: tok });
+    assert.equal(bal.status, 200, `leave balance resolves via the device: ${JSON.stringify(bal.body)}`);
+    const slips = await H.req('GET', '/me/payslips', { token: tok });
+    assert.equal(slips.status, 200, `payslips resolve via the device: ${JSON.stringify(slips.body)}`);
+    assert.deepEqual(slips.body.periods, [], 'no published pay yet — the honest empty state, not a 403');
+  } finally {
+    await owner(`DELETE FROM session WHERE device_id=$1`, [ids.dev]);
+    await owner(`DELETE FROM device WHERE id=$1`, [ids.dev]);
+    if (ids.emp) await owner(`DELETE FROM employee WHERE id=$1`, [ids.emp]);
+  }
+});

@@ -23,11 +23,7 @@ function num(v) {
 }
 const round2 = (n) => Math.round(n * 100) / 100;
 
-async function employeeOf(c, session) {
-  if (!session.user_id) return null;
-  const r = await c.query('SELECT employee_id FROM app_user WHERE id=$1', [session.user_id]);
-  return r.rows[0] ? r.rows[0].employee_id : null;
-}
+const { employeeOf } = require('./identity'); // session→employee (device bootstrap included)
 
 // The caller's ESS-visible payslip rows, newest first.
 async function ownRows(c, empId) {

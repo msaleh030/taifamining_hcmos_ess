@@ -17,19 +17,8 @@ const { HttpError } = require('./errors');
 const round1 = (x) => Math.round(x * 10) / 10;
 const OPEN = "status <> 'declined' AND status <> 'cancelled'"; // requests that consume balance
 
-async function employeeOf(client, session) {
-  if (!session.user_id) return null;
-  const r = await client.query('SELECT employee_id FROM app_user WHERE id=$1', [session.user_id]);
-  return r.rows[0] ? r.rows[0].employee_id : null;
-}
-// The employee id AND joined_at (the cycle anchor) in one read.
-async function employeeRowOf(client, session) {
-  if (!session.user_id) return null;
-  const r = await client.query(
-    `SELECT u.employee_id AS id, e.joined_at::text AS joined
-       FROM app_user u LEFT JOIN employee e ON e.id = u.employee_id WHERE u.id=$1`, [session.user_id]);
-  return r.rows[0] && r.rows[0].id ? r.rows[0] : null;
-}
+// session→employee (device bootstrap included; joined_at is the cycle anchor)
+const { employeeOf, employeeRowOf } = require('./identity');
 const openCarry = async (c, empId) => Number((await c.query(
   `SELECT coalesce(sum(days),0)::float8 d FROM leave_carry WHERE employee_id=$1 AND lapsed_at IS NULL`, [empId])).rows[0].d);
 // Consumption within the CURRENT entitlement cycle (bughunt-B #1/#2): `since`

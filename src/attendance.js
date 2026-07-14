@@ -20,11 +20,7 @@ const db = require('./db');
 const geofence = require('./geofence');
 const { HttpError } = require('./errors');
 
-async function employeeOf(client, session) {
-  if (!session.user_id) return null;
-  const r = await client.query('SELECT employee_id FROM app_user WHERE id=$1', [session.user_id]);
-  return r.rows[0] ? r.rows[0].employee_id : null;
-}
+const { employeeOf } = require('./identity'); // session→employee (device bootstrap included)
 
 async function clockIn(session, loc = {}) {
   const co = session.company_id;
