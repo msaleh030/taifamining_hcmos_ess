@@ -15,7 +15,7 @@ Status: PENDING → IMPORTED (or SKIPPED-<reason>).
 - [ ] HCMOS KPI Scorecard.html
 - [ ] HCMOS Employee Master & Lifecycle.html
 - [ ] HCMOS Leave & Liability Flow.html
-- [ ] HCMOS Governance & ESS.html
+- [x] HCMOS Governance & ESS.html IMPORTED (shell) + gov-flow.js VERIFIED CONTENT-EQUIVALENT to Jul-5
 - [ ] HCMOS Tenant Provisioning.html
 - [ ] HCMOS ESS Services.html
 ## Stage C (rest of reference — fetch per-build; full list in project inventory)

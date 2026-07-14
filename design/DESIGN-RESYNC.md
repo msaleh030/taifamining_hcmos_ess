@@ -99,3 +99,12 @@ The regen → accept → enforce → redeploy loop is intact and ready:
 4. On Design's acceptance, commit the 36 candidates to `design/app-baselines/`
    → CI re-enforces (green).
 5. Redeploy the enforced build to Frankfurt; LIVE = current Design.
+
+---
+## CLOSED 2026-07-14
+The reference was delivered (claude.ai/design project c64829ec…, imported to
+design/reference-2026-07/) and the divergence list produced:
+see design/DIVERGENCE-2026-07-14.md. Key finding: the flow reference for login
+is BYTE-IDENTICAL to the Jul-5 prototypes — the July design work is in the
+React app source and the c20-controls candidates. 13/18 states CONFIRMED
+PARITY; 5 DIVERGED (4 ordered-forward P1 login, 1 c20-controls).
