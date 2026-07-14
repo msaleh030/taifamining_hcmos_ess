@@ -23,6 +23,7 @@ import Support from './screens/Support';
 import Tenant from './screens/Tenant';
 import Attendance from './screens/Attendance';
 import EssHome from './screens/EssHome';
+import Blocked from './screens/Blocked';
 import Shell from './components/shell';
 import { Skeleton } from './components/state';
 
@@ -105,6 +106,11 @@ export default function App() {
   const location = useLocation();
   if (location.pathname === '/login') {
     return <Routes><Route path="/login" element={<Login />} /></Routes>;
+  }
+  // E14: the blocked screen is PRE-session by design — a suspended/terminated
+  // worker never gets a token, so this route must not require one.
+  if (location.pathname === '/blocked') {
+    return <Routes><Route path="/blocked" element={<Blocked />} /></Routes>;
   }
   if (!session.isAuthed) return <Navigate to="/login" replace />;
   if (location.pathname.startsWith('/ess')) {

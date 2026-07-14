@@ -623,6 +623,8 @@
 .lock{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;text-align:center;padding:30px;color:var(--muted);gap:11px;}
 .lock .ic{width:52px;height:52px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:var(--surface2);}
 .lock .ic.self{background:rgba(229,72,77,.12);color:var(--red);}
+.lock .ic.hold{background:rgba(251,192,45,.16);color:#9A6B00;}
+[data-theme="dark"] .lock .ic.hold, [data-theme="glass"] .lock .ic.hold, [data-theme="reduced"] .lock .ic.hold{color:var(--yellow);}
 .lock h3{margin:0;color:var(--text);font-size:16px;}
 .lock p{margin:0;font-size:13px;max-width:330px;line-height:1.5;}
 .lock .why{margin-top:4px;font:600 11px var(--mono);background:var(--surface2);border:1px solid var(--border);border-radius:var(--r-sm);padding:6px 10px;color:var(--muted);}

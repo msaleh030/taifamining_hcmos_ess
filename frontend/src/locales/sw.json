@@ -1184,5 +1184,16 @@
   "attendance.flagOpen": "Wazi",
   "attendance.na": "—",
   "overview.R15": "Meneja Fedha (mwandaaji)",
-  "overview.R16": "Mdhibiti Mkuu wa Fedha (mthibitishaji)"
+  "overview.R16": "Mdhibiti Mkuu wa Fedha (mthibitishaji)",
+  "ess.blocked.title": "Ufikiaji umezuiwa",
+  "ess.blocked.sub": "Hali ya akaunti · E14",
+  "ess.blocked.suspT": "Akaunti yako imesimamishwa",
+  "ess.blocked.suspB": "Ufikiaji wa ESS umesimamishwa wakati adhabu ya nidhamu ikiendelea. Huwezi kuingia kazini wala kutuma maombi hadi iondolewe. Wasiliana na msimamizi au HR.",
+  "ess.blocked.termT": "Akaunti yako imefungwa",
+  "ess.blocked.termB": "Akaunti hii imezimwa baada ya kuondoka. Huduma binafsi haipatikani tena. Nyaraka zako za mwisho zinabaki kwa HR.",
+  "ess.blocked.suspWhy": "Hali: Imesimamishwa · DISC-03",
+  "ess.blocked.termWhy": "Hali: Imesitishwa · LVR-01",
+  "ess.blocked.contactHr": "Wasiliana na HR",
+  "ess.blocked.contactHint": "Muulize msimamizi wako au ofisi ya HR ya eneo lako.",
+  "ess.blocked.back": "Rudi kwenye kuingia"
 }

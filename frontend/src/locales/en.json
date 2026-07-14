@@ -1336,5 +1336,16 @@
   "attendance.flagOpen": "Open",
   "attendance.na": "—",
   "overview.R15": "Finance Manager (maker)",
-  "overview.R16": "Chief Financial Controller (checker)"
+  "overview.R16": "Chief Financial Controller (checker)",
+  "ess.blocked.title": "Access blocked",
+  "ess.blocked.sub": "Account status · E14",
+  "ess.blocked.suspT": "Your account is suspended",
+  "ess.blocked.suspB": "ESS access is paused while a disciplinary suspension is in effect. You cannot clock in or submit requests until it is lifted. Contact your line manager or HR.",
+  "ess.blocked.termT": "Your account is closed",
+  "ess.blocked.termB": "This account has been deactivated following separation. Self-service is no longer available. Your final documents remain accessible to HR.",
+  "ess.blocked.suspWhy": "Status: Suspended · DISC-03",
+  "ess.blocked.termWhy": "Status: Terminated · LVR-01",
+  "ess.blocked.contactHr": "Contact HR",
+  "ess.blocked.contactHint": "Ask your line manager or the HR office at your site.",
+  "ess.blocked.back": "Back to sign in"
 }

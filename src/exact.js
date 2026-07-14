@@ -311,6 +311,7 @@ function headerMultimap(rows) {
     if (!m.has(k)) m.set(k, []);
     m.get(k).push(r.position);
   }
+  for (const v of m.values()) v.sort((a, b) => a - b);   // deterministic reporting
   return m;
 }
 

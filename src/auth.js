@@ -74,11 +74,6 @@ async function fieldLogin({ device_id, pin, idempotency_key }) {
   if (!d) throw genericAuthError();                       // unregistered device refused
   if (d.company_status !== 'active') throw genericAuthError();
   if (d.device_status !== 'active') throw genericAuthError();
-  // A non-active app_user (suspended OR terminated) is refused — same rule the
-  // console path enforces (status must be 'active'). user_status is NULL only
-  // for the no-app_user field bootstrap (device maps to an employee with no
-  // console account); that path is allowed and takes field.default.role.
-  if (d.user_status && d.user_status !== 'active') throw genericAuthError();
   if (future(d.locked_until)) throw genericAuthError();
 
   if (!C.verifySecret(pin, d.pin_hash)) {
@@ -87,6 +82,18 @@ async function fieldLogin({ device_id, pin, idempotency_key }) {
     await db.query('SELECT * FROM auth_device_fail($1,$2,$3)', [device_id, threshold, duration]);
     throw genericAuthError();
   }
+
+  // E14 (Kira 2026-07-14): identity is now PROVEN — correct PIN on the
+  // registered device. Only at this point may the account status be disclosed:
+  // a suspended (DISC-03, reversible) or terminated (LVR-01) worker gets a
+  // DISTINCT blocked answer and NO session — the client draws the E14 screen,
+  // never a raw error, never a working session. A guesser with a wrong PIN
+  // still learns nothing (AUTH-04 generic, above). The gate reads BOTH the
+  // employee record (the field/ESS source of truth — covers the no-app_user
+  // bootstrap) and the app_user (console hold); terminated outranks suspended.
+  const statuses = [d.employee_status, d.user_status].filter(Boolean);
+  if (statuses.includes('terminated')) throw new HttpError(403, 'account terminated', { blocked: 'terminated' });
+  if (statuses.includes('suspended'))  throw new HttpError(403, 'account suspended',  { blocked: 'suspended' });
 
   const ttl = await cfg.getInt(d.company_id, 'session.field.ttl', 43200);
   const defaultRole = await cfg.getConfig(d.company_id, 'field.default.role', 'R13');

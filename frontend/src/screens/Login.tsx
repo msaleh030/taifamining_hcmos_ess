@@ -76,6 +76,15 @@ export default function Login() {
       setDeviceId(dev);
       navigate('/ess');
     } catch (err) {
+      // E14: a correct PIN on a suspended/terminated account gets the DISTINCT
+      // blocked screen (the server discloses status only after the PIN proves
+      // identity) — never a raw error, never a working session.
+      const blocked = isApiError(err) && err.status === 403
+        && (err.body as { blocked?: string } | null)?.blocked;
+      if (blocked === 'suspended' || blocked === 'terminated') {
+        navigate('/blocked', { state: { kind: blocked }, replace: true });
+        return;
+      }
       // Generic — never which factor failed (AUTH-04); a locked device reads the same.
       setMessage(isApiError(err) && err.status === 401 ? t('auth.errField') : (err instanceof Error && err.message) || t('auth.errField'));
     } finally {

@@ -40,7 +40,12 @@ test('17.2 terminated user with valid console creds AND valid device PIN is refu
 
   const d = F.DEVICES.TERM_A; // active device, correct PIN, but owner is terminated
   const field = await H.req('POST', '/auth/field', { body: { device_id: d.id, pin: d.pin } });
-  assert.equal(field.status, 401);
+  // E14 (2026-07-14): a PROVEN PIN on a terminated account gets the distinct
+  // blocked answer (403, no session) so the client can draw the E14 screen;
+  // refused either way — never a working session.
+  assert.equal(field.status, 403);
+  assert.equal(field.body.blocked, 'terminated');
+  assert.ok(!field.body.token);
 });
 
 // ── Section 17.3: session invalidation on password reset ───────────────────

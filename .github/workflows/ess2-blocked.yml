@@ -1,0 +1,175 @@
+name: ESS-2 Blocked Probe (E14 suspended/terminated live, session kill, bilingual)
+
+# E14 / ESS-2 (Kira 2026-07-14): LIVE over HTTPS, raw bodies:
+#   • correct PIN on an ACTIVE account → 200 + token; /me/landing answers;
+#   • suspend the EMPLOYEE → the LIVE token dies (401) — the mine-gate hole:
+#     no lingering session can clock in;
+#   • correct PIN while suspended → 403 {"blocked":"suspended"} (distinct, no
+#     session); wrong PIN while suspended → GENERIC 401 (AUTH-04: a guesser
+#     learns nothing — status is disclosed only to a proven PIN);
+#   • terminate the employee → correct PIN → 403 {"blocked":"terminated"};
+#   • the served bundle carries the E14 strings in BOTH languages.
+# BUILD_SHA start/end; chain recompute + linkage; full cleanup.
+# Sentinel: .github/RUN-ESS2.
+on:
+  workflow_dispatch:
+  push:
+    branches: [claude/nifty-goodall-poihi4]
+    paths: ['.github/RUN-ESS2']
+
+concurrency: { group: ess2, cancel-in-progress: false }
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      UAT_IP: 152.239.121.249
+      UAT_CO: 11111111-1111-1111-1111-111111111111
+      BASE: https://uat.taifamining.tz
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - name: SSH path — tunnel first, direct fallback
+        env:
+          CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+          CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
+        run: |
+          mkdir -p ~/.ssh && printf '%s\n' "${{ secrets.UAT_SSH_PRIVATE_KEY }}" > ~/.ssh/uat && chmod 600 ~/.ssh/uat
+          sudo curl -sSL -o /usr/local/bin/cloudflared \
+            https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 \
+            && sudo chmod +x /usr/local/bin/cloudflared || true
+          cat > ~/.ssh/config <<EOF
+          Host uat-tunnel
+            HostName ssh.uat.taifamining.tz
+            User root
+            IdentityFile ~/.ssh/uat
+            StrictHostKeyChecking accept-new
+            ProxyCommand /usr/local/bin/cloudflared access ssh --hostname %h --service-token-id $CF_ACCESS_CLIENT_ID --service-token-secret $CF_ACCESS_CLIENT_SECRET
+          Host uat-direct
+            HostName $UAT_IP
+            User root
+            IdentityFile ~/.ssh/uat
+            StrictHostKeyChecking accept-new
+            ConnectTimeout 10
+          EOF
+          chmod 600 ~/.ssh/config
+          if timeout 30 ssh uat-tunnel true 2>/dev/null; then echo uat-tunnel > /tmp/ssh_host; exit 0; fi
+          for i in $(seq 1 60); do
+            ssh uat-direct true 2>/dev/null && { echo uat-direct > /tmp/ssh_host; exit 0; }
+            echo "waiting ($i/60)"; sleep 15
+          done
+          echo FATAL; exit 1
+
+      - name: BUILD_SHA START + seed throwaway employee + device (known PIN)
+        run: |
+          SSH="ssh $(cat /tmp/ssh_host)"
+          echo "── BUILD_SHA (running process) at START of ESS-2 ──"
+          $SSH "curl -fsS http://127.0.0.1:3000/health 2>/dev/null; echo; cat /opt/hcmos/BUILD_SHA 2>/dev/null | head -c 40; echo"
+          $SSH "cd /opt/hcmos && set -a && . /etc/hcmos/hcmos.env && set +a && node -e '
+            const db=require(\"./src/db\"), C=require(\"./src/crypto\");
+            const CO=\"$UAT_CO\";
+            (async()=>{ const out={};
+              await db.withOwner(async c=>{
+                const site=(await c.query(\"SELECT id FROM site WHERE company_id=\$1 ORDER BY id LIMIT 1\",[CO])).rows[0].id;
+                out.emp=(await c.query(\"INSERT INTO employee(id,company_id,site_id,full_name,role_code,status,is_expat) VALUES(gen_random_uuid(),\$1,\$2,\x27Zz E14 Probe\x27,\x27R13\x27,\x27active\x27,false) RETURNING id\",[CO,site])).rows[0].id;
+                out.dev=(await c.query(\"INSERT INTO device(company_id,employee_id,pin_hash,status) VALUES(\$1,\$2,\$3,\x27active\x27) RETURNING id\",[CO,out.emp,C.hashSecret(\"440022\")])).rows[0].id;
+              });
+              require(\"fs\").writeFileSync(\"/root/ess2.json\",JSON.stringify(out));
+              console.log(\"seeded device\",out.dev); await db.close();
+            })().catch(e=>{console.error(e.message);process.exit(1);});
+          '"
+          $SSH 'cat /root/ess2.json' > /tmp/ess2.json
+
+      - name: E14 live matrix over HTTPS (raw bodies; employee status flipped via SSH between legs)
+        env:
+          CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+          CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
+        run: |
+          SSH="ssh $(cat /tmp/ssh_host)"
+          EMP=$(python3 -c "import json;print(json.load(open('/tmp/ess2.json'))['emp'])")
+          flip() { $SSH "sudo -u postgres psql -d hcmos -c \"UPDATE employee SET status='$1' WHERE id='$EMP'\"" >/dev/null; }
+
+          run_leg() { node /tmp/leg.js "$1"; }
+          cat > /tmp/leg.js <<'EOF'
+          const Z = require('/tmp/ess2.json');
+          const CF = { 'CF-Access-Client-Id': process.env.CF_ACCESS_CLIENT_ID, 'CF-Access-Client-Secret': process.env.CF_ACCESS_CLIENT_SECRET };
+          const BASE = process.env.BASE;
+          const call = async (method, path, body, token) => {
+            const headers = { ...CF };
+            if (token) headers.authorization = `Bearer ${token}`;
+            if (body !== undefined) headers['content-type'] = 'application/json';
+            const r = await fetch(BASE+path,{method,headers,body:body!==undefined?JSON.stringify(body):undefined,signal:AbortSignal.timeout(20000)});
+            let d=null; try{d=await r.json();}catch{} return {status:r.status, body:d||{}};
+          };
+          const say=(ok,n,det)=>{ console.log(`${ok?'PASS':'FAIL'}  ${n} — ${det}`); if(!ok)process.exitCode=1; };
+          const fs=require('fs');
+          (async () => {
+            const leg = process.argv[2];
+            if (leg === 'active') {
+              const ok = await call('POST','/auth/field',{ device_id: Z.dev, pin: '440022' });
+              say(ok.status===200 && !!ok.body.token, 'active: PIN → 200 + token', `${ok.status} role=${ok.body.role}`);
+              const land = await call('GET','/me/landing',undefined,ok.body.token);
+              say(land.status===200, 'active: live token reaches /me/landing', `${land.status}`);
+              fs.writeFileSync('/tmp/token.txt', ok.body.token||'');
+            } else if (leg === 'suspended') {
+              const tok = fs.readFileSync('/tmp/token.txt','utf8');
+              const dead = await call('GET','/me/landing',undefined,tok);
+              say(dead.status===401, 'SUSPENDED: the LIVE token is DEAD (mine-gate hole closed)', `${dead.status} raw=${JSON.stringify(dead.body)}`);
+              const bl = await call('POST','/auth/field',{ device_id: Z.dev, pin: '440022' });
+              say(bl.status===403 && bl.body.blocked==='suspended' && !bl.body.token,
+                  'SUSPENDED: correct PIN → 403 blocked:"suspended", no session', `${bl.status} raw=${JSON.stringify(bl.body)}`);
+              const oracle = await call('POST','/auth/field',{ device_id: Z.dev, pin: '000000' });
+              say(oracle.status===401 && !('blocked' in oracle.body),
+                  'SUSPENDED: wrong PIN → GENERIC 401 (no status oracle, AUTH-04)', `${oracle.status} raw=${JSON.stringify(oracle.body)}`);
+            } else if (leg === 'terminated') {
+              const bl = await call('POST','/auth/field',{ device_id: Z.dev, pin: '440022' });
+              say(bl.status===403 && bl.body.blocked==='terminated' && !bl.body.token,
+                  'TERMINATED: correct PIN → 403 blocked:"terminated", no session', `${bl.status} raw=${JSON.stringify(bl.body)}`);
+            } else if (leg === 'bundle') {
+              const shellR = await fetch(BASE+'/login',{headers:CF,signal:AbortSignal.timeout(20000)});
+              const shell = await shellR.text();
+              const js = (shell.match(/src="(\/assets\/[^"]+\.js)"/)||[])[1];
+              let sw=false, en=false;
+              if (js) {
+                const bundle = await (await fetch(BASE+js,{headers:CF,signal:AbortSignal.timeout(30000)})).text();
+                sw = bundle.includes('Akaunti yako imesimamishwa') && bundle.includes('Akaunti yako imefungwa');
+                en = bundle.includes('Your account is suspended') && bundle.includes('Your account is closed');
+              }
+              say(sw && en, 'served bundle carries E14 strings in BOTH languages', `bundle=${js||'NOT FOUND'} en=${en} sw=${sw}`);
+            }
+          })().catch(e=>{console.error('PROBE ERROR:',e.message);process.exit(1);});
+          EOF
+
+          run_leg active
+          flip suspended
+          run_leg suspended
+          flip terminated
+          run_leg terminated
+          run_leg bundle
+
+      - name: audit chain + BUILD_SHA END + cleanup
+        if: always()
+        run: |
+          SSH="ssh $(cat /tmp/ssh_host)"
+          EMP=$(python3 -c "import json;print(json.load(open('/tmp/ess2.json'))['emp'])" 2>/dev/null || echo '')
+          if [ -n "$EMP" ]; then
+            $SSH "sudo -u postgres psql -d hcmos -c \"
+              DELETE FROM session WHERE device_id IN (SELECT id FROM device WHERE employee_id='$EMP');
+              DELETE FROM device WHERE employee_id='$EMP';
+              DELETE FROM employee WHERE id='$EMP';\""
+          fi
+          echo "── audit chain: head + recompute + linkage ──"
+          $SSH "sudo -u postgres psql -d hcmos -c \"
+            SELECT (SELECT max(seq) FROM audit WHERE company_id='$UAT_CO') AS head_seq,
+                   bool_and(hash = encode(sha256(convert_to(prev_hash || concat_ws('|',
+                     company_id::text, coalesce(actor,''), coalesce(role,''), action,
+                     coalesce(entity,''), coalesce(entity_id,''), ts::text,
+                     coalesce(before::text,''), coalesce(after::text,'')), 'UTF8')),'hex')) AS recompute_ok
+              FROM audit WHERE company_id='$UAT_CO';
+            SELECT count(*) AS linkage_breaks FROM (
+              SELECT prev_hash, lag(hash) OVER (PARTITION BY company_id ORDER BY seq) AS expect FROM audit) x
+             WHERE (expect IS NULL AND prev_hash <> repeat('0',64)) OR (expect IS NOT NULL AND prev_hash <> expect)\""
+          echo "── BUILD_SHA END ──"
+          $SSH "curl -fsS http://127.0.0.1:3000/health 2>/dev/null; echo; cat /opt/hcmos/BUILD_SHA 2>/dev/null | head -c 40; echo"

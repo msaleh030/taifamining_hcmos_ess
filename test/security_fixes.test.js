@@ -37,13 +37,19 @@ test('H1: readProfile denies directory-denied roles and out-of-site reads', asyn
 });
 
 // ── H2: field (device+PIN) login refuses a suspended user ────────────────────
+// E14 (2026-07-14) refined the ANSWER, not the rule: a correct PIN on a
+// suspended account now gets the DISTINCT 403 blocked response (no session)
+// instead of the generic 401 — the generic answer is reserved for callers who
+// have NOT proven the PIN (see test/e14_blocked.test.js for the full matrix).
 test('H2: suspended user cannot field-login even with a valid device + PIN', async () => {
   const d = F.DEVICES.FIELD_A; // EMP.FIELDA, app_user FIELD_A (R13), active
   try {
     // Console-equivalent hold: suspend the app_user.
     await owner(`UPDATE app_user SET status='suspended' WHERE id=$1`, [F.USERS.FIELD_A.id]);
     const r = await H.req('POST', '/auth/field', { body: { device_id: d.id, pin: d.pin } });
-    assert.equal(r.status, 401, 'suspended user is refused at the kiosk (was 200 before the fix)');
+    assert.equal(r.status, 403, 'suspended user is refused at the kiosk (E14: distinct blocked answer)');
+    assert.equal(r.body.blocked, 'suspended');
+    assert.ok(!r.body.token, 'no session either way');
   } finally {
     await owner(`UPDATE app_user SET status='active' WHERE id=$1`, [F.USERS.FIELD_A.id]);
   }
