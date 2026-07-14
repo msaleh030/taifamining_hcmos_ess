@@ -78,9 +78,24 @@ async function login(page: Page, user: { email: string; password: string }) {
   await page.waitForURL((u) => !u.pathname.includes('/login'));
 }
 
+// BASELINE-STALE SET (2026-07-14). These screens were changed by ORDERED builds
+// AFTER the on-disk baselines were declared stale (design/DESIGN-RESYNC.md,
+// open since 7 Jul — Design's current reference has not landed):
+//   • c1-login-*  — P1 field-PIN track + pre-auth EN/SW toggle (Kira P1 order);
+//   • c20-controls — 5th control card, sod.ingest_maker_checker (Kira item 3).
+// Diffing them against the stale Jul-5 PNGs can only fail, and self-re-baselining
+// would fake Design acceptance. The SNAPSHOT comparison alone is suspended for
+// this set — navigation and functional assertions still run. REMOVE entries the
+// moment Design's current reference lands and the screens are re-accepted.
+const BASELINE_STALE = new Set(['c1-login-empty', 'c1-login-error', 'c20-controls']);
+
 async function shoot(page: Page, name: string, theme: string, surface: string) {
   await page.waitForLoadState('networkidle');
   await page.waitForTimeout(150); // settle transitions (F5: 120–150ms feedback)
+  if (BASELINE_STALE.has(name)) {
+    console.log(`[baseline-stale] ${theme}-${surface}/${name}: snapshot diff suspended pending Design's current reference`);
+    return;
+  }
   await expect(page).toHaveScreenshot(`${theme}-${surface}/${name}.png`, { fullPage: false });
 }
 
