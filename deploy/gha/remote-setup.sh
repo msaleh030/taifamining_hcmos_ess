@@ -541,6 +541,19 @@ else
   exit 1
 fi
 
+# ── Wave 6: daily document/permit expiry alert sweep (DA-2 routing) ───────────
+# Net-new units this wave — INSTALL them (the backup timer above was already on
+# the box from provisioning; these are not). Enabling the timer schedules the
+# 03:07 UTC sweep; we also fire ONE sweep now so the alerts dashboard reflects
+# this deploy. The sweep is idempotent per day (no double-notify on replay).
+say "expiry-alert sweep (daily timer + one immediate run)"
+install -m 644 deploy/hcmos-expiry-alerts.service /etc/systemd/system/hcmos-expiry-alerts.service
+install -m 644 deploy/hcmos-expiry-alerts.timer   /etc/systemd/system/hcmos-expiry-alerts.timer
+systemctl daemon-reload
+systemctl enable --now hcmos-expiry-alerts.timer 2>/dev/null || echo "expiry-alerts timer not enabled"
+hcmos-run node scripts/run-expiry-alerts.js 2>&1 | tail -6 || echo "initial expiry sweep skipped (will run at 03:07 UTC)"
+echo "expiry-alerts timer: $(systemctl is-enabled hcmos-expiry-alerts.timer 2>/dev/null || echo unknown) · next: $(systemctl show hcmos-expiry-alerts.timer -p NextElapseUSecRealtime --value 2>/dev/null)"
+
 # ── smoke test ────────────────────────────────────────────────────────────────
 say "smoke test"
 bash deploy/smoke-test.sh http://127.0.0.1:3000

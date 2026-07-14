@@ -105,6 +105,9 @@ sudo -u "$SVC_USER" -E env PATH="$PATH" node scripts/sync-config.js
 install -m 644 deploy/hcmos.service /etc/systemd/system/hcmos.service
 install -m 644 deploy/hcmos-backup.service /etc/systemd/system/hcmos-backup.service
 install -m 644 deploy/hcmos-backup.timer   /etc/systemd/system/hcmos-backup.timer
+# Wave 6: daily expat/document expiry alert sweep (DA-2 routing to R11).
+install -m 644 deploy/hcmos-expiry-alerts.service /etc/systemd/system/hcmos-expiry-alerts.service
+install -m 644 deploy/hcmos-expiry-alerts.timer   /etc/systemd/system/hcmos-expiry-alerts.timer
 systemctl daemon-reload
 systemctl enable --now hcmos
 # enable --now STARTS a stopped service but does NOT bounce a running one — every
@@ -114,6 +117,8 @@ systemctl enable --now hcmos
 systemctl restart hcmos
 # Enable the nightly backup timer once BACKUP_TARGET is set (rclone remote):
 # systemctl enable --now hcmos-backup.timer
+# Daily document/permit expiry alert sweep (no external target needed):
+systemctl enable --now hcmos-expiry-alerts.timer
 
 echo "[post-install] done. Node on 127.0.0.1:3000 under systemd; Postgres scram+localhost."
 echo "NEXT (your Cloudflare account): cloudflared tunnel -> localhost:3000, Access allow-list,"

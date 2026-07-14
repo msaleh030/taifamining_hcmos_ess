@@ -1,0 +1,11 @@
+[Unit]
+Description=Daily HCMOS document/permit expiry alert sweep (DA-2 routing)
+
+[Timer]
+# 03:07 UTC daily — off the :00 mark and after the 02:17 backup. Persistent so a
+# missed tick (box asleep) replays on next boot; the sweep is idempotent per day.
+OnCalendar=*-*-* 03:07:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target
