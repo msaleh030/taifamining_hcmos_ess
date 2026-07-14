@@ -55,6 +55,15 @@ export const api = {
     session.set({ token: out.token, role: out.role });
     return out;
   },
+  // P1 — field sign-in (AUTH-02/03/04): device + PIN. The device id is the
+  // provisioned identity of THIS handset (entered once at handover, remembered
+  // locally); the PIN is the person's factor. Same generic-error discipline as
+  // console (the server never names which factor failed).
+  async fieldLogin(deviceId: string, pin: string): Promise<T.LoginOut> {
+    const out = await request<T.LoginOut>('/auth/field', { method: 'POST', body: { device_id: deviceId, pin } });
+    session.set({ token: out.token, role: out.role });
+    return out;
+  },
   logout() { session.clear(); },
   landing: () => request<T.Landing>('/me/landing'),
   reportsSummary: () => request<unknown>('/reports/summary'),
