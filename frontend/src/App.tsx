@@ -24,6 +24,7 @@ import Tenant from './screens/Tenant';
 import Attendance from './screens/Attendance';
 import EssHome from './screens/EssHome';
 import Blocked from './screens/Blocked';
+import Payslip from './screens/Payslip';
 import Shell from './components/shell';
 import { Skeleton } from './components/state';
 
@@ -120,6 +121,7 @@ export default function App() {
         <Route path="/ess/clockin" element={<div className="ess"><Attendance ess /></div>} />
         <Route path="/ess/leave" element={<div className="ess"><Leave ess /></div>} />
         <Route path="/ess/kpis" element={<div className="ess"><MyKpis ess /></div>} />
+        <Route path="/ess/payslip" element={<Payslip />} />
         <Route path="*" element={<Navigate to="/ess" replace />} />
       </Routes>
     );

@@ -1,0 +1,178 @@
+name: ESS-3/4 Probe (home real data + payslip wording law, live over HTTPS)
+
+# ESS-3 (E2 home completed) + ESS-4 (E6 payslip screen), Kira 2026-07-14.
+# Seeds a throwaway worker + device + a PUBLISHED v2.0 batch with an ESS-pushed
+# pay row, then proves over HTTPS with raw bodies:
+#   • R13 field login → /leave/balance and /me/payslips answer (the home's
+#     real-data sources);
+#   • /me/payslip returns the worker's OWN slip: earnings itemised, totals
+#     speak total_pay / total_deduction / net_pay and the identity holds;
+#   • the served bundle carries the wording-law strings in BOTH languages
+#     ("Total Pay"/"Net Pay" and "Malipo Yote"/"Mshahara Halisi") and the
+#     payslip quick-action ("Mshahara");
+# Cleanup removes batch, push, device, employee, sessions. Chain + BUILD_SHA.
+# Sentinel: .github/RUN-ESS34.
+on:
+  workflow_dispatch:
+  push:
+    branches: [claude/nifty-goodall-poihi4]
+    paths: ['.github/RUN-ESS34']
+
+concurrency: { group: ess34, cancel-in-progress: false }
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      UAT_IP: 152.239.121.249
+      UAT_CO: 11111111-1111-1111-1111-111111111111
+      BASE: https://uat.taifamining.tz
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - name: SSH path — tunnel first, direct fallback
+        env:
+          CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+          CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
+        run: |
+          mkdir -p ~/.ssh && printf '%s\n' "${{ secrets.UAT_SSH_PRIVATE_KEY }}" > ~/.ssh/uat && chmod 600 ~/.ssh/uat
+          sudo curl -sSL -o /usr/local/bin/cloudflared \
+            https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 \
+            && sudo chmod +x /usr/local/bin/cloudflared || true
+          cat > ~/.ssh/config <<EOF
+          Host uat-tunnel
+            HostName ssh.uat.taifamining.tz
+            User root
+            IdentityFile ~/.ssh/uat
+            StrictHostKeyChecking accept-new
+            ProxyCommand /usr/local/bin/cloudflared access ssh --hostname %h --service-token-id $CF_ACCESS_CLIENT_ID --service-token-secret $CF_ACCESS_CLIENT_SECRET
+          Host uat-direct
+            HostName $UAT_IP
+            User root
+            IdentityFile ~/.ssh/uat
+            StrictHostKeyChecking accept-new
+            ConnectTimeout 10
+          EOF
+          chmod 600 ~/.ssh/config
+          if timeout 30 ssh uat-tunnel true 2>/dev/null; then echo uat-tunnel > /tmp/ssh_host; exit 0; fi
+          for i in $(seq 1 60); do
+            ssh uat-direct true 2>/dev/null && { echo uat-direct > /tmp/ssh_host; exit 0; }
+            echo "waiting ($i/60)"; sleep 15
+          done
+          echo FATAL; exit 1
+
+      - name: BUILD_SHA START + seed worker + device + PUBLISHED v2.0 batch with ESS-pushed row
+        run: |
+          SSH="ssh $(cat /tmp/ssh_host)"
+          echo "── BUILD_SHA (running process) at START of ESS-3/4 ──"
+          $SSH "curl -fsS http://127.0.0.1:3000/health 2>/dev/null; echo; cat /opt/hcmos/BUILD_SHA 2>/dev/null | head -c 40; echo"
+          $SSH "cd /opt/hcmos && set -a && . /etc/hcmos/hcmos.env && set +a && node -e '
+            const db=require(\"./src/db\"), C=require(\"./src/crypto\");
+            const contractDef=require(\"./src/exact_contract\");
+            const CO=\"$UAT_CO\";
+            (async()=>{ const out={};
+              await db.withOwner(async c=>{
+                const site=(await c.query(\"SELECT id FROM site WHERE company_id=\$1 ORDER BY id LIMIT 1\",[CO])).rows[0].id;
+                out.emp=(await c.query(\"INSERT INTO employee(id,company_id,site_id,full_name,role_code,status,is_expat) VALUES(gen_random_uuid(),\$1,\$2,\x27Zz ESS34 Probe\x27,\x27R13\x27,\x27active\x27,false) RETURNING id\",[CO,site])).rows[0].id;
+                out.dev=(await c.query(\"INSERT INTO device(company_id,employee_id,pin_hash,status) VALUES(\$1,\$2,\$3,\x27active\x27) RETURNING id\",[CO,out.emp,C.hashSecret(\"550033\")])).rows[0].id;
+                out.batch=(await c.query(\"INSERT INTO exact_batch(company_id,period,file_hash,version,status,row_count,published_at) VALUES(\$1,\x272026-06-ess34\x27,\x27ess34-hash\x27,\x27v2.0\x27,\x27published\x27,1,now()) RETURNING id\",[CO])).rows[0].id;
+                const N=contractDef.build().length;
+                const cells=Array(N).fill(\"0\");
+                cells[10]=\"900000\"; cells[18]=\"150000\"; cells[19]=\"150000\";  // Basic + Housing (Fixed) + Transport(Fixed)
+                cells[27]=\"1200000\"; cells[30]=\"230000\"; cells[32]=\"120000\"; // Total Allowances / PAYE / NSSF Employee Contribution
+                cells[42]=\"350000\"; cells[44]=\"850000\";                       // Total Deductions / Net Payment
+                await c.query(\"INSERT INTO exact_row(company_id,batch_id,row_no,employee_id_raw,full_name,cells,matched_employee,match_status) VALUES(\$1,\$2,1,\x27ESS34\x27,\x27\x27,\$3,\$4,\x27matched\x27)\",[CO,out.batch,JSON.stringify(cells),out.emp]);
+                await c.query(\"INSERT INTO ess_push(company_id,batch_id) VALUES(\$1,\$2)\",[CO,out.batch]);
+              });
+              require(\"fs\").writeFileSync(\"/root/ess34.json\",JSON.stringify(out));
+              console.log(\"seeded\",JSON.stringify(out)); await db.close();
+            })().catch(e=>{console.error(e.message);process.exit(1);});
+          '"
+          $SSH 'cat /root/ess34.json' > /tmp/ess34.json
+
+      - name: ESS-3/4 live over HTTPS (raw bodies)
+        env:
+          CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+          CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
+        run: |
+          node - <<'EOF'
+          const Z = require('/tmp/ess34.json');
+          const CF = { 'CF-Access-Client-Id': process.env.CF_ACCESS_CLIENT_ID, 'CF-Access-Client-Secret': process.env.CF_ACCESS_CLIENT_SECRET };
+          const BASE = process.env.BASE;
+          const call = async (method, path, body, token) => {
+            const headers = { ...CF };
+            if (token) headers.authorization = `Bearer ${token}`;
+            if (body !== undefined) headers['content-type'] = 'application/json';
+            const r = await fetch(BASE+path,{method,headers,body:body!==undefined?JSON.stringify(body):undefined,signal:AbortSignal.timeout(20000)});
+            let d=null; try{d=await r.json();}catch{} return {status:r.status, body:d||{}};
+          };
+          let fail=false; const say=(ok,n,det)=>{ if(!ok)fail=true; console.log(`${ok?'PASS':'FAIL'}  ${n} — ${det}`); };
+          (async () => {
+            const ok = await call('POST','/auth/field',{ device_id: Z.dev, pin: '550033' });
+            say(ok.status===200 && !!ok.body.token, 'R13 field login', `${ok.status}`);
+            const tok = ok.body.token;
+            // Home real-data sources.
+            const bal = await call('GET','/leave/balance',undefined,tok);
+            say(bal.status===200 && bal.body.annual !== undefined,
+                'home: /leave/balance answers for the worker', `${bal.status} raw=${JSON.stringify(bal.body).slice(0,160)}`);
+            const list = await call('GET','/me/payslips',undefined,tok);
+            say(list.status===200 && Array.isArray(list.body.periods) && list.body.periods.length===1
+                && list.body.periods[0].net_pay===850000,
+                'home: /me/payslips lists the published period (net 850,000)', `${list.status} raw=${JSON.stringify(list.body)}`);
+            // The payslip itself — wording law + identity.
+            const slip = await call('GET','/me/payslip',undefined,tok);
+            const p = slip.body.payslip||{};
+            const t = p.totals||{};
+            say(slip.status===200 && t.total_pay===1200000 && t.total_deduction===350000 && t.net_pay===850000
+                && t.net_pay===t.total_pay-t.total_deduction,
+                'payslip: totals speak total_pay/total_deduction/net_pay and the identity holds',
+                `${slip.status} totals=${JSON.stringify(t)}`);
+            const labels=(p.earnings||[]).map(x=>x.label);
+            say(labels.includes('Basic Salary') && labels.includes('Housing Allowance (Fixed)') && labels.includes('Transport Allowance(Fixed)')
+                && !labels.some(l=>/total allowance/i.test(l)),
+                'payslip: earnings itemise the official v2.0 components; gross is never an earning line',
+                `earnings=${JSON.stringify(labels)} deductions=${JSON.stringify((p.deductions||[]).map(x=>x.label))}`);
+            // Wording-law strings in the SHIPPED bundle, both languages.
+            const shellR = await fetch(BASE+'/login',{headers:CF,signal:AbortSignal.timeout(20000)});
+            const shell = await shellR.text();
+            const js = (shell.match(/src="(\/assets\/[^"]+\.js)"/)||[])[1];
+            let en=false, sw=false;
+            if (js) {
+              const bundle = await (await fetch(BASE+js,{headers:CF,signal:AbortSignal.timeout(30000)})).text();
+              en = bundle.includes('Total Pay') && bundle.includes('Net Pay');
+              sw = bundle.includes('Malipo Yote') && bundle.includes('Mshahara Halisi');
+            }
+            say(en && sw, 'served bundle: "Total Pay"/"Net Pay" + "Malipo Yote"/"Mshahara Halisi"', `bundle=${js||'NOT FOUND'} en=${en} sw=${sw}`);
+            process.exit(fail?1:0);
+          })().catch(e=>{console.error('PROBE ERROR:',e.message);process.exit(1);});
+          EOF
+
+      - name: audit chain + BUILD_SHA END + cleanup
+        if: always()
+        run: |
+          SSH="ssh $(cat /tmp/ssh_host)"
+          EMP=$(python3 -c "import json;print(json.load(open('/tmp/ess34.json'))['emp'])" 2>/dev/null || echo '')
+          BATCH=$(python3 -c "import json;print(json.load(open('/tmp/ess34.json'))['batch'])" 2>/dev/null || echo '')
+          if [ -n "$EMP" ]; then
+            $SSH "sudo -u postgres psql -d hcmos -c \"
+              DELETE FROM ess_push WHERE batch_id='$BATCH';
+              DELETE FROM exact_batch WHERE id='$BATCH';
+              DELETE FROM session WHERE device_id IN (SELECT id FROM device WHERE employee_id='$EMP');
+              DELETE FROM device WHERE employee_id='$EMP';
+              DELETE FROM employee WHERE id='$EMP';\""
+          fi
+          echo "── audit chain: head + recompute + linkage ──"
+          $SSH "sudo -u postgres psql -d hcmos -c \"
+            SELECT (SELECT max(seq) FROM audit WHERE company_id='$UAT_CO') AS head_seq,
+                   bool_and(hash = encode(sha256(convert_to(prev_hash || concat_ws('|',
+                     company_id::text, coalesce(actor,''), coalesce(role,''), action,
+                     coalesce(entity,''), coalesce(entity_id,''), ts::text,
+                     coalesce(before::text,''), coalesce(after::text,'')), 'UTF8')),'hex')) AS recompute_ok
+              FROM audit WHERE company_id='$UAT_CO';
+            SELECT count(*) AS linkage_breaks FROM (
+              SELECT prev_hash, lag(hash) OVER (PARTITION BY company_id ORDER BY seq) AS expect FROM audit) x
+             WHERE (expect IS NULL AND prev_hash <> repeat('0',64)) OR (expect IS NOT NULL AND prev_hash <> expect)\""
+          echo "── BUILD_SHA END ──"
+          $SSH "curl -fsS http://127.0.0.1:3000/health 2>/dev/null; echo; cat /opt/hcmos/BUILD_SHA 2>/dev/null | head -c 40; echo"

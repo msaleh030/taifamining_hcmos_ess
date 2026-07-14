@@ -1195,5 +1195,20 @@
   "ess.blocked.termWhy": "Hali: Imesitishwa · LVR-01",
   "ess.blocked.contactHr": "Wasiliana na HR",
   "ess.blocked.contactHint": "Muulize msimamizi wako au ofisi ya HR ya eneo lako.",
-  "ess.blocked.back": "Rudi kwenye kuingia"
+  "ess.blocked.back": "Rudi kwenye kuingia",
+  "ess.payslip.title": "Mshahara",
+  "ess.payslip.sub": "Malipo yangu yaliyotolewa · E6 · PRT-02",
+  "ess.payslip.periods": "Vipindi",
+  "ess.payslip.earnings": "Mapato",
+  "ess.payslip.deductions": "Makato",
+  "ess.payslip.totals": "Jumla",
+  "ess.payslip.totalPay": "Malipo Yote",
+  "ess.payslip.totalDeduction": "Makato Yote",
+  "ess.payslip.netPay": "Mshahara Halisi",
+  "ess.payslip.identity": "Mshahara Halisi = Malipo Yote − Makato Yote. Imethibitishwa wakati wa upakiaji dhidi ya faili rasmi la Exact (usawa wa malipo, safu zote).",
+  "ess.payslip.emptyT": "Hakuna mshahara bado",
+  "ess.payslip.emptyB": "Mshahara wako utaonekana hapa baada ya malipo kutolewa kwenye huduma binafsi.",
+  "ess.homeLeaveLine": "Salio la likizo ya mwaka",
+  "ess.homePayLine": "Mshahara wa hivi karibuni umetolewa",
+  "ess.homeLeaveSub": "siku zinazopatikana kati ya stahili"
 }

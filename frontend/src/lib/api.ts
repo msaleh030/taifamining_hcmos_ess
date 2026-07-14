@@ -88,6 +88,9 @@ export const api = {
 
   // F3 — leave (self-service) + liability (pay-adjacent, guarded).
   leaveBalance: () => request<T.LeaveBalance>('/leave/balance'),
+  // E6 — own payslips (OWN-ONLY by construction: no employee parameter exists).
+  myPayslips: () => request<{ periods: T.PayslipPeriod[] }>('/me/payslips'),
+  myPayslip: (batch?: string) => request<T.PayslipOut>(`/me/payslip${batch ? `?batch=${batch}` : ''}`),
   leaveApply: (body: { leave_type: string; days?: number; weeks?: number; hoh_override?: boolean }) =>
     request<unknown>('/leave/apply', { method: 'POST', body }),
   liabilityBatch: (batchId: string) => request<T.LiabilityOut>(`/liability/batch/${batchId}`),

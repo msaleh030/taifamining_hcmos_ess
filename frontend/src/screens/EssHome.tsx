@@ -1,9 +1,11 @@
-// E2 — ESS services home (UNI-01, A3, PRT-01). The mobile shell: status-safe
-// topbar with the online/offline chip, greeting, quick-action grid and the
-// outstanding strip. Composed ONLY from certified endpoints (landing, leave
-// balance, policy ack, clock-in); documents / notifications / smart-ID need
-// endpoints that don't exist yet and stay on the Kira list rather than being
-// mocked. Confidential documents will be restricted-not-shown when they land.
+// E2 — ESS services home (UNI-01, A3, PRT-01), COMPLETED (ESS-3, Kira
+// 2026-07-14). The mobile shell: status-safe topbar with the online/offline
+// chip, greeting, quick-action grid and REAL data — leave balance and the
+// latest published payslip come from certified own-only endpoints. Of the 8
+// design quick-actions, six have backends and render (Leave, Payslip, My
+// KPIs, Policies, Support + the functional Clock-in tile); Documents (E5),
+// Training (Slice 13) and ID card (E11) have NO backend and are deliberately
+// ABSENT, never mocked — they stay on the deferred list.
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -11,7 +13,7 @@ import { useTranslation } from 'react-i18next';
 import { api, session } from '../lib/api';
 import { Skeleton } from '../components/state';
 import { initials } from '../components/shell';
-import { IcCalendar, IcChart, IcFile, IcLifeBuoy, IcLogOut, IcMapPin } from '../components/icons';
+import { IcBanknote, IcCalendar, IcChart, IcFile, IcLifeBuoy, IcLogOut, IcMapPin } from '../components/icons';
 
 export default function EssHome() {
   const { t } = useTranslation();
@@ -26,16 +28,21 @@ export default function EssHome() {
   }, []);
 
   const landing = useQuery({ queryKey: ['landing'], queryFn: api.landing, retry: false });
+  const balance = useQuery({ queryKey: ['leaveBalance'], queryFn: api.leaveBalance, retry: false });
+  const payslips = useQuery({ queryKey: ['payslips'], queryFn: api.myPayslips, retry: false });
   if (landing.isError) { session.clear(); navigate('/login'); return null; }
 
   const name = landing.data?.name ?? '';
   const QA = [
     { label: t('ess.qaLeave'), icon: <IcCalendar />, to: '/ess/leave' },
+    { label: t('ess.qaPayslip'), icon: <IcBanknote />, to: '/ess/payslip' },
     { label: t('attendance.clockin'), icon: <IcMapPin />, to: '/ess/clockin' },
     { label: t('ess.qaPerf'), icon: <IcChart />, to: '/ess/kpis' },
     { label: t('ess.qaPolicies'), icon: <IcFile />, to: '/policy' },
     { label: t('ess.qaSupport'), icon: <IcLifeBuoy />, to: '/support' },
   ];
+  const latest = payslips.data?.periods?.[0];
+  const annual = balance.data?.annual;
 
   return (
     <div className="ess" style={{ minHeight: '100vh' }} data-state={landing.isPending ? 'loading' : 'populated'}>
@@ -70,9 +77,27 @@ export default function EssHome() {
               ))}
             </div>
 
-            <div className="shead">{t('ess.outstanding')}</div>
-            <div className="banner info" style={{ margin: 0 }}>
-              {t('ess.homeEmptyT')} — {t('ess.homeEmptyB')}
+            <div className="shead">{t('ess.activity')}</div>
+            <div className="plist">
+              {annual && (
+                <div className="pitem">
+                  <div style={{ flex: 1 }}><div className="pt">{t('ess.homeLeaveLine')}</div>
+                    <div className="pd">{t('ess.homeLeaveSub')}</div></div>
+                  <span className="ptime num">{annual.available}/{annual.entitlement}</span>
+                </div>
+              )}
+              {latest ? (
+                <div className="pitem">
+                  <div style={{ flex: 1 }}><div className="pt">{t('ess.homePayLine')}</div>
+                    <div className="pd">{latest.period ?? '—'}</div></div>
+                  <span className="ptime num">TZS {latest.net_pay.toLocaleString('en-US')}</span>
+                </div>
+              ) : (
+                <div className="pitem">
+                  <div style={{ flex: 1 }}><div className="pt">{t('ess.payslip.emptyT')}</div>
+                    <div className="pd">{t('ess.payslip.emptyB')}</div></div>
+                </div>
+              )}
             </div>
           </>
         )}

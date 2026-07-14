@@ -79,3 +79,17 @@ export interface ControlsOut { all_pass: boolean; checks: ControlCheck[] }
 export interface TenantOut { company_id: string; name: string; config_keys: number; sites: number }
 
 export interface DisciplineOut { action_type: string; manager?: string; suspended?: boolean }
+
+// E6 — ESS payslip (PRT-02). Wording is law: total_pay / net_pay, never
+// "Total Allowance". Shapes mirror src/payslip.js verbatim.
+export interface PayslipPeriod { batch_id: string; period: string | null; published_at: string; net_pay: number }
+export interface PayslipItem { label: string; amount: number }
+export interface PayslipOut {
+  payslip: null | {
+    batch_id: string; period: string | null; published_at: string;
+    employee: { emp_no: string | null; full_name: string };
+    earnings: PayslipItem[];
+    deductions: PayslipItem[];
+    totals: { total_pay: number; total_deduction: number; net_pay: number };
+  };
+}

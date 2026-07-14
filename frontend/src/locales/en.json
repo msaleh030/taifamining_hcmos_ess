@@ -1347,5 +1347,20 @@
   "ess.blocked.termWhy": "Status: Terminated · LVR-01",
   "ess.blocked.contactHr": "Contact HR",
   "ess.blocked.contactHint": "Ask your line manager or the HR office at your site.",
-  "ess.blocked.back": "Back to sign in"
+  "ess.blocked.back": "Back to sign in",
+  "ess.payslip.title": "Payslip",
+  "ess.payslip.sub": "My published pay · E6 · PRT-02",
+  "ess.payslip.periods": "Periods",
+  "ess.payslip.earnings": "Earnings",
+  "ess.payslip.deductions": "Deductions",
+  "ess.payslip.totals": "Totals",
+  "ess.payslip.totalPay": "Total Pay",
+  "ess.payslip.totalDeduction": "Total Deduction",
+  "ess.payslip.netPay": "Net Pay",
+  "ess.payslip.identity": "Net Pay = Total Pay − Total Deduction. Verified at ingest against the official Exact export (net identity, all rows).",
+  "ess.payslip.emptyT": "No payslip yet",
+  "ess.payslip.emptyB": "Your payslip appears here after payroll is published to self-service.",
+  "ess.homeLeaveLine": "Annual leave balance",
+  "ess.homePayLine": "Latest payslip published",
+  "ess.homeLeaveSub": "days available of entitlement"
 }
