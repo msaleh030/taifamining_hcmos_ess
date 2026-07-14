@@ -51,6 +51,12 @@ export interface LiabilityOut {
 }
 
 export interface ClockInOut { retry?: boolean; reason?: string; zone?: string }
+// ESS-5 — clock-out, shift status, sync-conflict resolution.
+export interface ClockOutOut { retry?: boolean; reason?: string; zone?: string; since?: string }
+export interface AttLast { id: string; direction: 'in' | 'out'; at: string; via: string; zone?: string | null; review_flag?: string | null }
+export interface AttStatusOut { open: boolean; since: string | null; last: AttLast | null }
+export interface ConflictServer { attendance_id: string; punched_at: string; via: string; zone?: string | null }
+export interface ResolveOut { resolved?: boolean; retry?: boolean; reason?: string; resolution?: string; attendance_id?: string; flagged?: string }
 
 export interface ExactUploadOut { batch_id: string; row_count: number; deduped?: boolean }
 export interface ExactReconcileOut { matched: number; key: string; unmatched: { employee_id: string }[] }

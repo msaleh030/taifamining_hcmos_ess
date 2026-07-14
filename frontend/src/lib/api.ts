@@ -124,6 +124,15 @@ export const api = {
   // F5 — attendance clock-in. The server re-validates; the client cannot assert in.
   clockIn: (loc: { lat: number; lng: number; accuracy: number; idempotency_key: string }) =>
     request<T.ClockInOut>('/attendance/clock-in', { method: 'POST', body: loc }),
+  // ESS-5 — shift close (only against an open punch; 409 otherwise), shift
+  // status, and sync-conflict resolution (keep-device/server/both, audited).
+  clockOut: (loc: { lat: number; lng: number; accuracy: number; idempotency_key: string }) =>
+    request<T.ClockOutOut>('/attendance/clock-out', { method: 'POST', body: loc }),
+  attendanceStatus: () => request<T.AttStatusOut>('/attendance/status'),
+  resolveConflict: (body: { resolution: 'keep_server' | 'keep_device' | 'keep_both';
+    server_attendance_id: string;
+    device: { lat: number; lng: number; accuracy: number; idempotency_key: string; queued_at: string } }) =>
+    request<T.ResolveOut>('/attendance/conflicts/resolve', { method: 'POST', body }),
 
   // F6 — Exact payroll integration (pay-guarded). Upload → reconcile → net-check
   // → control-totals → publish. The server BLOCKS on schema-fail and on totals

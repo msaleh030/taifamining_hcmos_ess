@@ -228,6 +228,13 @@ const routes = [
   // ESS-5 (AC-ATT-02): shift close — same trust boundary as clock-in.
   { method: 'POST', pattern: /^\/attendance\/clock-out$/,
     handler: async (req, m, url, s) => ({ status: 200, body: await attendance.clockOut(s, await readJson(req)) }) },
+  // ESS-5: shift status (open punch? since when) — own record only.
+  { method: 'GET', pattern: /^\/attendance\/status$/,
+    handler: async (req, m, url, s) => ({ status: 200, body: await attendance.status(s) }) },
+  // ESS-5 (UNI-01/06): sync-conflict resolution — keep-device / keep-server /
+  // keep-both, decided on the phone, audited, server stays source of truth.
+  { method: 'POST', pattern: /^\/attendance\/conflicts\/resolve$/,
+    handler: async (req, m, url, s) => ({ status: 200, body: await attendance.resolveConflict(s, await readJson(req)) }) },
 
   // ── F6: Exact payroll integration (upload → schema-validate → reconcile →
   // control-totals → publish). This touches PAY data, so every endpoint is

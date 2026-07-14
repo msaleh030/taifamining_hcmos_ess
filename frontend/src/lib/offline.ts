@@ -44,14 +44,24 @@ export const punchQueue = {
   count: () => tx<number>('readonly', (s) => s.count()),
 };
 
+// ESS-5: a replay can CLASH with a punch already on the server (duplicate
+// clock-in). That answer is a question, not a decision — the punch stays
+// queued and is surfaced for keep-device / keep-server / keep-both.
+export interface PunchConflict {
+  punch: QueuedPunch;
+  server: { attendance_id: string; punched_at: string; via: string; zone?: string | null };
+}
+
 // Replays queued punches through the given sender (the API clock-in call).
 // A punch is removed only when the server ANSWERS (any decision — in, out,
-// retry — is an answer); a network failure keeps it queued for the next pass.
+// retry — is an answer); a network failure keeps it queued for the next pass;
+// a 409 sync-conflict keeps it queued AND reports it for resolution.
 export async function drainQueue(
   send: (p: QueuedPunch) => Promise<unknown>,
-): Promise<{ sent: number; kept: number }> {
+): Promise<{ sent: number; kept: number; conflicts: PunchConflict[] }> {
   const items = await punchQueue.all();
   let sent = 0;
+  const conflicts: PunchConflict[] = [];
   for (const p of items) {
     try {
       await send(p);
@@ -59,12 +69,19 @@ export async function drainQueue(
       sent += 1;
     } catch (e: unknown) {
       // An HTTP status IS a server decision (e.g. 403 outside-site): recorded,
-      // dequeue. Only transport-level failures (fetch TypeError) stay queued.
+      // dequeue. Only transport-level failures (fetch TypeError) stay queued —
+      // and a 409 conflict, which needs the worker's resolution first.
       if (e && typeof e === 'object' && 'status' in e) {
+        const err = e as { status: number; body?: { conflict?: { server: PunchConflict['server'] } } };
+        const server = err.status === 409 ? err.body?.conflict?.server : undefined;
+        if (server) {
+          conflicts.push({ punch: p, server });
+          continue; // stays queued pending the decision
+        }
         await punchQueue.remove(p.idempotency_key);
         sent += 1;
       }
     }
   }
-  return { sent, kept: (await punchQueue.count()) };
+  return { sent, kept: (await punchQueue.count()), conflicts };
 }

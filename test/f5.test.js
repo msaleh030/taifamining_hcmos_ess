@@ -14,6 +14,13 @@ const owner = (sql, p) => db.withOwner((c) => c.query(sql, p));
 const tok = async (u) => (await H.loginConsole(u)).body.token;
 const dLat = (m) => m / 111194.9;
 const clock = (token, body) => H.req('POST', '/attendance/clock-in', { token, body });
+// ESS-5: a second clock-in over a live same-day 'in' now 409s as a sync
+// conflict (duplicate clock-in). These tests pin the GEOFENCE semantics, so
+// each clears the books first — the conflict flow has its own test file.
+// (Postgres array literal by hand — the vendored client JSON-serialises JS arrays.)
+const clearOpen = (...empIds) => owner(
+  `DELETE FROM attendance WHERE employee_id = ANY($1::uuid[]) AND direction='in' AND punched_at::date = current_date`,
+  [`{${empIds.join(',')}}`]);
 async function zone(name) {
   const z = (await owner(`SELECT center_lat, center_lng, radius_m FROM geofence_zone WHERE name=$1`, [name])).rows[0];
   return { lat: Number(z.center_lat), lng: Number(z.center_lng), radius: Number(z.radius_m) };
@@ -27,6 +34,7 @@ test('ATT-01/02 inside accepts; outside rejects; a spoofed verdict is rejected s
   const tsf = await zone('NM TSF');
   assert.equal(tsf.radius, 400, 'confirmed v1.4 zone is loaded from the registry');
   const field = await tok(F.USERS.FIELD_A); // FIELDA → SITE A1 (North Mara)
+  await clearOpen(F.EMP.FIELDA); // stale open punches from a prior run are conflicts now
 
   const inside = await clock(field, { lat: tsf.lat, lng: tsf.lng, accuracy: 5 });
   assert.equal(inside.status, 200);
@@ -43,6 +51,7 @@ test('ATT-01/02 inside accepts; outside rejects; a spoofed verdict is rejected s
 
   // Site-scoped: the NM point is valid for the A1 employee, rejected for an A2 one.
   const dave = await tok(F.USERS.SITE2_A); // DAVE → SITE A2 (Mwadui)
+  await clearOpen(F.EMP.FIELDA); // close the books — geofence is the pin here, not the conflict flow
   assert.equal((await clock(field, { lat: tsf.lat, lng: tsf.lng, accuracy: 5 })).body.accepted, true);
   assert.equal((await clock(dave, { lat: tsf.lat, lng: tsf.lng, accuracy: 5 })).status, 403, 'A point valid for site A is rejected for a site-B employee');
 });
@@ -51,6 +60,7 @@ test('ATT-01/02 inside accepts; outside rejects; a spoofed verdict is rejected s
 test('ATT-03 tolerance accepts near a boundary; accuracy > 100 m returns retry', async () => {
   const prod = await zone('MW Production'); // r100
   const dave = await tok(F.USERS.SITE2_A);
+  await clearOpen(F.EMP.DAVE);
   const pt = { lat: prod.lat + dLat(130), lng: prod.lng }; // ~130 m out (away from MW Workshop)
 
   const ok = await clock(dave, { ...pt, accuracy: 40 }); // 130 <= 100 + min(40,50)
@@ -69,6 +79,7 @@ test('UNI-01 an offline punch with an idempotency key syncs once; a duplicate do
   const tsf = await zone('NM TSF');
   const field = await tok(F.USERS.FIELD_A);
   const key = 'f5-offline-1';
+  await clearOpen(F.EMP.FIELDA);
   const before = Number((await owner(`SELECT count(*)::int n FROM attendance WHERE employee_id=$1`, [F.EMP.FIELDA])).rows[0].n);
 
   const first = await clock(field, { lat: tsf.lat, lng: tsf.lng, accuracy: 5, idempotency_key: key });
@@ -95,6 +106,7 @@ test('UNI-02 two employees using the same raw idempotency key each record their 
   const key = 'f5-shared-raw-key';
   const field = await tok(F.USERS.FIELD_A); // → EMP.FIELDA (site A1)
   const emp = await tok(F.USERS.EMP_A);     // → EMP.ALICE  (site A1)
+  await clearOpen(F.EMP.FIELDA, F.EMP.ALICE);
   const countOf = async (id) => Number((await owner(
     `SELECT count(*)::int n FROM attendance WHERE employee_id=$1`, [id])).rows[0].n);
   const b1 = await countOf(F.EMP.FIELDA), b2 = await countOf(F.EMP.ALICE);
