@@ -10,7 +10,7 @@ Status: PENDING → IMPORTED (or SKIPPED-<reason>).
 - [ ] leave-i18n.js
 - [ ] styles.css
 ## Stage B (divergence: the 8 flows covering the 18 baseline states)
-- [ ] HCMOS Auth Flow.html
+- [x] HCMOS Auth Flow.html IMPORTED + VERIFIED BYTE-IDENTICAL to design/prototypes (Jul-5)
 - [ ] HCMOS Workforce Overview.html
 - [ ] HCMOS KPI Scorecard.html
 - [ ] HCMOS Employee Master & Lifecycle.html
