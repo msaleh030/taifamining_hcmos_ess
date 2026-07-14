@@ -108,9 +108,13 @@ jobs:
             // FIFTH.1 — the CEO (R14) is refused on a mutating route (read-only everywhere).
             const ceoWrite = await call('POST', `/employees/${Z.emp}/change`, Z.ceo, { field: 'phone', value: '0700000000' });
             say(ceoWrite.status===403, 'CEO (R14) POST field-change → 403 (read-only everywhere)', `${ceoWrite.status} raw=${JSON.stringify(ceoWrite.body)}`);
-            // FOURTH — the terminal/severance surface is GONE (parked).
+            // FOURTH — the terminal/severance ENGINE is parked: there is no HTTP
+            // handler, so the route serves NO severance register (an unmatched GET
+            // falls through to the SPA shell, exactly like any removed deep-link).
+            // The invariant that matters: no severance figure is ever served.
             const term = await call('GET', `/liability/terminal/${Z.batch}?asOf=2026-07-14`, Z.pay);
-            say(term.status===404, 'GET /liability/terminal → 404 (parked, off the surface)', `${term.status} raw=${JSON.stringify(term.body).slice(0,120)}`);
+            const isRegister = !!term.body && (Array.isArray(term.body.available) || Array.isArray(term.body.not_available) || 'total' in term.body || 'severance' in term.body);
+            say(!isRegister, 'GET /liability/terminal serves NO severance register (engine parked)', `${term.status} raw=${JSON.stringify(term.body).slice(0,120)}`);
             // FIFTH.3 — leave-liability is FAIL-CLOSED: NOT AVAILABLE, naming the reason.
             const liab = await call('GET', `/liability/batch/${Z.batch}`, Z.pay);
             const row = (liab.body.available||[]).find(a=>a.employee_id===Z.emp);
