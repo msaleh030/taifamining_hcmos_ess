@@ -18,14 +18,17 @@ const THEMES = ['light', 'dark'] as const;
 const SURFACES = { desktop: { width: 1280, height: 800 }, mobile: { width: 390, height: 760 } } as const;
 
 // C20 controls — DETERMINISTIC capture (Design reject fix). The audit-chain
-// tile counts EVERY audit row and logins append to the chain, so capturing
-// light and dark in separate logged-in sweeps rendered two different counts
-// for one screen. This test therefore runs FIRST (workers:1, declaration
-// order): exactly ONE login against the fresh fixed seed, capture light,
-// flip [data-theme] client-side and reload (session persists, reads append
-// nothing), capture dark — same chain length in both shots by construction,
-// and stable across runs (fixed seed + fixed position + single login). The
-// cross-theme identity is ASSERTED on the rendered text, not assumed.
+// tile counts EVERY audit row, and both logins AND the controls read itself
+// append to the chain (GET /controls writes a controls.run row since Wave 9 —
+// the same forward-only audit precedent as the Wave 7 register.read reads), so
+// any second appending fetch between the two shots would render two different
+// counts for one screen. This test therefore runs FIRST (workers:1, declaration
+// order): exactly ONE login against the fresh fixed seed, ONE GET /controls,
+// capture light, then flip [data-theme] client-side WITHOUT reloading (theme is
+// pure CSS on the attribute; App.tsx only mirrors localStorage onto it at boot),
+// capture dark — no second fetch, so the same DOM (and same chain length) is
+// shot in both themes by construction, stable across runs. The cross-theme
+// identity is ASSERTED on the rendered text, not assumed.
 test('C20 controls — deterministic chain fixture (light + dark)', async ({ page }) => {
   test.setTimeout(240_000);
   await page.setViewportSize(SURFACES.desktop);
@@ -48,9 +51,18 @@ test('C20 controls — deterministic chain fixture (light + dark)', async ({ pag
   const lightCount = await chainCount();
   await shoot(page, 'c20-controls', 'light', 'desktop');
 
-  await page.evaluate(() => localStorage.setItem('hcmos.theme', 'dark'));
-  await page.reload();
-  await page.waitForSelector(TERMINAL, { timeout: 90_000 });
+  // Flip to dark WITHOUT re-fetching /controls. A reload would re-issue GET
+  // /controls, which appends a controls.run audit row (Wave 9), bumping the
+  // audit-chain tile so the two themes would differ by construction. The theme
+  // is driven purely by [data-theme] on <html> (App.tsx only mirrors
+  // localStorage onto the attribute at boot), so setting the attribute directly
+  // renders the dark theme faithfully while every datum — the chain count
+  // included — stays byte-identical to the light shot. Persist to localStorage
+  // too, so the app agrees with the DOM. Cross-theme identity is still ASSERTED.
+  await page.evaluate(() => {
+    localStorage.setItem('hcmos.theme', 'dark');
+    document.documentElement.setAttribute('data-theme', 'dark');
+  });
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
   const darkCount = await chainCount();
   expect(darkCount, 'chain count must be identical across themes').toBe(lightCount);
