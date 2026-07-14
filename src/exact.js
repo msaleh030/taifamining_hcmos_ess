@@ -39,11 +39,17 @@ async function loadContract(client, version) {
 
 // ── AC-EXACT-01/02/03: validate an uploaded grid against the contract ───────
 async function validateLayout(client, companyId, grid) {
-  const version    = await cfg.getConfig(companyId, 'exact.contract.version', 'v1.2', client);
-  const headerRow  = await cfg.getInt(companyId, 'exact.header_row', 7, client);   // 1-based
-  const sectionRow = await cfg.getInt(companyId, 'exact.section_row', 6, client);  // 1-based
+  const version    = await cfg.getConfig(companyId, 'exact.contract.version', 'v2.0', client);
+  const headerRow  = await cfg.getInt(companyId, 'exact.header_row', 1, client);   // 1-based
+  const sectionRow = await cfg.getInt(companyId, 'exact.section_row', 1, client);  // 1-based
   const contract   = await loadContract(client, version);
   if (contract.length === 0) throw new HttpError(409, `no column contract for version ${version}`);
+
+  // Correction 1 (Kira 2026-07-14): the ingest REFUSES TO RUN while any
+  // configured pay-component name fails to resolve to exactly one contract
+  // column. Checked at upload — not just at base time — so a broken
+  // classification can never stage a batch quietly.
+  await classificationPositions(companyId, client);
 
   const errors = [];
   if (grid.length < headerRow) errors.push(`file has no header row at row ${headerRow}`);
@@ -141,9 +147,9 @@ async function match(session, batchId) {
 // DECLARED at upload. Any declared total that doesn't reconcile is a hard block.
 async function controlCheck(session, batchId, exec) {
   const co = session.company_id;
-  // v1.5: col 28 is GROSS (file label TOTAL ALLOWANCE). The DB columns keep their
+  // v2.0: col 27 is GROSS (file label Total Allowances). The DB columns keep their
   // 012 names (control_total_pay STORES the declared gross) — the API speaks gross.
-  const gcCol = await cfg.getInt(co, 'exact.col.gross', 28, exec);
+  const gcCol = await cfg.getInt(co, 'exact.col.gross', 27, exec);
   const tdCol = await cfg.getInt(co, 'exact.col.total_deduction', 42, exec);
   const ruCol = await optCol(co, 'exact.col.roundup', exec);
   const rdCol = await optCol(co, 'exact.col.rounddown', exec);
@@ -281,31 +287,88 @@ const round2 = (x) => Math.round(x * 100) / 100;
 // ── EX-2 / PC-1: daily-rate base — NAME-KEYED, resolved to column positions via
 // the contract. INCLUDE the fixed-pay components; EXCLUDE the variable
 // overtime/rotation/night ones. Because it resolves by NAME, a column moving
-// position cannot silently change the base (the name-keyed test guards it), and a
-// configured name missing from the contract BLOCKS rather than compute a wrong,
-// money-driving base. This is the ONE base; leave pay/liability reads it too.
-const norm = (s) => String(s || '').trim().toUpperCase().replace(/\s+/g, ' ');
+// position cannot silently change the base (the name-keyed test guards it).
+//
+// CORRECTION 1 (Kira 2026-07-14): resolution is EXACT, CASE-INSENSITIVE on the
+// LITERAL Exact header string — ends trimmed, uppercased, NOTHING else. No
+// substrings, no abbreviations, no whitespace tidying ('Transport
+// Allowance(Fixed)' has no space before the bracket; neither does the config
+// string). And resolution HARD-FAILS — the ingest REFUSES TO RUN — when any
+// configured name resolves to ZERO contract columns (the MEDICAL phantom) or
+// MORE THAN ONE (a duplicated header — the HOUSING ambiguity). Never a warning:
+// silence is what let a phantom component sit in the base config.
+const norm = (s) => String(s || '').trim().toUpperCase();
+const splitNames = (csv) => String(csv || '').split(',').map((s) => s.trim()).filter(Boolean);
 
-async function contractPositions(companyId) {
-  const version = await cfg.getConfig(companyId, 'exact.contract.version', 'v1.2', null);
-  const r = await db.query('SELECT position, header FROM exact_column WHERE version=$1', [version]);
-  const map = new Map();
-  for (const row of r.rows) map.set(norm(row.header), row.position);
-  return map;
+// norm(header) → [position, ...] over the contract. A multimap, deliberately:
+// a Map that keeps one position per header SILENTLY DROPS a duplicate — the
+// exact failure mode Correction 1 exists to make loud.
+function headerMultimap(rows) {
+  const m = new Map();
+  for (const r of rows) {
+    const k = norm(r.header);
+    if (!k) continue;
+    if (!m.has(k)) m.set(k, []);
+    m.get(k).push(r.position);
+  }
+  return m;
+}
+
+// Resolve one configured name list against the contract multimap. Every name
+// must land on EXACTLY ONE column; zero or several throws 409 (hard block —
+// upload, base and liability all refuse). Returns Map norm(name)→position.
+function resolveConfiguredNames(map, csv, listKey) {
+  const out = new Map();
+  const zero = [], multi = [];
+  for (const name of splitNames(csv)) {
+    const pos = map.get(norm(name)) || [];
+    if (pos.length === 0) zero.push(`"${name}"`);
+    else if (pos.length > 1) multi.push(`"${name}" → columns ${pos.join(',')}`);
+    else out.set(norm(name), pos[0]);
+  }
+  if (zero.length || multi.length) {
+    const parts = [];
+    if (zero.length) parts.push(`resolve(s) to ZERO contract columns: ${zero.join(', ')}`);
+    if (multi.length) parts.push(`resolve(s) ambiguously to MORE THAN ONE contract column: ${multi.join('; ')}`);
+    throw new HttpError(409,
+      `${listKey}: configured pay-component name(s) ${parts.join(' | ')} — ` +
+      'matching is exact case-insensitive on the literal header; the ingest refuses to run');
+  }
+  return out;
+}
+
+// Load the contract and resolve ALL THREE configured lists (include, exclude,
+// pending) with the hard-fail semantics above, plus the include∩exclude and
+// include/exclude∩pending conflicts. `exec` runs the reads on the caller's
+// transaction client when one is held (pool-deadlock discipline, bughunt-B).
+async function classificationPositions(companyId, exec = null) {
+  const q = exec ? (sql, p) => exec.query(sql, p) : (sql, p) => db.query(sql, p);
+  const version = await cfg.getConfig(companyId, 'exact.contract.version', 'v2.0', exec);
+  const rows = (await q('SELECT position, header, section FROM exact_column WHERE version=$1', [version])).rows;
+  const map = headerMultimap(rows);
+  const include = resolveConfiguredNames(map,
+    await cfg.getConfig(companyId, 'exact.dailyrate.include_names', '', exec), 'exact.dailyrate.include_names');
+  const exclude = resolveConfiguredNames(map,
+    await cfg.getConfig(companyId, 'exact.dailyrate.exclude_names', '', exec), 'exact.dailyrate.exclude_names');
+  // Pending (Cecilia) names gate money row-by-row: one that resolved to zero or
+  // two columns would gate the WRONG CELL — the same silent-failure class.
+  const pending = resolveConfiguredNames(map,
+    await cfg.getConfig(companyId, 'exact.dailyrate.pending_names', '', exec), 'exact.dailyrate.pending_names');
+  const overlap = (a, b) => [...a.keys()].filter((k) => b.has(k));
+  const conflicts = [
+    ...overlap(include, exclude).map((k) => `${k} (included AND excluded)`),
+    ...overlap(include, pending).map((k) => `${k} (included AND pending)`),
+    ...overlap(exclude, pending).map((k) => `${k} (excluded AND pending)`),
+  ];
+  if (conflicts.length) {
+    throw new HttpError(409, `daily-rate base: component(s) in more than one list: ${conflicts.join('; ')}`);
+  }
+  return { include, exclude, pending, rows };
 }
 
 async function dailyRateBase(session, cells) {
-  const co = session.company_id;
-  const include = (await cfg.getConfig(co, 'exact.dailyrate.include_names', '', null)).split(',').map(norm).filter(Boolean);
-  const exclude = new Set((await cfg.getConfig(co, 'exact.dailyrate.exclude_names', '', null)).split(',').map(norm).filter(Boolean));
-  const pos = await contractPositions(co);
-
-  const missing = include.filter((n) => !pos.has(n));
-  if (missing.length) throw new HttpError(409, `daily-rate base: component(s) not in the column contract: ${missing.join(', ')}`);
-  const conflict = include.filter((n) => exclude.has(n));
-  if (conflict.length) throw new HttpError(409, `daily-rate base: component both included and excluded: ${conflict.join(', ')}`);
-
-  return round2(include.reduce((sum, n) => sum + num(cells[pos.get(n)]), 0));
+  const { include } = await classificationPositions(session.company_id);
+  return round2([...include.values()].reduce((sum, p) => sum + num(cells[p]), 0));
 }
 
 // EX-2 / LIAB-03 (Kira 2026-07-14): a pay column that is NEITHER included NOR
@@ -318,17 +381,14 @@ async function dailyRateBase(session, cells) {
 // moves each component into include or exclude, the list empties.
 async function unclassifiedPayComponents(session, cells) {
   const co = session.company_id;
-  const include = new Set((await cfg.getConfig(co, 'exact.dailyrate.include_names', '', null)).split(',').map(norm).filter(Boolean));
-  const exclude = new Set((await cfg.getConfig(co, 'exact.dailyrate.exclude_names', '', null)).split(',').map(norm).filter(Boolean));
-  // PENDING (Cecilia): classified as neither include nor exclude YET — a ruling
-  // is outstanding. Reported separately so the block NAMES the governance hold.
-  const pending = new Set((await cfg.getConfig(co, 'exact.dailyrate.pending_names', '', null)).split(',').map(norm).filter(Boolean));
+  // classificationPositions HARD-FAILS first (Correction 1): a config list that
+  // does not resolve one-to-one against the contract never gets as far as a
+  // per-row unclassified answer — the whole computation refuses to run.
+  const { include, exclude, pending, rows } = await classificationPositions(co);
   const gross = norm(await cfg.getConfig(co, 'exact.dailyrate.gross_name', 'TOTAL ALLOWANCE', null));
-  const version = await cfg.getConfig(co, 'exact.contract.version', 'v1.2', null);
-  const cols = (await db.query(
-    "SELECT position, header FROM exact_column WHERE version=$1 AND section='allowances'", [version])).rows;
   const out = { unclassified: [], pending: [] };
-  for (const c of cols) {
+  for (const c of rows) {
+    if (c.section !== 'allowances') continue;
     const h = norm(c.header);
     if (!h || h === gross || include.has(h) || exclude.has(h)) continue;
     if (num(cells[c.position]) === 0) continue;
@@ -366,7 +426,7 @@ async function optCol(co, key, exec = null) {
 // the North Mara period totals in test/exact.test.js.
 async function netCheck(session, cells) {
   const co = session.company_id;
-  const gc = await cfg.getInt(co, 'exact.col.gross', 28, null);
+  const gc = await cfg.getInt(co, 'exact.col.gross', 27, null);
   const td = await cfg.getInt(co, 'exact.col.total_deduction', 42, null);
   const ru = await optCol(co, 'exact.col.roundup');
   const rd = await optCol(co, 'exact.col.rounddown');
@@ -421,5 +481,6 @@ async function getBatch(session, batchId) {
 module.exports = {
   parseCsv, gridHash, validateLayout, stage, match, publish, controlCheck, controlReport, getBatch,
   runLegs, retryPublishLegs, dailyRateBase, unclassifiedPayComponents, baseUnavailableReason,
+  headerMultimap, resolveConfiguredNames, classificationPositions,
   netCheck, netCheckBatch, reconcile, num,
 };

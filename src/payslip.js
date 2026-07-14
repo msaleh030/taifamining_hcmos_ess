@@ -42,7 +42,7 @@ async function ownRows(c, empId) {
 
 async function cols(c, co) {
   return {
-    gross: await cfg.getInt(co, 'exact.col.gross', 28, c),
+    gross: await cfg.getInt(co, 'exact.col.gross', 27, c),
     td: await cfg.getInt(co, 'exact.col.total_deduction', 42, c),
     net: parseInt(String(await cfg.getConfig(co, 'exact.netpay.source', 'col:44', c)).split(':')[1], 10),
   };

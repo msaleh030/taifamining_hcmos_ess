@@ -23,12 +23,8 @@ const N = CONTRACT.length;
 const blank = () => Array(N).fill('0');
 
 function validGrid(dataRows = []) {
-  const g = [['Exact Payroll Export', ...Array(N - 1).fill('')]];
-  for (let i = 0; i < 4; i++) g.push(Array(N).fill(''));
-  g.push(CONTRACT.map((c) => c.section.toUpperCase())); // row 6 — section labels
-  g.push(CONTRACT.map((c) => c.header));                // row 7 — column headers
-  for (const d of dataRows) g.push(d);
-  return g;
+  // v2.0 (official export): single header row at ROW 1 — no title band.
+  return [CONTRACT.map((c) => c.header), ...dataRows];
 }
 function dataRow(empId, name, over = {}) {
   const r = Array(N).fill('0');
@@ -46,14 +42,14 @@ test('schema validation accepts the exact layout and rejects malformed files', a
   assert.equal(ok.row_count, 1);
 
   const short = validGrid([dataRow('E-A-0001', 'x')]);
-  short[6] = short[6].slice(0, N - 1);                 // wrong column count
+  short[0] = short[0].slice(0, N - 1);                 // wrong column count
   await assert.rejects(exact.stage(session, { grid: short }), /layout invalid/);
 
   const renamed = validGrid();
-  renamed[6][0] = 'EMP';                                // renamed pinned header
+  renamed[0][0] = 'EMP';                                // renamed pinned header
   await assert.rejects(exact.stage(session, { grid: renamed }), /layout invalid/);
 
-  await assert.rejects(exact.stage(session, { grid: validGrid().slice(0, 6) }), /layout invalid/); // no header row
+  await assert.rejects(exact.stage(session, { grid: [] }), /layout invalid/); // no header row
 });
 
 // ── EX-1: match on legacy_id; unmatched report incl. TMCL-only joiner ───────
@@ -104,37 +100,34 @@ test('publish is atomic — an injected fault rolls back; a clean run publishes 
 // ── EX-3: per-row net check (Total Pay − Total Deduction == col AS) ──────────
 test('EX-3 net check: computed net equals col AS, and a wrong col AS is flagged', async () => {
   // direct row check
-  const good = await exact.netCheck(session, dataRow('E-A-0001', 'Alice', { 28: '1000', 42: '300', 44: '700' }));
+  const good = await exact.netCheck(session, dataRow('E-A-0001', 'Alice', { 27: '1000', 42: '300', 44: '700' }));
   assert.deepEqual(good, { computed: 700, col_as: 700, ok: true });
-  const bad = await exact.netCheck(session, dataRow('E-A-0002', 'Carol', { 28: '1000', 42: '300', 44: '999' }));
+  const bad = await exact.netCheck(session, dataRow('E-A-0002', 'Carol', { 27: '1000', 42: '300', 44: '999' }));
   assert.equal(bad.ok, false);
   assert.equal(bad.computed, 700);
 
   // batch check surfaces only the mismatching row (partial AC-EXACT-07)
   const staged = await exact.stage(session, { period: '2026-06-net',
     grid: validGrid([
-      dataRow('E-A-0001', 'Alice', { 28: '1000', 42: '300', 44: '700' }),
-      dataRow('E-A-0002', 'Carol', { 28: '1000', 42: '300', 44: '999' }),
+      dataRow('E-A-0001', 'Alice', { 27: '1000', 42: '300', 44: '700' }),
+      dataRow('E-A-0002', 'Carol', { 27: '1000', 42: '300', 44: '999' }),
     ]) });
   const res = await exact.netCheckBatch(session, staged.batch_id);
   assert.equal(res.checked, 2);
   assert.deepEqual(res.mismatches.map((m) => m.row_no), [2]);
 });
 
-// ── EX-2: daily-rate base is NAME-KEYED against the real Exact export ────────
-// INCLUDE = Basic(12) Housing(13) Responsibility(14) Project(15) Medical(16)
-// Housing All(17) Fixed Overtime(19) Transport(20); EXCLUDE = Rotation(11)
-// Overtime-normal(21) Overtime-holiday(24) Night Shift(26).
+// ── EX-2: daily-rate base is NAME-KEYED against the OFFICIAL export (v2.0) ───
+// INCLUDE (ratified six): Basic(10) Fixed OT(12) Project(13) Responsibility(14)
+// Housing Fixed(18) Transport Fixed(19). EXCLUDE: Rotation(22), House Var(17),
+// OT Normal(15)/Holidays(21), Night(24).
 test('EX-2 daily-rate base is the SIX RATIFIED components; Variable house + Rotation/OT/Night excluded (Kira 2026-07-14)', async () => {
   const cells = Array(N).fill('0');
-  // The ratified six: Basic Salary(12), Housing Allowance (Fixed)(13),
-  // Responsibility Allowance(14), Project Allowance(15), Fixed Overtime(19),
-  // Transport Allowance(Fixed)(20) → 600.
-  for (const p of [12, 13, 14, 15, 19, 20]) cells[p] = '100';
-  cells[11] = '999';                    // Rotation Allowance        — EXCLUDED
+  for (const p of [10, 12, 13, 14, 18, 19]) cells[p] = '100'; // the ratified six → 600
+  cells[22] = '999';                    // Rotation Allowance        — EXCLUDED
   cells[17] = '999';                    // House Allowance(Variable) — EXCLUDED
-  cells[21] = '999'; cells[24] = '999'; // Overtime Normal/Holidays  — EXCLUDED
-  cells[26] = '999';                    // Night Allowance           — EXCLUDED
+  cells[15] = '999'; cells[21] = '999'; // Overtime Normal/Holidays  — EXCLUDED
+  cells[24] = '999';                    // Night Allowance           — EXCLUDED
   assert.equal(await exact.dailyRateBase(session, cells), 600, 'exactly the six ratified components contribute');
 });
 
@@ -142,28 +135,28 @@ test('EX-2 daily-rate base is the SIX RATIFIED components; Variable house + Rota
 // column changing position can never silently move money.
 test('EX-2 base is name-keyed — excluded columns never enter it; Fixed Overtime + Transport do', async () => {
   const rows = (await db.withOwner((c) => c.query(
-    `SELECT header, position FROM exact_column WHERE version='v1.2'`))).rows;
+    `SELECT header, position FROM exact_column WHERE version='v2.0'`))).rows;
   const pos = Object.fromEntries(rows.map((row) => [row.header, Number(row.position)]));
-  // the confirmed real-export anchors
-  assert.equal(pos['Rotation Allowance'], 11);
-  assert.equal(pos['Fixed Overtime'], 19);
-  assert.equal(pos['Transport Allowance(Fixed)'], 20);
-  assert.equal(pos['Overtime - Normal Days'], 21);
-  assert.equal(pos['Overtime - Holidays'], 24);
-  assert.equal(pos['Night Allowance'], 26);
+  // the evidenced official-export anchors (header-map probe 2026-07-14)
+  assert.equal(pos['Rotation Allowance'], 22);
+  assert.equal(pos['Fixed Overtime'], 12);
+  assert.equal(pos['Transport Allowance(Fixed)'], 19);
+  assert.equal(pos['Overtime - Normal Days'], 15);
+  assert.equal(pos['Overtime - Holidays'], 21);
+  assert.equal(pos['Night Allowance'], 24);
 
   const onlyExcluded = Array(N).fill('0');
-  for (const p of [11, 21, 24, 26]) onlyExcluded[p] = '1000';
+  for (const p of [22, 15, 21, 24]) onlyExcluded[p] = '1000';
   assert.equal(await exact.dailyRateBase(session, onlyExcluded), 0, 'excluded-by-name columns never enter the base');
 
   const onlyFixedOtTransport = Array(N).fill('0');
-  onlyFixedOtTransport[19] = '100'; onlyFixedOtTransport[20] = '100';
+  onlyFixedOtTransport[12] = '100'; onlyFixedOtTransport[19] = '100';
   assert.equal(await exact.dailyRateBase(session, onlyFixedOtTransport), 200, 'Fixed Overtime + Transport are included by name');
 
   const grossOnly = Array(N).fill('0');
-  grossOnly[28] = '827000000'; // the mislabelled TOTAL ALLOWANCE (= GROSS) column
+  grossOnly[27] = '827000000'; // 'Total Allowances' (GROSS) column
   assert.equal(await exact.dailyRateBase(session, grossOnly), 0,
-    'v1.5: GROSS never enters the daily-rate base — mapping it as an allowance would double-count');
+    'GROSS never enters the daily-rate base — mapping it as an allowance would double-count');
 });
 
 // ── Remaining [TBC]: full-period reconciliation still BLOCKS ─────────────────
@@ -172,31 +165,24 @@ test('full-period reconciliation (AC-EXACT-07) is still gated', async () => {
   await assert.rejects(exact.reconcile(session, staged.batch_id), /pending governance/);
 });
 
-// ── v1.5 gross mapping (North Mara reconciliation): the mislabelled TOTAL
-// ALLOWANCE column IS GROSS, and the period foots on the identity
-// net = gross + round-up − total-deductions − round-down. The round columns are
-// [TBC] positions; this fixture sets them (43/30) for the test tenant and
-// restores the sentinel after. Pinned so the mapping cannot silently regress.
-test('v1.5 North Mara period reconciles: gross 551,896,561.41 − deductions 254,837,938.35 ∓ rounding = net 297,058,000.00', async () => {
-  const setCfg = (k, v) => db.withOwner((c) =>
-    c.query(`UPDATE config SET value=$1 WHERE company_id=$2 AND key=$3`, [v, A, k]));
-  await setCfg('exact.col.roundup', '43');
-  await setCfg('exact.col.rounddown', '30');
+// ── North Mara reconciliation: 'Total Allowances' (27) IS GROSS, and the
+// period foots on the identity net = gross + round-up − total-deductions −
+// round-down. The cent columns are EVIDENCED positions (v2.0: up 28, down 43 —
+// header-map probe 2026-07-14, ex-[TBC]). Pinned so the mapping cannot regress.
+test('North Mara period reconciles: gross 551,896,561.41 − deductions 254,837,938.35 ∓ rounding = net 297,058,000.00', async () => {
   const staged = await exact.stage(session, { period: '2026-06-nm-recon', grid: validGrid([
-    dataRow('E-A-0001', 'NM-1', { 28: '200000000.00', 42: '100000000.00', 30: '500.00', 43: '0', 44: '99999500.00' }),
-    dataRow('E-A-0002', 'NM-2', { 28: '200000000.00', 42: '100000000.00', 30: '123.06', 43: '0', 44: '99999876.94' }),
-    dataRow('E-A-0051', 'NM-3', { 28: '151896561.41', 42: '54837938.35', 30: '0', 43: '0', 44: '97058623.06' }),
+    dataRow('E-A-0001', 'NM-1', { 27: '200000000.00', 42: '100000000.00', 43: '500.00', 28: '0', 44: '99999500.00' }),
+    dataRow('E-A-0002', 'NM-2', { 27: '200000000.00', 42: '100000000.00', 43: '123.06', 28: '0', 44: '99999876.94' }),
+    dataRow('E-A-0051', 'NM-3', { 27: '151896561.41', 42: '54837938.35', 43: '0', 28: '0', 44: '97058623.06' }),
   ]) });
   try {
     const nc = await exact.netCheckBatch(session, staged.batch_id);
-    assert.equal(nc.mismatches.length, 0, 'every row satisfies net = gross + ru − ded − rd against col AS');
+    assert.equal(nc.mismatches.length, 0, 'every row satisfies net = gross + ru − ded − rd against col 44');
     const ctl = await exact.controlReport(session, staged.batch_id);
-    assert.equal(ctl.computed.gross, 551896561.41, 'period gross (the mislabelled col, mapped as gross)');
+    assert.equal(ctl.computed.gross, 551896561.41, 'period gross (Total Allowances, mapped as gross)');
     assert.equal(ctl.computed.total_deduction, 254837938.35, 'period deductions');
     assert.equal(ctl.computed.net, 297058000.00, 'period NET foots exactly — the mapping cannot silently regress');
   } finally {
-    await setCfg('exact.col.roundup', cfg.PENDING);
-    await setCfg('exact.col.rounddown', cfg.PENDING);
     await db.withOwner((c) => c.query('DELETE FROM exact_batch WHERE id=$1', [staged.batch_id]));
   }
 });

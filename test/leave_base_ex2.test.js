@@ -6,8 +6,9 @@
 //      AVAILABLE, naming the pending ratification.
 //   2. UNCLASSIFIED — even once ratified, an allowance column that carries money
 //      but is neither included nor excluded from the base is NOT AVAILABLE,
-//      NAMING the component (Cecilia must classify it). On North Mara this catches
-//      the un-named allowance columns that Rotation/Night-shift/overtime do not.
+//      NAMING the component (Cecilia must classify it). On the official v2.0
+//      layout this catches 'Previous Cent-Round Deduction' (25) — the one
+//      allowance component no 2026-07-14 ruling covered.
 //   3. Only when ratified AND every populated pay column is classified does the
 //      base compute — the same one base ÷30 the certified LIAB-01 math pins.
 const { test, before, after } = require('node:test');
@@ -30,7 +31,7 @@ const INCLUDE = 'exact.dailyrate.include_names';
 // RATIFIED six (Kira 2026-07-14, official NM export — exact strings).
 const INCLUDE_FULL = 'Basic Salary,Fixed Overtime,Project Allowance,Responsibility Allowance,Housing Allowance (Fixed),Transport Allowance(Fixed)';
 
-function baseCells() { const c = Array(N).fill('0'); c[12] = '3000'; return c; } // BASIC SALARY only (classified)
+function baseCells() { const c = Array(N).fill('0'); c[10] = '3000'; return c; } // Basic Salary (v2.0) only (classified)
 
 before(H.start);
 after(async () => { await setCfg(RATIFIED, '__TBC__'); await setCfg(INCLUDE, INCLUDE_FULL); await H.stop(); });
@@ -48,13 +49,13 @@ test('UNCLASSIFIED: money in a pay column neither included nor excluded → NOT 
   await setCfg(RATIFIED, 'true');
   // Drop Transport Allowance(Fixed) from include WITHOUT excluding it → unclassified.
   await setCfg(INCLUDE, 'Basic Salary,Fixed Overtime,Project Allowance,Responsibility Allowance,Housing Allowance (Fixed)');
-  const cells = baseCells(); cells[20] = '500'; // Transport Allowance(Fixed) (position 20) carries money — unclassified
+  const cells = baseCells(); cells[19] = '500'; // Transport Allowance(Fixed) (v2.0 position 19) carries money — unclassified
   const r = await liab.liabilityFor(session, { employeeId: F.EMP.DAVE, days: 10, cells });
   assert.equal(r.available, false, 'an unclassified non-zero pay column blocks the figure');
   assert.match(r.missing, /Transport Allowance\(Fixed\)/, 'the reason names the unclassified component');
   // A zero in the same unclassified column does NOT block (no money → nothing to classify).
   await setCfg(RATIFIED, 'true');
-  const zero = baseCells(); // Transport Allowance(Fixed) (20) = '0'
+  const zero = baseCells(); // Transport Allowance(Fixed) (19) = '0'
   const rz = await liab.liabilityFor(session, { employeeId: F.EMP.DAVE, days: 10, cells: zero });
   assert.equal(rz.available, true, 'a zero in an unclassified column is not money to classify');
 });
@@ -62,19 +63,20 @@ test('UNCLASSIFIED: money in a pay column neither included nor excluded → NOT 
 test('PENDING CECILIA: money in a pending-named component blocks the figure NAMING the governance hold', async () => {
   await setCfg(RATIFIED, 'true');
   await setCfg(INCLUDE, INCLUDE_FULL);
-  // Position 16 is the un-named slot (ex-MEDICAL phantom). Point pending_names at
-  // its header to pin the MECHANISM; in production the pending names are
-  // 'Local Conveyance,TSF Allowance' (Kira 2026-07-14 — do not guess).
-  await setCfg('exact.dailyrate.pending_names', 'ALLOWANCES 16');
-  try {
-    const cells = baseCells(); cells[16] = '25000'; // pending component carries money
-    const r = await liab.liabilityFor(session, { employeeId: F.EMP.DAVE, days: 10, cells });
-    assert.equal(r.available, false, 'a pending component with money blocks the figure');
-    assert.match(r.missing, /pending Cecilia/, 'the reason names the governance hold');
-    assert.match(r.missing, /ALLOWANCES 16/, 'and the component');
-  } finally {
-    await setCfg('exact.dailyrate.pending_names', 'Local Conveyance,TSF Allowance');
-  }
+  // v2.0 carries the REAL pending components by name — Local Conveyance (23)
+  // and TSF Allowance (20) ('Local Conveyance,TSF Allowance', Kira 2026-07-14
+  // — do not guess). No stand-in needed: pin the production hold directly.
+  const cells = baseCells(); cells[23] = '25000'; // Local Conveyance carries money
+  const r = await liab.liabilityFor(session, { employeeId: F.EMP.DAVE, days: 10, cells });
+  assert.equal(r.available, false, 'a pending component with money blocks the figure');
+  assert.match(r.missing, /pending Cecilia/, 'the reason names the governance hold');
+  assert.match(r.missing, /Local Conveyance/, 'and the component');
+
+  const both = baseCells(); both[23] = '25000'; both[20] = '133088'; // TSF Allowance too
+  const r2 = await liab.liabilityFor(session, { employeeId: F.EMP.DAVE, days: 10, cells: both });
+  assert.equal(r2.available, false);
+  assert.match(r2.missing, /Local Conveyance/);
+  assert.match(r2.missing, /TSF Allowance/, 'every pending component with money is named');
 });
 
 test('GROSS-TRAP sanity: the base is the SIX ratified components, never gross — variable money never enters', async () => {
@@ -82,10 +84,10 @@ test('GROSS-TRAP sanity: the base is the SIX ratified components, never gross �
   await setCfg(INCLUDE, INCLUDE_FULL);
   // A row where gross-style thinking is 33% wrong: base components 3000, plus
   // variable/excluded money (rotation 500, variable house 300, OT 200) = gross 4000.
-  const cells = baseCells();          // Basic Salary (12) = 3000
-  cells[11] = '500';                  // Rotation Allowance — EXCLUDED
+  const cells = baseCells();          // Basic Salary (10) = 3000
+  cells[22] = '500';                  // Rotation Allowance — EXCLUDED
   cells[17] = '300';                  // House Allowance(Variable) — EXCLUDED
-  cells[21] = '200';                  // Overtime - Normal Days — EXCLUDED
+  cells[15] = '200';                  // Overtime - Normal Days — EXCLUDED
   const exact = require('../src/exact');
   const base = await exact.dailyRateBase(session, cells);
   assert.equal(base, 3000, 'base = the six ratified components only');

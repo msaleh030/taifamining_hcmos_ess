@@ -100,7 +100,7 @@ test('3. readJson: malformed body → 400; a >1 MB body is refused (DoS cap)', a
 test('4. exact.retryPublishLegs refuses a non-published batch (409, no stray GL leg)', async () => {
   const batchId = (await owner(
     `INSERT INTO exact_batch(company_id,period,file_hash,version,status,row_count)
-     VALUES ($1,'2026-06-w8','w8-hash','v1.2','staged',0) RETURNING id`, [A])).rows[0].id;
+     VALUES ($1,'2026-06-w8','w8-hash','v2.0','staged',0) RETURNING id`, [A])).rows[0].id;
   try {
     const session = { company_id: A, role_code: 'R16', user_id: F.USERS.CFC_A.id };
     await assert.rejects(
@@ -116,10 +116,10 @@ test('5. terminal severance: an active, remunerated employee with NULL joining d
   const setDays = (v) => owner(
     `INSERT INTO config(company_id,key,value) VALUES ($1,'terminal.severance.days_per_year',$2)
      ON CONFLICT (company_id,key) DO UPDATE SET value=EXCLUDED.value`, [A, v]);
-  const cells = Array(N).fill('0'); cells[12] = '3000'; // BASIC SALARY → base > 0
+  const cells = Array(N).fill('0'); cells[10] = '3000'; // Basic Salary (v2.0) → base > 0
   const batchId = (await owner(
     `INSERT INTO exact_batch(company_id,period,file_hash,version,status,row_count)
-     VALUES ($1,'2026-06-w8b','w8b-hash','v1.2','staged',1) RETURNING id`, [A])).rows[0].id;
+     VALUES ($1,'2026-06-w8b','w8b-hash','v2.0','staged',1) RETURNING id`, [A])).rows[0].id;
   await owner(
     `INSERT INTO exact_row(company_id,batch_id,row_no,employee_id_raw,full_name,cells,matched_employee,match_status)
      VALUES ($1,$2,1,'x','',$3,$4,'matched')`, [A, batchId, JSON.stringify(cells), F.EMP.DAVE]);

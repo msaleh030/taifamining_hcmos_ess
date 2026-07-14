@@ -26,27 +26,23 @@ const owner = (sql, p) => db.withOwner((c) => c.query(sql, p));
 const CONTRACT = contractDef.build();
 const N = CONTRACT.length;
 function grid(dataRows) {
-  const g = [['Exact Payroll Export', ...Array(N - 1).fill('')]];
-  for (let i = 0; i < 4; i++) g.push(Array(N).fill(''));
-  g.push(CONTRACT.map((c) => c.section.toUpperCase()));
-  g.push(CONTRACT.map((c) => c.header));
-  for (const d of dataRows) g.push(d);
-  return g;
+  // v2.0 (official export): single header row at ROW 1.
+  return [CONTRACT.map((c) => c.header), ...dataRows];
 }
-// Alice's pay row: Total Pay (28) 1,200,000 − Total Deduction (42) 350,000 =
+// Alice's pay row: Total Pay (27) 1,200,000 − Total Deduction (42) 350,000 =
 // Net Pay (44) 850,000 — satisfies the per-row EXACT-07 identity.
 function aliceRow(over = {}) {
   const r = Array(N).fill('0');
   r[0] = 'E-A-0001'; r[1] = 'Alice Admin'; r[3] = '2020-01-01'; r[4] = 'Admin';
-  r[12] = '900000';  // BASIC SALARY
-  r[13] = '150000';  // Housing Allowance (Fixed)
-  r[20] = '150000';  // Transport Allowance(Fixed)
+  r[10] = '900000';  // Basic Salary
+  r[18] = '150000';  // Housing Allowance (Fixed)
+  r[19] = '150000';  // Transport Allowance(Fixed)
   for (const [k, v] of Object.entries(over)) r[k] = v;
-  r[28] = '1200000'; // GROSS (file label TOTAL ALLOWANCE) — served as total_pay
-  r[31] = '120000';  // NSSF
-  r[32] = '230000';  // PAYE
-  r[42] = '350000';  // TOTAL DEDUCTION
-  r[44] = '850000';  // NET PAY
+  r[27] = '1200000'; // GROSS ('Total Allowances') — served as total_pay
+  r[32] = '120000';  // NSSF Employee Contribution
+  r[30] = '230000';  // PAYE
+  r[42] = '350000';  // Total Deductions
+  r[44] = '850000';  // Net Payment
   return r;
 }
 
@@ -92,8 +88,8 @@ test('E6: payslip appears only after publish + ESS push; own-only; wording pinne
     // Earnings/deductions itemize the nonzero component columns (not the totals).
     const labels = (xs) => xs.map((x) => x.label).sort();
     assert.deepEqual(labels(got.payslip.earnings), ['Basic Salary', 'Housing Allowance (Fixed)', 'Transport Allowance(Fixed)']);
-    assert.deepEqual(labels(got.payslip.deductions), ['NSSF', 'PAYE']);
-    assert.ok(!labels(got.payslip.earnings).includes('TOTAL ALLOWANCE'), 'gross column is a total, not an earning line');
+    assert.deepEqual(labels(got.payslip.deductions), ['NSSF Employee Contribution', 'PAYE']);
+    assert.ok(!labels(got.payslip.earnings).includes('Total Allowances'), 'gross column is a total, not an earning line');
 
     // OWN-ONLY: Frank has no row in the batch — his view is empty, and asking
     // for Alice's batch id by hand is a 404, never her payslip.
@@ -105,7 +101,7 @@ test('E6: payslip appears only after publish + ESS push; own-only; wording pinne
     // (compared within THIS test's batches — other suites leave their own).
     // Different composition (stage is idempotent BY FILE HASH — an identical
     // grid would return the already-published first batch), same totals.
-    const staged2 = await exact.stage(finance, { period: '2026-06-e6', grid: grid([aliceRow({ 12: '850000', 13: '200000' })]) });
+    const staged2 = await exact.stage(finance, { period: '2026-06-e6', grid: grid([aliceRow({ 10: '850000', 18: '200000' })]) });
     ids.push(staged2.batch_id);
     await exact.match(finance, staged2.batch_id);
     await exact.publish(finance, staged2.batch_id);
@@ -126,7 +122,7 @@ test('E6: payslip appears only after publish + ESS push; own-only; wording pinne
 test('E6 endpoints: /me/payslip + /me/payslips serve the session\'s own data over HTTP', async () => {
   const ids = [];
   try {
-    const staged = await exact.stage(finance, { period: '2026-07-e6http', grid: grid([aliceRow({ 12: '800000', 13: '250000' })]) });
+    const staged = await exact.stage(finance, { period: '2026-07-e6http', grid: grid([aliceRow({ 10: '800000', 18: '250000' })]) });
     ids.push(staged.batch_id);
     await exact.match(finance, staged.batch_id);
     await exact.publish(finance, staged.batch_id);

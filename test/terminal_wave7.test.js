@@ -29,7 +29,7 @@ const setDays = (v) => owner(
   `INSERT INTO config(company_id,key,value) VALUES ($1,'terminal.severance.days_per_year',$2)
    ON CONFLICT (company_id,key) DO UPDATE SET value=EXCLUDED.value`, [A, v]);
 
-function cellsWithBase(base) { const c = Array(N).fill('0'); c[12] = String(base); return c; } // BASIC SALARY
+function cellsWithBase(base) { const c = Array(N).fill('0'); c[10] = String(base); return c; } // Basic Salary (v2.0)
 
 before(H.start);
 after(async () => { await setDays('__TBC__'); await H.stop(); });
@@ -38,7 +38,7 @@ async function withBatch(fn) {
   const setup = await db.withOwner(async (c) => {
     const b = (await c.query(
       `INSERT INTO exact_batch(company_id,period,file_hash,version,status,row_count)
-       VALUES ($1,'2026-06-w7','w7-hash-1','v1.2','staged',3) RETURNING id`, [A])).rows[0];
+       VALUES ($1,'2026-06-w7','w7-hash-1','v2.0','staged',3) RETURNING id`, [A])).rows[0];
     const row = (emp, cells, no) => c.query(
       `INSERT INTO exact_row(company_id,batch_id,row_no,employee_id_raw,full_name,cells,matched_employee,match_status)
        VALUES ($1,$2,$3,'x','',$4,$5,'matched')`, [A, b.id, no, JSON.stringify(cells), emp]);

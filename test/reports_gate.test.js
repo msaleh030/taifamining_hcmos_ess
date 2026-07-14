@@ -27,13 +27,13 @@ before(async () => { await H.start(); await ratify('true'); });
 after(async () => { await ratify('__TBC__'); await H.stop(); });
 
 test('C17 registers inherit the C16 pay-gate server-side; catalogue hides financials from non-pay', async () => {
-  // A batch with one matched row: base 3000 (col 12) and net 2000 (col AS = 44),
+  // A batch with one matched row: base 3000 (col 10, v2.0) and net 2000 (col 44),
   // plus 10 carry days for DISS → liability 10 × (3000/30) = 1000.
   const setup = await db.withOwner(async (c) => {
     const b = (await c.query(
       `INSERT INTO exact_batch(company_id,period,file_hash,version,status,row_count)
-       VALUES ($1,'2026-06-rep','rep-hash-1','v1.2','published',1) RETURNING id`, [A])).rows[0];
-    const cells = Array(N).fill('0'); cells[12] = '3000'; cells[44] = '2000';
+       VALUES ($1,'2026-06-rep','rep-hash-1','v2.0','published',1) RETURNING id`, [A])).rows[0];
+    const cells = Array(N).fill('0'); cells[10] = '3000'; cells[44] = '2000';
     await c.query(
       `INSERT INTO exact_row(company_id,batch_id,row_no,employee_id_raw,full_name,cells,matched_employee,match_status)
        VALUES ($1,$2,1,'x','',$3,$4,'matched')`, [A, b.id, JSON.stringify(cells), F.EMP.DISS]);

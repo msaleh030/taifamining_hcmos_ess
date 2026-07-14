@@ -16,10 +16,10 @@ const tok = async (u) => (await H.loginConsole(u)).body.token;
 const N = contractDef.build().length;
 const round1 = (x) => Math.round(x * 10) / 10;
 
-// A cells array whose EX-2 name-keyed base sums to `base` (Basic Salary at col 12).
+// A cells array whose EX-2 name-keyed base sums to `base` (Basic Salary at col 10, v2.0).
 function cellsWithBase(base) {
   const c = Array(N).fill('0');
-  c[12] = String(base); // BASIC SALARY (an included component)
+  c[10] = String(base); // Basic Salary (an included component)
   return c;
 }
 
@@ -39,7 +39,7 @@ test('liability endpoint: figure from the single base, missing→not-available, 
   const setup = await db.withOwner(async (c) => {
     const b = (await c.query(
       `INSERT INTO exact_batch(company_id,period,file_hash,version,status,row_count)
-       VALUES ($1,'2026-06-f3','f3-hash-1','v1.2','staged',3) RETURNING id`, [A])).rows[0];
+       VALUES ($1,'2026-06-f3','f3-hash-1','v2.0','staged',3) RETURNING id`, [A])).rows[0];
     const row = (emp, cells, no) => c.query(
       `INSERT INTO exact_row(company_id,batch_id,row_no,employee_id_raw,full_name,cells,matched_employee,match_status)
        VALUES ($1,$2,$3,'x','',$4,$5,'matched')`, [A, b.id, no, JSON.stringify(cells), emp]);

@@ -23,8 +23,10 @@ async function main() {
       await c.query(`DELETE FROM ${t}`);
     }
 
-    // Exact column contract (reference data, versioned; seeded once, not per-tenant).
-    for (const col of exactContract.build()) {
+    // Exact column contract (reference data, versioned; seeded once, not
+    // per-tenant). Both versions: v2.0 (active, official layout) and v1.2
+    // (legacy — historical batches read their contract by batch version).
+    for (const col of exactContract.buildAll()) {
       await c.query('INSERT INTO exact_column(version,position,section,header,pinned) VALUES ($1,$2,$3,$4,$5)',
         [col.version, col.position, col.section, col.header, col.pinned]);
     }

@@ -185,49 +185,48 @@ const DEFAULT_CONFIG = {
   // this no longer applies to HO; kept for any unmapped site). 'allow' | 'reject'.
   'geofence.empty_zone.policy': 'allow',
 
-  // ── Exact payroll ingestion (Slice 8, contract v1.2 / registry v1.3) ──────
+  // ── Exact payroll ingestion (Slice 8; contract v2.0 = OFFICIAL export) ────
   // The EX-* values below are pinned by test/exact.test.js and test/f6.test.js
-  // (schema validation, EX-1 legacy_id match, EX-3 per-row net == col AS, EX-2
+  // (schema validation, EX-1 legacy_id match, EX-3 per-row net == col 44, EX-2
   // name-keyed base). A wrong column index fails those tests, not just this note.
-  'exact.contract.version': 'v1.2',
-  'exact.section_row':      '6',   // two-row header: section labels on row 6…
-  'exact.header_row':       '7',   // …column headers on row 7 (1-based)
+  // v2.0 (2026-07-14, header-map probe run 29331947385): the official Exact
+  // export is 49 columns with headers on ROW 1 — no title band, no section row.
+  // The v1.2 registry-appendix grid never matched it (Correction 1 made that
+  // loud); v1.2 remains seeded for historical batches only.
+  'exact.contract.version': 'v2.0',
+  'exact.section_row':      '1',   // single-row header: no section band in the
+  'exact.header_row':       '1',   // official export; both point at row 1
   // EX-1 CONFIRMED: match Exact rows on legacy_id (old master-file ID), NOT
   // emp_no/TMCL. New joiners with only a TMCL number surface as unmatched.
   'exact.match.key':        'legacy_id',
-  // v1.5 (North Mara reconciliation, supersedes EX-4): col 28 is labelled "TOTAL
-  // ALLOWANCE" in the file but IS GROSS PAY (basic + all allowances). Mapped as
-  // GROSS — never as an allowance line (summing it with the individual allowance
-  // columns double-counts). Identity: net = gross + roundup − deductions −
-  // rounddown; pinned against the North Mara period in test/exact.test.js.
-  'exact.col.gross':           '28',
+  // GROSS: 'Total Allowances' at 27 (basic + ALL earnings incl. Overdraft,
+  // ruled an EARNING 2026-07-14). Identity: net = gross + roundup − deductions
+  // − rounddown; pinned against the North Mara period in test/exact.test.js.
+  'exact.col.gross':           '27',
   'exact.col.total_deduction': '42',
-  // [TBC] round-up / round-down column POSITIONS (the identity needs them; the
-  // appendix has not confirmed which physical columns carry them). Unset → they
-  // contribute 0 to the per-row net check; set them to activate the full identity.
-  'exact.col.roundup':         PENDING,
-  'exact.col.rounddown':       PENDING,
-  // EX-3 CONFIRMED: NET PAY is column AS (0-indexed 44) = gross + ru − ded − rd.
+  // Round-up / round-down positions — EVIDENCED by the header-map probe
+  // ('Cent Round Up' 28, 'Cent Round Down' 43); the ex-[TBC] is closed.
+  'exact.col.roundup':         '28',
+  'exact.col.rounddown':       '43',
+  // EX-3 CONFIRMED: 'Net Payment' is column 44 = gross + ru − ded − rd.
   'exact.netpay.source':    'col:44',
-  // EX-2 CONFIRMED daily-rate base (PC-1): BASIC + Housing(15%) + Responsibility
-  // + Project + Medical + Housing(fixed) + Fixed Overtime + Transport(10%).
-  // Positions are the contract's earnings columns; EXCLUDE overtime cols 21 & 24.
   // EX-2 daily-rate base — NAME-KEYED (resolved to positions via the column
-  // contract), confirmed against the real Exact export, so a column can never
-  // silently drift. INCLUDE = the fixed-pay set; EXCLUDE = the variable
-  // overtime/rotation/night components. This is the single base used by payroll
-  // and by leave pay/liability.
+  // contract), so a column can never silently drift. This is the single base
+  // used by payroll and by leave pay/liability.
   // RATIFIED (Kira 2026-07-14, official NM export, 285 rows / 231 complete):
-  // exactly SIX base components — the Fixed housing/transport columns, never the
-  // Variable ones; MEDICAL was a phantom and is gone. Matching is exact-after-
-  // normalisation (uppercase + whitespace-collapse), never substring.
+  // exactly SIX base components — the Fixed housing/transport columns, never
+  // the Variable ones; MEDICAL was a phantom and is gone.
+  // CORRECTION 1 (Kira 2026-07-14): every name below resolves by EXACT,
+  // CASE-INSENSITIVE match on the literal header — no substrings, no
+  // abbreviations, no whitespace tidying — and a name resolving to zero or
+  // several contract columns HARD-BLOCKS the ingest (src/exact.js).
   'exact.dailyrate.include_names': 'Basic Salary,Fixed Overtime,Project Allowance,Responsibility Allowance,Housing Allowance (Fixed),Transport Allowance(Fixed)',
   'exact.dailyrate.exclude_names': 'Rotation Allowance,Night Allowance,Overtime - Normal Days,Overtime - Holidays,Transport Allowance(variable),House Allowance(Variable),Gross Salary Arrears,Terminal Dues,Overdraft',
   // PENDING CECILIA (do not guess): money in these components blocks the figure,
   // NAMING them. Impact at 20 days outstanding ≈ TZS 3.7M across 231 people.
   'exact.dailyrate.pending_names': 'Local Conveyance,TSF Allowance',
   // The GROSS/TOTAL earnings column — a total, never a base component.
-  'exact.dailyrate.gross_name': 'TOTAL ALLOWANCE',
+  'exact.dailyrate.gross_name': 'Total Allowances',
   // EX-2 governance gate (Kira 2026-07-14): the leave-pay/liability figure is
   // fail-closed — NOT AVAILABLE — until Cecilia RATIFIES the pay-component
   // classification (rotation/night-shift/variable-overtime excluded; the

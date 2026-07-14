@@ -25,14 +25,9 @@ const tok = async (u) => (await H.loginConsole(u)).body.token;
 const CONTRACT = contractDef.build();
 const N = CONTRACT.length;
 
-// Build a valid grid (two-row header at rows 6/7) with the given data rows.
+// Build a valid grid (v2.0: single header row at ROW 1) with the given data rows.
 function validGrid(dataRows = []) {
-  const g = [['Exact Payroll Export', ...Array(N - 1).fill('')]];
-  for (let i = 0; i < 4; i++) g.push(Array(N).fill(''));
-  g.push(CONTRACT.map((c) => c.section.toUpperCase())); // row 6 — section labels
-  g.push(CONTRACT.map((c) => c.header));                // row 7 — column headers
-  for (const d of dataRows) g.push(d);
-  return g;
+  return [CONTRACT.map((c) => c.header), ...dataRows];
 }
 function dataRow(empId, name, over = {}) {
   const r = Array(N).fill('0');
@@ -48,8 +43,8 @@ const upload = (token, body) => H.req('POST', '/exact/upload', { token, body });
 const post = (token, path) => H.req('POST', path, { token });
 const get = (token, path) => H.req('GET', path, { token });
 
-// A row with total_pay@28, total_deduction@42, col-AS net@44.
-const payRow = (id, name, tp, td, as) => dataRow(id, name, { 28: String(tp), 42: String(td), 44: String(as) });
+// A row with total_pay@27, total_deduction@42, net@44 (v2.0 positions).
+const payRow = (id, name, tp, td, as) => dataRow(id, name, { 27: String(tp), 42: String(td), 44: String(as) });
 
 before(H.start);
 after(H.stop);
@@ -71,13 +66,13 @@ test('EXACT-01/02/03 schema validation blocks malformed files; endpoint is pay-g
 
   // Wrong column count → 422, nothing ingested.
   const short = validGrid([dataRow('E-A-0001', 'x')]);
-  short[6] = short[6].slice(0, N - 1);
+  short[0] = short[0].slice(0, N - 1);
   const shortRes = await upload(pay, { csv: toCsv(short) });
   assert.equal(shortRes.status, 422, 'wrong column count rejected at the endpoint');
 
   // Renamed pinned header → 422.
   const renamed = validGrid([dataRow('E-A-0001', 'x')]);
-  renamed[6][0] = 'EMP';
+  renamed[0][0] = 'EMP';
   assert.equal((await upload(pay, { csv: toCsv(renamed) })).status, 422, 'renamed header rejected');
 
   // Not ingested: no staged batch exists for these malformed uploads.

@@ -17,15 +17,15 @@ const A = F.TENANT_A;
 const session = { company_id: A, user_id: F.USERS.FINMGR_A.id, role_code: 'R15' };
 const N = contractDef.build().length;
 
-// EX-2 base sums to 3000 (→ daily rate 3000/30 = 100). Basic sits at col 12
-// (an INCLUDED component); Rotation(11)/overtime(21,24)/Night Shift(26) are
-// populated to prove they never reach the base.
+// EX-2 base sums to 3000 (→ daily rate 3000/30 = 100). Basic sits at col 10
+// (v2.0, INCLUDED); Rotation(22)/overtime(15,21)/Night(24) are populated to
+// prove they never reach the base.
 function baseCells() {
   const c = Array(N).fill('0');
-  c[12] = '3000';                       // Basic Salary (included)
-  c[11] = '999';                        // Rotation      — excluded
-  c[21] = '999'; c[24] = '999';         // overtime      — excluded
-  c[26] = '999';                        // Night Shift   — excluded
+  c[10] = '3000';                       // Basic Salary (included)
+  c[22] = '999';                        // Rotation      — excluded
+  c[15] = '999'; c[21] = '999';         // overtime      — excluded
+  c[24] = '999';                        // Night         — excluded
   return c;
 }
 
@@ -61,7 +61,7 @@ test('LIAB-02 / LVR-02 batch liability covers ACTIVE staff only; leavers exclude
   const setup = await db.withOwner(async (c) => {
     const b = (await c.query(
       `INSERT INTO exact_batch(company_id,period,file_hash,version,status,row_count)
-       VALUES ($1,'2026-06-liab','liab-hash-2','v1.2','staged',3) RETURNING id`, [A])).rows[0];
+       VALUES ($1,'2026-06-liab','liab-hash-2','v2.0','staged',3) RETURNING id`, [A])).rows[0];
     const row = (empId, emp, cellArr, no) => c.query(
       `INSERT INTO exact_row(company_id,batch_id,row_no,employee_id_raw,full_name,cells,matched_employee,match_status)
        VALUES ($1,$2,$3,$4,'',$5,$6,'matched')`, [A, b.id, no, empId, JSON.stringify(cellArr), emp]);
@@ -95,7 +95,7 @@ test('LIAB-04 duplicate matched rows for one employee do not double-count the li
   const setup = await db.withOwner(async (c) => {
     const b = (await c.query(
       `INSERT INTO exact_batch(company_id,period,file_hash,version,status,row_count)
-       VALUES ($1,'2026-06-dup','liab-hash-dup','v1.2','staged',2) RETURNING id`, [A])).rows[0];
+       VALUES ($1,'2026-06-dup','liab-hash-dup','v2.0','staged',2) RETURNING id`, [A])).rows[0];
     const row = (no) => c.query(
       `INSERT INTO exact_row(company_id,batch_id,row_no,employee_id_raw,full_name,cells,matched_employee,match_status)
        VALUES ($1,$2,$3,'E-A-0005','',$4,$5,'matched')`, [A, b.id, no, JSON.stringify(cells), F.EMP.DAVE]);

@@ -159,7 +159,9 @@ function main() {
     const findCol = (name) => hdr.findIndex((h) => normHdr(h) === normHdr(name));
     const cIdx = Object.fromEntries(BASE_SIX.map((n) => [n, findCol(n)]));
     const totAllow = findCol('Total Allowances'), totDed = findCol('Total Deductions');
-    const netC = findCol('Net Pay') >= 0 ? findCol('Net Pay') : findCol('Net Salary');
+    // Official header is 'Net Payment' (header-map probe 2026-07-14); older
+    // drafts said 'Net Pay'/'Net Salary'. First exact match wins — no substring.
+    const netC = ['Net Payment', 'Net Pay', 'Net Salary'].map(findCol).find((i) => i >= 0) ?? -1;
     const overdraft = findCol('Overdraft');
     const cru = findCol('Cent Round Up'), crd = findCol('Cent Round Down');
     const basicC = cIdx['Basic Salary'];
