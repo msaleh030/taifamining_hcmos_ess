@@ -46,6 +46,28 @@ async function request<Out>(path: string, opts: { method?: string; body?: unknow
   return data as Out;
 }
 
+// ── Shared KIOSK (clock-only, single-use token — NEVER stored in the session;
+// the token exists for one punch and the server revokes it with the punch).
+export interface KioskWorker { employee_id: string; emp_no: string | null; full_name: string }
+export const kioskApi = {
+  roster: (deviceId: string) =>
+    request<{ site: string; workers: KioskWorker[] }>('/kiosk/roster', { method: 'POST', body: { device_id: deviceId } }),
+  login: (deviceId: string, employeeId: string, pin: string) =>
+    request<{ token: string; kind: string; worker: { full_name: string } }>(
+      '/auth/kiosk', { method: 'POST', body: { device_id: deviceId, employee_id: employeeId, pin } }),
+  async punch(token: string, direction: 'in' | 'out', photo: string | null) {
+    const res = await fetch('/kiosk/punch', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
+      body: JSON.stringify({ direction, photo }),
+    });
+    let data: any = null;
+    try { data = await res.json(); } catch { /* empty */ }
+    if (!res.ok) throw new ApiError((data && data.error) || `HTTP ${res.status}`, res.status, data);
+    return data as { ok: boolean; direction: string; photo_recorded: boolean; flagged?: string };
+  },
+};
+
 export const api = {
   // Public login config (pre-auth): drives the MFA field's visibility. Same key
   // the server enforces, so the field and enforcement flip together.

@@ -25,6 +25,7 @@ import Attendance from './screens/Attendance';
 import EssHome from './screens/EssHome';
 import Blocked from './screens/Blocked';
 import Payslip from './screens/Payslip';
+import Kiosk from './screens/Kiosk';
 import Shell from './components/shell';
 import { Skeleton } from './components/state';
 
@@ -112,6 +113,11 @@ export default function App() {
   // worker never gets a token, so this route must not require one.
   if (location.pathname === '/blocked') {
     return <Routes><Route path="/blocked" element={<Blocked />} /></Routes>;
+  }
+  // Shared kiosk: pre-session by design — the kiosk token is single-use and
+  // never stored; the screen carries its whole flow itself.
+  if (location.pathname === '/kiosk') {
+    return <Routes><Route path="/kiosk" element={<Kiosk />} /></Routes>;
   }
   if (!session.isAuthed) return <Navigate to="/login" replace />;
   if (location.pathname.startsWith('/ess')) {

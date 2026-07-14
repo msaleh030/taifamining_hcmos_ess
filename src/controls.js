@@ -31,9 +31,13 @@ async function runControls(session) {
       `SELECT id, employee_id, field, maker, checker FROM field_change
         WHERE status='approved' AND checker IS NOT NULL AND checker = maker`)).rows);
 
-    // 2. Attendance — population: every punch; offender: no location evidence.
-    add('attendance.no_location', await one('SELECT 1 FROM attendance'), (await c.query(
-      `SELECT id, employee_id, punched_at FROM attendance WHERE lat IS NULL OR lng IS NULL`)).rows);
+    // 2. Attendance — population: every PERSONAL punch; offender: no location
+    //    evidence. KIOSK punches carry the site-enrolled DEVICE as their
+    //    location control (no GPS by design) — their evidence signal is the
+    //    photo, covered by check 6, so they are excluded here, not exempted.
+    add('attendance.no_location', await one(`SELECT 1 FROM attendance WHERE via='personal'`), (await c.query(
+      `SELECT id, employee_id, punched_at FROM attendance
+        WHERE via='personal' AND (lat IS NULL OR lng IS NULL)`)).rows);
 
     // 3. Access — population: active logins; offender: active login on a leaver (LVR-01).
     add('access.leaver_retained', await one(
@@ -57,6 +61,22 @@ async function runControls(session) {
       `SELECT id, kind, submitted_by, committed_by, committed_at FROM ingest_batch
         WHERE status='committed'
           AND (submitted_by IS NULL OR committed_by IS NULL OR submitted_by = committed_by)`)).rows);
+
+    // 6. Kiosk photo evidence (Kira 2026-07-14) — the buddy-punching / camera-
+    //    failure signal. Photo-on-punch RECORDS, never blocks: a punch without
+    //    a photo still succeeded, flagged. Population: kiosk punches in the
+    //    last 30 days; offender: flagged rows, grouped BY SITE with counts —
+    //    provable, not asserted (the all-clear shows the counts either way).
+    add('kiosk.photo_missing', await one(
+      `SELECT 1 FROM attendance WHERE via='kiosk' AND punched_at > now() - interval '30 days'`), (await c.query(
+      `SELECT s.name AS site, count(*)::int AS no_photo_punches,
+              min(a.punched_at)::date::text AS first, max(a.punched_at)::date::text AS last
+         FROM attendance a
+         JOIN employee e ON e.id = a.employee_id
+         JOIN site s ON s.id = e.site_id
+        WHERE a.via='kiosk' AND a.photo_missing
+          AND a.punched_at > now() - interval '30 days'
+        GROUP BY s.name ORDER BY s.name`)).rows);
 
     return { checks, all_pass: checks.every((x) => x.pass) };
   });

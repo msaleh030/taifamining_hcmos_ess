@@ -57,12 +57,58 @@ async function clockIn(session, loc = {}) {
       }
     }
     await c.query(
-      `INSERT INTO attendance(id, company_id, employee_id, lat, lng, accuracy, zone, source)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+      `INSERT INTO attendance(id, company_id, employee_id, lat, lng, accuracy, zone, source, direction, via)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'in','personal')`,
       [attId, co, empId, Number(loc.lat), Number(loc.lng), loc.accuracy != null ? Number(loc.accuracy) : null,
        verdict.zone || null, loc.source || 'field']);
     return { ...response, deduped: false };
   });
 }
 
-module.exports = { clockIn };
+// ── AC-ATT-02 (ESS-5): clock-out — shift close. Same trust boundary as
+// clock-in (server-side geofence re-validation, employee-scoped idempotency),
+// and it only closes an OPEN shift: the employee's latest punch must be an
+// 'in' (the reference's empty state — "clock-out only captures against an
+// open shift").
+async function clockOut(session, loc = {}) {
+  const co = session.company_id;
+  const rawKey = loc.idempotency_key || null;
+
+  const verdict = await geofence.validateClockIn(session, loc);
+  if (verdict.retry) return verdict;
+
+  return db.withTenant(co, async (c) => {
+    const empId = await employeeOf(c, session);
+    if (!empId) throw new HttpError(403, 'no employee for user');
+    const last = (await c.query(
+      `SELECT direction, punched_at::text AS at FROM attendance
+        WHERE employee_id=$1 ORDER BY punched_at DESC LIMIT 1`, [empId])).rows[0];
+    if (!last || last.direction !== 'in') throw new HttpError(409, 'not clocked in');
+
+    const key = rawKey ? `att:${empId}:${rawKey}` : null;
+    if (key) {
+      const seen = await c.query('SELECT response FROM idempotency WHERE company_id=$1 AND key=$2', [co, key]);
+      if (seen.rows[0]) return { ...seen.rows[0].response, deduped: true };
+    }
+    const attId = crypto.randomUUID();
+    const response = { ok: true, accepted: true, direction: 'out', since: last.at,
+      zone: verdict.zone || null, attendance_id: attId };
+    if (key) {
+      const claim = await c.query(
+        `INSERT INTO idempotency(company_id, key, response) VALUES ($1,$2,$3)
+         ON CONFLICT (company_id, key) DO NOTHING RETURNING key`, [co, key, response]);
+      if (claim.rows.length === 0) {
+        const winner = await c.query('SELECT response FROM idempotency WHERE company_id=$1 AND key=$2', [co, key]);
+        return { ...(winner.rows[0] ? winner.rows[0].response : response), deduped: true };
+      }
+    }
+    await c.query(
+      `INSERT INTO attendance(id, company_id, employee_id, lat, lng, accuracy, zone, source, direction, via)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'out','personal')`,
+      [attId, co, empId, Number(loc.lat), Number(loc.lng), loc.accuracy != null ? Number(loc.accuracy) : null,
+       verdict.zone || null, loc.source || 'field']);
+    return { ...response, deduped: false };
+  });
+}
+
+module.exports = { clockIn, clockOut };

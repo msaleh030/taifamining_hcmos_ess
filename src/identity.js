@@ -11,6 +11,9 @@
 // this resolution. Session status/device revocation is already enforced
 // upstream by auth_lookup_session (migrations 022 + 039).
 async function employeeOf(client, session) {
+  // A KIOSK session carries the PIN'd person directly (session.employee_id) —
+  // its device maps to a SITE, not a person.
+  if (session.employee_id) return session.employee_id;
   if (session.user_id) {
     const r = await client.query('SELECT employee_id FROM app_user WHERE id=$1', [session.user_id]);
     if (r.rows[0] && r.rows[0].employee_id) return r.rows[0].employee_id;

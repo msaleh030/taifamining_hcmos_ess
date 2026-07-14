@@ -271,6 +271,16 @@ const DEFAULT_CONFIG = {
   // HR) decides. The CEO (R14) is read-only everywhere and is NO LONGER a
   // checker. SoD does not dead-end: maker (R03) ≠ checker (R11).
   'expat.checker.roles':             'R11',
+  // ── Shared KIOSK (Kira rulings 2026-07-14) ────────────────────────────────
+  // A kiosk session exists for ONE punch: short TTL + revoked on punch.
+  'kiosk.session.ttl':        '120',
+  // Punch photos: BINARY ON DISK outside the deploy tree (path in the DB,
+  // never base64). Production object storage is a flagged Kira decision.
+  'attendance.photo.dir':     '/var/lib/hcmos/punch-photos',
+  // Second factor on the shared device (the buddy-punching seam): 'photo' =
+  // photo-on-punch (ruled 2026-07-14; records, never blocks). A stronger
+  // factor later slots in at kiosk.kioskLogin without touching the punch path.
+  'kiosk.second_factor':      'photo',
   // Support ticket channels (ES-5).
   'support.channels':         'in_app,email',
   // ── F7 guards (Slice 9 modules exposed over HTTP). All four are APPLIED,

@@ -15,6 +15,7 @@ const leave = require('./leave');
 const liability = require('./liability');
 const kpi = require('./kpi');
 const attendance = require('./attendance');
+const kiosk = require('./kiosk');
 const exact = require('./exact');
 const docalerts = require('./docalerts');
 const support = require('./support');
@@ -94,6 +95,15 @@ const routes = [
     handler: async (req) => ({ status: 200, body: await auth.consoleLogin(await readJson(req), { source_ip: clientIp(req) }) }) },
   { method: 'POST', pattern: /^\/auth\/field$/, auth: false,
     handler: async (req) => ({ status: 200, body: await auth.fieldLogin(await readJson(req)) }) },
+  // ── Shared KIOSK (Kira 2026-07-14): site-enrolled device, PIN identifies the
+  // person, session is clock-only + single-use. Pre-auth surface is gated on
+  // possession of an enrolled ACTIVE kiosk device id (generic 401 otherwise).
+  { method: 'POST', pattern: /^\/kiosk\/roster$/, auth: false,
+    handler: async (req) => ({ status: 200, body: await kiosk.roster(await readJson(req)) }) },
+  { method: 'POST', pattern: /^\/auth\/kiosk$/, auth: false,
+    handler: async (req) => ({ status: 200, body: await kiosk.kioskLogin(await readJson(req)) }) },
+  { method: 'POST', pattern: /^\/kiosk\/punch$/, kioskOk: true,
+    handler: async (req, m, url, s) => ({ status: 200, body: await kiosk.punch(s, await readJson(req)) }) },
   { method: 'POST', pattern: /^\/auth\/reset\/password$/,
     handler: async (req, m, url, s) => ({ status: 200, body: await auth.resetPassword(s, await readJson(req)) }) },
   { method: 'POST', pattern: /^\/auth\/reset\/pin$/,
@@ -215,6 +225,9 @@ const routes = [
   // location against the employee's site zones; the device verdict is never trusted.
   { method: 'POST', pattern: /^\/attendance\/clock-in$/,
     handler: async (req, m, url, s) => ({ status: 200, body: await attendance.clockIn(s, await readJson(req)) }) },
+  // ESS-5 (AC-ATT-02): shift close — same trust boundary as clock-in.
+  { method: 'POST', pattern: /^\/attendance\/clock-out$/,
+    handler: async (req, m, url, s) => ({ status: 200, body: await attendance.clockOut(s, await readJson(req)) }) },
 
   // ── F6: Exact payroll integration (upload → schema-validate → reconcile →
   // control-totals → publish). This touches PAY data, so every endpoint is
@@ -365,6 +378,13 @@ async function guard(route, req) {
   if (route.auth === false) return null;
   const session = await auth.verifySession(bearer(req));
   if (!session) throw new HttpError(401, 'authentication required');
+  // KIOSK CONFINEMENT (Kira 2026-07-14, server-side by design): a kiosk
+  // session reaches ONLY the routes flagged kioskOk (the punch). No leave, no
+  // payslip, no profile, no directory — those live on the personal phone. A
+  // kiosk session can never resolve to a full R13 surface.
+  if (session.kind === 'kiosk' && !route.kioskOk) {
+    throw new HttpError(403, 'kiosk session is clock-only');
+  }
   if (route.module && !roles.moduleAllowed(session.role_code, route.module)) throw new HttpError(403, 'forbidden');
   if (route.action && !roles.canPerform(session.role_code, route.action)) throw new HttpError(403, 'forbidden');
   if (route.deny) {
