@@ -1,3 +1,3 @@
-Wave 7 deploy — RE-FIRE (prior run #52 stalled on infra >15m)
-requested-at: 2026-07-14T07:22:38Z
-head: 1c8c471e33ce3d4dff77ae7cd204949433e70c82
+Wave 9 deploy — build-gap closures (ingest 400/404, controls.run audit, /audit surface)
+requested-at: 2026-07-14T07:50:31Z
+head: 7e72e6186398a4c92c9b94b1347df0b4df9b0393
