@@ -90,7 +90,12 @@ jobs:
                   \"   AND EXISTS (SELECT 1 FROM employee_pay q WHERE q.employee_id=e.id)\" +
                   \" ORDER BY e.legacy_id NULLS LAST, e.emp_no NULLS LAST, e.id\",[CO])).rows;
                 console.log(\"no-TIN loaded employees found:\", rows.length);
-                let n=0, assigned=0;
+                // Numbering continues from the durable audit record so a later
+                // run (after more rows load) can NEVER reissue an existing
+                // dummy TIN to a different person.
+                const start=Number((await c.query(
+                  \"SELECT count(*)::int n FROM audit WHERE company_id=\$1 AND action=\x27tin.dummy.assigned\x27\",[CO])).rows[0].n);
+                let n=start, assigned=0;
                 for(const r of rows){
                   n+=1; const dummy=\"DUMMY-TIN-\"+String(n).padStart(4,\"0\");
                   const upd=await c.query(
