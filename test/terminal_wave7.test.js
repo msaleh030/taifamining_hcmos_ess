@@ -11,8 +11,15 @@ const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 const H = require('./helpers');
 const db = require('../src/db');
+const terminal = require('../src/terminal');
 const contractDef = require('../src/exact_contract');
 const { F } = H;
+// Kira 2026-07-14: the /liability/terminal HTTP route is PARKED (removed from the
+// production surface — statutory exposure, never in Taifa scope). src/terminal.js
+// stays on the branch; these tests exercise the engine DIRECTLY so the parked
+// code keeps coverage if it is ever revived. The financial-gate (a3.pay.roles)
+// was the route's guard and is retired with the route.
+const sess = (role) => ({ company_id: A, role_code: role, user_id: F.USERS.PAYROLL_A.id });
 
 const A = F.TENANT_A;
 const owner = (sql, p) => db.withOwner((c) => c.query(sql, p));
@@ -49,9 +56,11 @@ async function withBatch(fn) {
 test('terminal register BLOCKS with 409 while the statutory rate is PENDING', async () => {
   await setDays('__TBC__');
   await withBatch(async ({ batchId }) => {
-    const pay = await tok(F.USERS.PAYROLL_A); // R07 ∈ a3.pay.roles — passes the gate, blocked by governance
-    const r = await H.req('GET', `/liability/terminal/${batchId}?asOf=2026-07-14`, { token: pay });
-    assert.equal(r.status, 409, 'a pending statutory rate must BLOCK, never guess a severance figure');
+    // Engine-level: a pending statutory rate must BLOCK (409), never guess a figure.
+    await assert.rejects(
+      terminal.batchSeverance(sess('R07'), batchId, '2026-07-14'),
+      (e) => e.status === 409,
+      'a pending statutory rate must BLOCK, never guess a severance figure');
   });
 });
 
@@ -59,23 +68,17 @@ test('terminal dues compute once the rate is confirmed: dailyBasic×days/yr×com
   await setDays('7'); // e.g. 7 days basic wage per completed year (TEST value, not a legal ruling)
   try {
     await withBatch(async ({ batchId }) => {
-      const pay = await tok(F.USERS.PAYROLL_A);
-      const r = await H.req('GET', `/liability/terminal/${batchId}?asOf=2026-07-14`, { token: pay });
-      assert.equal(r.status, 200, JSON.stringify(r.body));
-      const diss = r.body.available.find((a) => a.employee_id === F.EMP.DISS);
+      const r = await terminal.batchSeverance(sess('R07'), batchId, '2026-07-14');
+      const diss = r.available.find((a) => a.employee_id === F.EMP.DISS);
       assert.ok(diss, 'the active employee with a base is available');
       assert.equal(diss.daily_rate, 100, '3000 / 30');
       assert.equal(diss.completed_years, 3, '2023-01-01 → 2026-07-14 = 3 completed years');
       assert.equal(diss.severance, 2100, '100 × 7 days/yr × 3 years');
       // missing remuneration → not-available (named), never a silent zero
-      assert.ok(r.body.not_available.some((n) => n.employee_id === F.EMP.DCHK && n.missing === 'monthly remuneration'));
+      assert.ok(r.not_available.some((n) => n.employee_id === F.EMP.DCHK && n.missing === 'monthly remuneration'));
       // leaver excluded from the provision
-      assert.ok(r.body.excluded.some((x) => x.employee_id === F.EMP.TERM));
-      assert.ok(!r.body.available.some((a) => a.employee_id === F.EMP.TERM));
-
-      // financial gate holds: a non-pay role is 403 even with the rate set
-      const nopay = await tok(F.USERS.HR_A); // R03 ∉ a3.pay.roles
-      assert.equal((await H.req('GET', `/liability/terminal/${batchId}`, { token: nopay })).status, 403);
+      assert.ok(r.excluded.some((x) => x.employee_id === F.EMP.TERM));
+      assert.ok(!r.available.some((a) => a.employee_id === F.EMP.TERM));
     });
   } finally { await setDays('__TBC__'); }
 });

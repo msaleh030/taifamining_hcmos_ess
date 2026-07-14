@@ -308,6 +308,46 @@ async function dailyRateBase(session, cells) {
   return round2(include.reduce((sum, n) => sum + num(cells[pos.get(n)]), 0));
 }
 
+// EX-2 / LIAB-03 (Kira 2026-07-14): a pay column that is NEITHER included NOR
+// excluded from the daily-rate base is UNCLASSIFIED. Enumerate the earnings
+// (allowances-section) columns of the contract; any whose header is not in
+// include_names or exclude_names (and is not the GROSS/TOTAL column) and that
+// CARRIES A NON-ZERO VALUE in this row is unclassified money — the base cannot
+// be trusted. Returns the offending headers (verbatim, for naming). Classified,
+// zero, or gross columns never appear. This is fully configurable: once Cecilia
+// moves each component into include or exclude, the list empties.
+async function unclassifiedPayComponents(session, cells) {
+  const co = session.company_id;
+  const include = new Set((await cfg.getConfig(co, 'exact.dailyrate.include_names', '', null)).split(',').map(norm).filter(Boolean));
+  const exclude = new Set((await cfg.getConfig(co, 'exact.dailyrate.exclude_names', '', null)).split(',').map(norm).filter(Boolean));
+  const gross = norm(await cfg.getConfig(co, 'exact.dailyrate.gross_name', 'TOTAL ALLOWANCE', null));
+  const version = await cfg.getConfig(co, 'exact.contract.version', 'v1.2', null);
+  const cols = (await db.query(
+    "SELECT position, header FROM exact_column WHERE version=$1 AND section='allowances'", [version])).rows;
+  const out = [];
+  for (const c of cols) {
+    const h = norm(c.header);
+    if (!h || h === gross || include.has(h) || exclude.has(h)) continue;
+    if (num(cells[c.position]) !== 0) out.push(c.header);
+  }
+  return out;
+}
+
+// EX-2 governance gate (Kira 2026-07-14): the leave-pay/liability figure must NOT
+// be disclosed while the pay-component classification is unsettled. Returns a
+// NOT-AVAILABLE reason string (LIAB-03: named, never a silent zero) or null when
+// the base may be computed. Two fail-closed conditions:
+//   1. any unclassified pay component carries money in this row → name it; or
+//   2. the classification is not RATIFIED (exact.dailyrate.classification.ratified
+//      ≠ 'true') → block until Cecilia signs off.
+async function baseUnavailableReason(session, cells) {
+  const unclassified = await unclassifiedPayComponents(session, cells);
+  if (unclassified.length) return `unclassified pay component(s) pending EX-2 classification: ${unclassified.join(', ')}`;
+  const ratified = norm(await cfg.getConfig(session.company_id, 'exact.dailyrate.classification.ratified', '__TBC__', null));
+  if (ratified !== 'TRUE') return 'leave-pay base pending EX-2 classification ratification (Cecilia)';
+  return null;
+}
+
 // Optional column position from config: null when unset/[TBC] (contributes 0).
 // `exec` is passed through when the caller already holds a transaction client.
 async function optCol(co, key, exec = null) {
@@ -375,5 +415,6 @@ async function getBatch(session, batchId) {
 
 module.exports = {
   parseCsv, gridHash, validateLayout, stage, match, publish, controlCheck, controlReport, getBatch,
-  runLegs, retryPublishLegs, dailyRateBase, netCheck, netCheckBatch, reconcile, num,
+  runLegs, retryPublishLegs, dailyRateBase, unclassifiedPayComponents, baseUnavailableReason,
+  netCheck, netCheckBatch, reconcile, num,
 };

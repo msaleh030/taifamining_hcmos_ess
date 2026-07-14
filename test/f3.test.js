@@ -23,8 +23,14 @@ function cellsWithBase(base) {
   return c;
 }
 
-before(H.start);
-after(H.stop);
+// EX-2 gate (Kira 2026-07-14): ratify the pay-component classification so the
+// integration test can certify the liability MATH (fail-closed behaviour is
+// proved in leave_base_ex2.test.js).
+const ratify = (v) => owner(
+  `INSERT INTO config(company_id,key,value) VALUES ($1,'exact.dailyrate.classification.ratified',$2)
+   ON CONFLICT (company_id,key) DO UPDATE SET value=EXCLUDED.value`, [A, v]);
+before(async () => { await H.start(); await ratify('true'); });
+after(async () => { await ratify('__TBC__'); await H.stop(); });
 
 // ── LIAB-01/02/03 + LV-02 (guarded) via HTTP ────────────────────────────────
 test('liability endpoint: figure from the single base, missing→not-available, leaver excluded, pay-guarded', async () => {

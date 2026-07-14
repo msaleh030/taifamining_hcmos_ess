@@ -2,8 +2,8 @@
 // Wave 5 (2026-07-14): confidentiality + CEO read-only.
 //   • CEO read-only (auth.readonly.roles) is STRUCTURAL — a read-only role is
 //     barred at the HTTP guard from EVERY mutating route, regardless of the
-//     route's own guards; the one exception is a route flagged `readonlyOk`
-//     (R14's expatriate field-change decision).
+//     route's own guards. Kira 2026-07-14: there are NO exceptions — the former
+//     readonlyOk expat-decision carve-out is removed; R14 is read-only anywhere.
 //   • A CONFIDENTIAL profile read leaves an audit trail (profile.read + which
 //     blocks were disclosed); a base-directory-only read does NOT, so ordinary
 //     browsing does not flood the chain. Forward-only: the hash chain still
@@ -37,45 +37,50 @@ async function withExpat(fn) {
 
 test('CEO read-only guard is STRUCTURAL and config-driven: the same role+route flips 200→403 by membership', async () => {
   await withExpat(async () => {
-    const r11 = await tok(F.USERS.DIRECTOR_A); // Head of HR — the legitimate expat MAKER (200 baseline)
+    const r03 = await tok(F.USERS.HR_A); // site HR — the legitimate expat MAKER (200 baseline)
     await setRO('R14'); // default posture
 
-    // Baseline: R11 may raise an expat field-change (it is the expat maker).
-    const base = await H.req('POST', `/employees/${XPAT}/change`, { token: r11, body: { field: 'phone', value: '0711110000' } });
+    // Baseline: R03 may raise an expat field-change (it is the expat maker).
+    const base = await H.req('POST', `/employees/${XPAT}/change`, { token: r03, body: { field: 'phone', value: '0711110000' } });
     assert.equal(base.status, 200, `baseline raise must succeed: ${JSON.stringify(base.body)}`);
     await owner(`DELETE FROM field_change WHERE employee_id=$1`, [XPAT]);
 
-    // Put R11 into the read-only set — the SAME POST is now barred structurally.
-    await setRO('R11,R14');
-    const blocked = await H.req('POST', `/employees/${XPAT}/change`, { token: r11, body: { field: 'phone', value: '0711110001' } });
+    // Put R03 into the read-only set — the SAME POST is now barred structurally.
+    await setRO('R03,R14');
+    const blocked = await H.req('POST', `/employees/${XPAT}/change`, { token: r03, body: { field: 'phone', value: '0711110001' } });
     assert.equal(blocked.status, 403, 'a read-only role is barred from the mutating route');
     // …but a GET is untouched (read-only means read).
-    const read = await H.req('GET', `/employees/${XPAT}`, { token: r11 });
+    const read = await H.req('GET', `/employees/${XPAT}`, { token: r03 });
     assert.equal(read.status, 200, 'read-only role still READS');
 
     // Lift the membership — the write path is restored (proves it was the guard, not another denial).
     await setRO('R14');
-    const restored = await H.req('POST', `/employees/${XPAT}/change`, { token: r11, body: { field: 'phone', value: '0711110002' } });
+    const restored = await H.req('POST', `/employees/${XPAT}/change`, { token: r03, body: { field: 'phone', value: '0711110002' } });
     assert.equal(restored.status, 200, 'removing the role from the set restores the write');
     await owner(`DELETE FROM field_change WHERE employee_id=$1`, [XPAT]);
   });
 });
 
-test('R14 (CEO) is read-only everywhere EXCEPT the readonlyOk expat decision', async () => {
+test('R14 (CEO) is read-only EVERYWHERE — no exceptions, including the expat decision (Kira 2026-07-14)', async () => {
   await setRO('R14');
   await withExpat(async () => {
-    const r11 = await tok(F.USERS.DIRECTOR_A);
-    const r14 = await tok(F.USERS.CEO_A);
+    const r03 = await tok(F.USERS.HR_A);       // expat MAKER
+    const r11 = await tok(F.USERS.DIRECTOR_A); // expat CHECKER
+    const r14 = await tok(F.USERS.CEO_A);      // read-only everywhere
 
-    // A non-exception mutating route is barred for R14 (even a plain local change).
+    // A local field change is barred for R14 (read-only guard).
     const change = await H.req('POST', `/employees/${F.EMP.CAROL}/change`, { token: r14, body: { field: 'phone', value: '0700000099' } });
-    assert.equal(change.status, 403, 'R14 cannot raise a field change (not a readonlyOk route)');
+    assert.equal(change.status, 403, 'R14 cannot raise a field change');
 
-    // The ONE exception: R14 decides an expat field-change (readonlyOk) — raised by R11.
-    const sub = await H.req('POST', `/employees/${XPAT}/change`, { token: r11, body: { field: 'phone', value: '0711110003' } });
+    // The expat change is raised by site HR (R03) and decided by the Head of HR (R11).
+    const sub = await H.req('POST', `/employees/${XPAT}/change`, { token: r03, body: { field: 'phone', value: '0711110003' } });
     assert.equal(sub.status, 200, JSON.stringify(sub.body));
-    const approve = await H.req('POST', `/field-change/${sub.body.id}/approve`, { token: r14 });
-    assert.equal(approve.status, 200, 'R14 CAN decide the expat change (the single deliberate exception)');
+    // R14 is NO LONGER a checker — the former readonlyOk carve-out is removed: 403.
+    const ceoTry = await H.req('POST', `/field-change/${sub.body.id}/approve`, { token: r14 });
+    assert.equal(ceoTry.status, 403, 'R14 can no longer decide an expat change — read-only everywhere');
+    // R11 decides it.
+    const approve = await H.req('POST', `/field-change/${sub.body.id}/approve`, { token: r11 });
+    assert.equal(approve.status, 200, JSON.stringify(approve.body));
     assert.equal(approve.body.applied, true);
   });
 });

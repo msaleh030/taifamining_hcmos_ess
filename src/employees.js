@@ -126,15 +126,15 @@ async function get(session, id) {
   });
 }
 
-// Resolve permitted makers/checkers for a field (field-specific, else generic).
-// Expatriate CRUD gate (Kira 2026-07-12): STRICTLY the Head of HR. Applied to
-// BOTH sides of maker-checker — a non-R11 may neither raise nor decide a change
-// on an is_expat employee. Config-driven ('expat.crud.roles'), fail-closed.
-async function assertExpatCrud(client, session, isExpat) {
+// Expatriate field-change MAKER gate (Kira 2026-07-14, supersedes 2026-07-12):
+// site HR (R03) RAISES an expatriate field change; the Head of HR (R11) DECIDES
+// it (see decide()). Config-driven ('expat.maker.roles'), fail-closed. Direct
+// expat record CREATION stays R11-only via the separate 'expat.crud.roles' gate.
+async function assertExpatMaker(client, session, isExpat) {
   if (!isExpat) return;
-  const allowed = await cfg.getRoleSet(session.company_id, 'expat.crud.roles', 'R11', client);
+  const allowed = await cfg.getRoleSet(session.company_id, 'expat.maker.roles', 'R03', client);
   if (!allowed.has(session.role_code))
-    throw new HttpError(403, 'expatriate records are managed by the Head of HR only');
+    throw new HttpError(403, 'expatriate field changes are raised by site HR (R03) only');
 }
 
 async function rolesFor(companyId, kind, field) {
@@ -161,7 +161,7 @@ async function submitChange(session, id, body) {
       const mySites = await requesterSites(client, session);
       if (!mySites.length || !mySites.includes(emp.site_id)) throw new HttpError(404, 'not found');
     }
-    await assertExpatCrud(client, session, emp.is_expat);
+    await assertExpatMaker(client, session, emp.is_expat);
 
     const maker = await actorEmail(client, session);
     if (!maker) throw new HttpError(403, 'forbidden');
@@ -209,13 +209,14 @@ async function decide(session, changeId, approve) {
     if (!EDITABLE_FIELDS.has(fc.field)) throw new HttpError(400, 'field not editable');
     const subj = await client.query('SELECT is_expat FROM employee WHERE id=$1', [fc.employee_id]);
     if (subj.rows[0] && subj.rows[0].is_expat) {
-      // Kira 2026-07-12: an expatriate change is DECIDED by the CEO/Executive
-      // tier — this REPLACES the generic checker set for is_expat subjects
-      // (Omid R11 raises, Richard R14 decides; SoD never dead-ends on the
-      // single Head of HR account). Fail-closed for everyone else, R11 included.
-      const chk = await cfg.getRoleSet(session.company_id, 'expat.checker.roles', 'R14', client);
+      // Kira 2026-07-14 (supersedes 2026-07-12): an expatriate change is RAISED
+      // by site HR (R03) and DECIDED by the Head of HR (R11) — this REPLACES the
+      // generic checker set for is_expat subjects. The CEO (R14) is read-only
+      // everywhere and is NO LONGER a checker. Maker (R03) ≠ checker (R11), so
+      // SoD does not dead-end. Fail-closed for everyone else.
+      const chk = await cfg.getRoleSet(session.company_id, 'expat.checker.roles', 'R11', client);
       if (!chk.has(session.role_code))
-        throw new HttpError(403, 'expatriate changes are decided by the CEO/Executive (R14) only');
+        throw new HttpError(403, 'expatriate changes are decided by the Head of HR (R11) only');
     } else {
       const checkers = await rolesFor(session.company_id, 'checkers', fc.field);
       if (!checkers.has(session.role_code)) throw new HttpError(403, 'forbidden');

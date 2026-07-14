@@ -29,8 +29,15 @@ function baseCells() {
   return c;
 }
 
-before(H.start);
-after(H.stop);
+// EX-2 governance gate (Kira 2026-07-14): the leave-pay base is fail-closed until
+// the classification is RATIFIED. These tests certify the MATH, so they ratify;
+// the fail-closed / unclassified-naming behaviour is proved in leave_base_ex2.test.js.
+const owner = (sql, p) => db.withOwner((c) => c.query(sql, p));
+const ratify = (v) => owner(
+  `INSERT INTO config(company_id,key,value) VALUES ($1,'exact.dailyrate.classification.ratified',$2)
+   ON CONFLICT (company_id,key) DO UPDATE SET value=EXCLUDED.value`, [A, v]);
+before(async () => { await H.start(); await ratify('true'); });
+after(async () => { await ratify('__TBC__'); await H.stop(); });
 
 test('LIAB-01 liability = outstanding days × (monthly remuneration / 30), from the one EX-2 base', async () => {
   const cells = baseCells();

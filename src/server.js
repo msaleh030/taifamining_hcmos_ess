@@ -13,7 +13,6 @@ const employees = require('./employees');
 const disciplinary = require('./disciplinary');
 const leave = require('./leave');
 const liability = require('./liability');
-const terminal = require('./terminal');
 const kpi = require('./kpi');
 const attendance = require('./attendance');
 const exact = require('./exact');
@@ -162,12 +161,13 @@ const routes = [
     handler: async (req, m, url, s) => ({ status: 200, body: await employees.submitChange(s, m[1], await readJson(req)) }) },
   { method: 'GET', pattern: /^\/employees\/([0-9a-f-]+)$/i, deny: 'directory.deny.roles',
     handler: async (req, m, url, s) => ({ status: 200, body: await employees.get(s, m[1]) }) },
-  // readonlyOk: the expatriate field-change DECISION is R14's (CEO) sole
-  // deliberate, config-pinned write — the one exception to the Wave-5 read-only
-  // guard. Every OTHER mutating route stays barred for R14.
-  { method: 'POST', pattern: /^\/field-change\/([0-9a-f-]+)\/approve$/i, deny: 'directory.deny.roles', readonlyOk: true,
+  // Expatriate field-change decision: MAKER = R03 (site HR), CHECKER = R11 (Head
+  // of HR) — expat.checker.roles. Kira 2026-07-14: the CEO (R14) is read-only
+  // EVERYWHERE, no exceptions — the former readonlyOk carve-out is removed, so
+  // R14 (auth.readonly.roles) is barred here like every other mutating route.
+  { method: 'POST', pattern: /^\/field-change\/([0-9a-f-]+)\/approve$/i, deny: 'directory.deny.roles',
     handler: async (req, m, url, s) => ({ status: 200, body: await employees.decide(s, m[1], true) }) },
-  { method: 'POST', pattern: /^\/field-change\/([0-9a-f-]+)\/decline$/i, deny: 'directory.deny.roles', readonlyOk: true,
+  { method: 'POST', pattern: /^\/field-change\/([0-9a-f-]+)\/decline$/i, deny: 'directory.deny.roles',
     handler: async (req, m, url, s) => ({ status: 200, body: await employees.decide(s, m[1], false) }) },
 
   // ── F2: Disciplinary action + fan-out. Only permitted issuers (registry
@@ -198,11 +198,10 @@ const routes = [
     handler: async (req, m, url, s) => ({ status: 200, body: await leave.decide(s, m[1], await readJson(req)) }) },
   { method: 'GET', pattern: /^\/liability\/batch\/([0-9a-f-]+)$/i, allow: 'a3.pay.roles',
     handler: async (req, m, url, s) => ({ status: 200, body: await liability.batchLiability(s, m[1]) }) },
-  // Wave 7: terminal/severance dues — same financial gate (a3.pay.roles). BLOCKS
-  // with 409 while the statutory rate (terminal.severance.days_per_year) is
-  // PENDING — never a guessed severance figure.
-  { method: 'GET', pattern: /^\/liability\/terminal\/([0-9a-f-]+)$/i, allow: 'a3.pay.roles',
-    handler: async (req, m, url, s) => ({ status: 200, body: await terminal.batchSeverance(s, m[1], url.searchParams.get('asOf')) }) },
+  // Kira 2026-07-14: the terminal/severance-dues surface is PARKED — removed from
+  // the production HTTP surface (a severance calculation carries statutory
+  // exposure and was never in Taifa's scope). src/terminal.js and its tests stay
+  // on the branch; the route is not registered, so it is unreachable in prod.
 
   // ── F4: KPI scorecard (role-scoped, feature-flagged) + personal My KPIs. The
   // scorecard is feature-flagged inside the engine (analytics.enabled) — the

@@ -45,6 +45,11 @@ async function liabilityFor(session, { employeeId, days, cells }) {
   if (cells == null) return { employee_id: employeeId, available: false, missing: REMUNERATION };
   const base = await exact.dailyRateBase(session, cells);
   if (!(base > 0)) return { employee_id: employeeId, available: false, missing: REMUNERATION };
+  // EX-2 / LIAB-03 (Kira 2026-07-14): never disclose a figure while the pay-
+  // component classification is unratified or a component carries unclassified
+  // money — NOT AVAILABLE naming the reason, never a silent (possibly wrong) zero.
+  const unavailable = await exact.baseUnavailableReason(session, cells);
+  if (unavailable) return { employee_id: employeeId, available: false, missing: unavailable };
   const rate = await dailyRate(session, cells);
   return { employee_id: employeeId, available: true, days, daily_rate: rate, liability: round2(rate * days) };
 }

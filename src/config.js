@@ -219,6 +219,13 @@ const DEFAULT_CONFIG = {
   // and by leave pay/liability.
   'exact.dailyrate.include_names': 'BASIC SALARY,HOUSING ALLOWANCE,RESPONSIBILITY,PROJECT,MEDICAL,HOUSING ALL,FIXED OVERTIME,TRANSPORT',
   'exact.dailyrate.exclude_names': 'ROTATION,OVERTIME NORMAL,OVERTIME HOLIDAY,NIGHT SHIFT',
+  // The GROSS/TOTAL earnings column — a total, never a base component.
+  'exact.dailyrate.gross_name': 'TOTAL ALLOWANCE',
+  // EX-2 governance gate (Kira 2026-07-14): the leave-pay/liability figure is
+  // fail-closed — NOT AVAILABLE — until Cecilia RATIFIES the pay-component
+  // classification (rotation/night-shift/variable-overtime excluded; the
+  // unclassified North Mara components ruled). Set to 'true' only on her sign-off.
+  'exact.dailyrate.classification.ratified': PENDING,
   // Full-period control-totals reconciliation (AC-EXACT-07) — still gated until a
   // real populated period arrives; the per-row net check runs now (EX-3).
   'exact.reconciliation':   PENDING,
@@ -251,11 +258,13 @@ const DEFAULT_CONFIG = {
   // The bulk ingest pipeline (R15 maker / R16 checker, control-totalled) is
   // the ONE sanctioned load path and is not an interactive CRUD surface.
   'expat.crud.roles':                'R11',
-  // The CHECKER for an R11-raised expatriate change is the CEO/Executive
-  // (Kira, 2026-07-12): Omid (R11) raises, Richard (R14) decides. This set
-  // REPLACES the generic field_change checkers for is_expat subjects, so SoD
-  // never dead-ends on the single R11 account.
-  'expat.checker.roles':             'R14',
+  // Expatriate field-change MAKER (Kira, 2026-07-14): site HR raises the change.
+  'expat.maker.roles':               'R03',
+  // Expatriate field-change maker-checker (Kira, 2026-07-14 — supersedes the
+  // 2026-07-12 R14 ruling): MAKER = R03 (site HR) raises, CHECKER = R11 (Head of
+  // HR) decides. The CEO (R14) is read-only everywhere and is NO LONGER a
+  // checker. SoD does not dead-end: maker (R03) ≠ checker (R11).
+  'expat.checker.roles':             'R11',
   // Support ticket channels (ES-5).
   'support.channels':         'in_app,email',
   // ── F7 guards (Slice 9 modules exposed over HTTP). All four are APPLIED,

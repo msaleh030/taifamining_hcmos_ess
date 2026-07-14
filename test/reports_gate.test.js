@@ -17,8 +17,14 @@ const owner = (sql, p) => db.withOwner((c) => c.query(sql, p));
 const tok = async (u) => (await H.loginConsole(u)).body.token;
 const N = contractDef.build().length;
 
-before(H.start);
-after(H.stop);
+// EX-2 gate (Kira 2026-07-14): ratify the pay-component classification so the
+// leave-liability register certifies its total (fail-closed behaviour is proved
+// in leave_base_ex2.test.js).
+const ratify = (v) => owner(
+  `INSERT INTO config(company_id,key,value) VALUES ($1,'exact.dailyrate.classification.ratified',$2)
+   ON CONFLICT (company_id,key) DO UPDATE SET value=EXCLUDED.value`, [A, v]);
+before(async () => { await H.start(); await ratify('true'); });
+after(async () => { await ratify('__TBC__'); await H.stop(); });
 
 test('C17 registers inherit the C16 pay-gate server-side; catalogue hides financials from non-pay', async () => {
   // A batch with one matched row: base 3000 (col 12) and net 2000 (col AS = 44),

@@ -25,8 +25,10 @@ const LANDING = {
   R01: { name: 'Employee (Self-Service)', modules: ['dashboard', 'profile', 'leave', 'timesheet', 'training'] },
   R02: { name: 'Supervisor',              modules: ['dashboard', 'profile', 'leave', 'timesheet', 'performance', 'reports'] },
   // v1.5 LI-2: HR Officer ABSORBS clinic/medical administration (R10 removed) —
-  // hence health_safety/medical/permits. Flagged for design reconciliation at UAT.
-  R03: { name: 'HR Officer',              modules: ['dashboard', 'profile', 'leave', 'recruitment', 'training', 'health_safety', 'medical', 'permits'] },
+  // hence health_safety/medical/permits.
+  // Kira 2026-07-14 (closes the [TBC]): HR Officer GETS Reports: operational —
+  // the organogram is per-site, positional, and respects R03's site scoping.
+  R03: { name: 'HR Officer',              modules: ['dashboard', 'profile', 'leave', 'recruitment', 'training', 'health_safety', 'medical', 'permits', 'reports'] },
   R04: { name: 'HR Manager',              modules: ['dashboard', 'profile', 'leave', 'recruitment', 'training', 'performance', 'reports'] },
   // R05 (HSE Officer) REMOVED at the app layer — registry v1.6 (Kira, ratified):
   // the duties are performed by the SHEQ Manager (R06); no separate HSE Officer
